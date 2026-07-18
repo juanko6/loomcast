@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+fase0/venv/
+
+# Herramientas y binarios descargados
+tools/
+
+# Salidas generadas
+fase0/rife_test/
+fase0/*.wav
+proyectos/
+*.db
+
+# macOS
+.DS_Store
