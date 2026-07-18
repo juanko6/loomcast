@@ -1,0 +1,19 @@
+{
+  "nombre": "curiosidades",
+  "descripcion": "Datos sorprendentes y hechos poco conocidos, con giro final",
+  "voz": {
+    "instruct": "Voz masculina grave de narrador de documental en español, tono misterioso y envolvente, ritmo ágil y con energía, ligeramente más rápido que un narrador tradicional, dicción clara.",
+    "language": "Spanish"
+  },
+  "estilo_visual": "cinematic photography, dramatic lighting, hyperdetailed, rich colors, volumetric light, vertical composition",
+  "subtitulos": {
+    "max_palabras_por_bloque": 3,
+    "fuente": "Montserrat ExtraBold",
+    "color": "#FFFFFF",
+    "borde": "#000000"
+  },
+  "ritmo": {
+    "duracion_objetivo_s": 45,
+    "duracion_escena_s": 4
+  }
+}

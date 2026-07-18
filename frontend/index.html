@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Loomcast</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>🎬 Loomcast</h1>
+    <div id="salud">
+      <span id="dot-llm" class="dot" title="llama-server">LLM</span>
+      <span id="dot-comfy" class="dot" title="ComfyUI">Comfy</span>
+      <span id="jobs-badge" class="badge oculto"></span>
+    </div>
+  </header>
+
+  <main>
+    <aside>
+      <section>
+        <h2>Nuevo tema</h2>
+        <form id="form-tema">
+          <textarea id="tema-texto" rows="3" required
+            placeholder="¿De qué va el video? Ej: misterios del océano"></textarea>
+          <select id="tema-plantilla"></select>
+          <button type="submit">Generar ideas</button>
+        </form>
+      </section>
+      <section>
+        <h2>Temas</h2>
+        <ul id="lista-temas" class="lista"></ul>
+      </section>
+      <section>
+        <h2>Proyectos</h2>
+        <ul id="lista-proyectos" class="lista"></ul>
+      </section>
+    </aside>
+
+    <section id="panel">
+      <p class="vacio">Crea un tema para empezar, o elige uno de la lista.</p>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

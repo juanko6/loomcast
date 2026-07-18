@@ -2,7 +2,7 @@
 
 Generador automatizado de videos cortos (30–60 s, formato vertical 9:16) para YouTube Shorts y TikTok, **100% con IA local**.
 
-> Estado: **Fase 0 completada** (2026-07-18) — todo el stack validado en local, ver [fase0/RESULTADOS.md](fase0/RESULTADOS.md). Estimación: **~15–20 min por video**. Siguiente: Fase 1 (núcleo texto).
+> Estado: **Fase 1 completada** (2026-07-18) — backend FastAPI + SQLite + worker de jobs, cliente llama.cpp (razonamiento desactivado por petición), plantilla `curiosidades`, UI de revisión, probado end-to-end con Qwen3.6-27B. Siguiente: Fase 2 (voz y subtítulos).
 
 ## 1. Decisiones tomadas
 
@@ -127,7 +127,7 @@ proyectos/<slug>/
 ## 6. Fases de desarrollo
 
 1. ~~**Fase 0 — Validación del entorno**~~ ✅ **Completada** (2026-07-18): todo el stack validado, mediciones y cambios de diseño en [fase0/RESULTADOS.md](fase0/RESULTADOS.md). La memoria se gestiona descargando Z-Image entre etapas con `POST /free` de ComfyUI (~20 GB liberados); TTS (~5 GB) + Whisper (~2 GB) + LLM conviven sin problema.
-2. **Fase 1 — Núcleo texto**: FastAPI + SQLite + llama.cpp. Etapas 0–3 (ideas → metadatos) con UI mínima de revisión/edición y la plantilla `curiosidades`.
+2. ~~**Fase 1 — Núcleo texto**~~ ✅ **Completada** (2026-07-18): FastAPI + SQLite + worker en hilo, etapas 0–3 con UI de revisión/edición y plantilla `curiosidades`. Nota clave: las peticiones al LLM mandan `chat_template_kwargs: {enable_thinking: false}` — con el modo razonamiento activo, generar 8 ideas tardaba 6+ min; sin él, segundos.
 3. **Fase 2 — Audio**: etapas 4–5 (voz Qwen3-TTS + subtítulos).
 4. **Fase 3 — Visual**: etapas 6–8 (escenas, imágenes vía Comfy, clips Ken Burns).
 5. **Fase 4 — Acabado**: etapas 9–11 (ESRGAN, RIFE, armado final con marca de agua opcional).

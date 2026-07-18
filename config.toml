@@ -1,0 +1,17 @@
+# Configuración de Loomcast — servicios locales
+
+[llm]
+# llama-server (API OpenAI-compatible) — puerto de los scripts de ~/models
+url = "http://127.0.0.1:8001"
+# Nombre del modelo (informativo; llama-server usa el que tenga cargado)
+model = "local"
+temperature = 0.8
+timeout_s = 600
+
+[comfy]
+url = "http://127.0.0.1:8188"
+
+[paths]
+proyectos = "proyectos"
+plantillas = "plantillas"
+db = "loomcast.db"
