@@ -81,9 +81,14 @@ def generar_guion(proyecto_id: int) -> str:
         idea = s.get(Idea, p.idea_id)
         pl = plantillas.cargar(p.plantilla)
         duracion = pl["ritmo"]["duracion_objetivo_s"]
-        system = pl["prompts"]["guion"]
+        # Español narrado ágil ≈ 2.2–2.7 palabras/segundo
+        system = (
+            pl["prompts"]["guion"]
+            .replace("{duracion}", str(duracion))
+            .replace("{min_palabras}", str(round(duracion * 2.2)))
+            .replace("{max_palabras}", str(round(duracion * 2.7)))
+        )
         user = (
-            f"Duración objetivo: {duracion} segundos.\n"
             f"Idea del video:\n- Título: {idea.titulo}\n"
             f"- Gancho propuesto: {idea.gancho}\n- Resumen: {idea.resumen}"
         )
