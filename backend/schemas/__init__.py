@@ -1,12 +1,13 @@
 """Contratos Pydantic por ámbito: API HTTP, LLMs y plantillas."""
 from .api import EstadoIdeaIn, GuionIn, TemaIn
 from .llm import (
+    DescripcionLLM,
+    EscenaLLM,
+    EtiquetasLLM,
     GuionLLM,
     IdeaLLM,
     IdeasLLM,
-    MetadatosLLM,
-    MetadatosTikTokLLM,
-    MetadatosYouTubeLLM,
+    TituloLLM,
 )
 from .plantilla import (
     Plantilla,
@@ -17,7 +18,7 @@ from .plantilla import (
 
 __all__ = [
     "EstadoIdeaIn", "GuionIn", "TemaIn",
-    "GuionLLM", "IdeaLLM", "IdeasLLM",
-    "MetadatosLLM", "MetadatosTikTokLLM", "MetadatosYouTubeLLM",
+    "DescripcionLLM", "EscenaLLM", "EtiquetasLLM",
+    "GuionLLM", "IdeaLLM", "IdeasLLM", "TituloLLM",
     "Plantilla", "RitmoPlantilla", "SubtitulosPlantilla", "VozPlantilla",
 ]

@@ -22,16 +22,20 @@ class GuionLLM(BaseModel):
     cta: str = Field(min_length=1)
 
 
-class MetadatosYouTubeLLM(BaseModel):
-    titulo: str = Field(min_length=1)
-    descripcion: str = Field(min_length=1)
-    etiquetas: list[str] = Field(min_length=1)
+class TituloLLM(BaseModel):
+    # El prompt pide 35-55 chars (máx 65); el margen evita rechazar por poco
+    titulo: str = Field(min_length=10, max_length=80)
 
 
-class MetadatosTikTokLLM(BaseModel):
-    descripcion: str = Field(min_length=1)
+class DescripcionLLM(BaseModel):
+    # El prompt pide 250-450 chars; margen amplio para no rechazar por poco
+    descripcion: str = Field(min_length=100, max_length=600)
 
 
-class MetadatosLLM(BaseModel):
-    youtube: MetadatosYouTubeLLM
-    tiktok: MetadatosTikTokLLM
+class EtiquetasLLM(BaseModel):
+    etiquetas: list[str] = Field(min_length=5, max_length=15)
+    tiktok: str = Field(min_length=1, max_length=250)
+
+
+class EscenaLLM(BaseModel):
+    prompt: str = Field(min_length=20)

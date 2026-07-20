@@ -10,7 +10,7 @@ from ...repositories import metadatos as metadatos_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
 from ...repositories import temas as temas_repo
-from ...schemas import GuionLLM, IdeasLLM, MetadatosLLM
+from ...schemas import DescripcionLLM, EtiquetasLLM, GuionLLM, IdeasLLM, TituloLLM
 
 N_IDEAS = 8
 # Español narrado ágil ≈ 2.2–2.7 palabras/segundo
@@ -70,6 +70,8 @@ def generar_guion(proyecto_id: int) -> str:
 
 
 def generar_metadatos(proyecto_id: int) -> str:
+    """Tres llamadas especializadas encadenadas: título → descripción →
+    etiquetas/TikTok (la descripción necesita el título ya elegido)."""
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)
         if p is None:
@@ -82,13 +84,33 @@ def generar_metadatos(proyecto_id: int) -> str:
 
     texto = " ".join([g["gancho"], *g["frases"], g["cta"]])
     pl = plantillas_repo.cargar(plantilla)
-    meta = llm.chat(
-        pl["prompts"]["metadatos"], f"Guion del video:\n{texto}", MetadatosLLM
+    prompts = pl["prompts"]
+
+    titulo = llm.chat(
+        prompts["titulo"], f"Guion del video:\n{texto}", TituloLLM
+    ).titulo
+    descripcion = llm.chat(
+        prompts["descripcion"],
+        f"Título: {titulo}\n\nGuion del video:\n{texto}",
+        DescripcionLLM,
+    ).descripcion
+    redes = llm.chat(
+        prompts["etiquetas"],
+        f"Título: {titulo}\n\nGuion del video:\n{texto}",
+        EtiquetasLLM,
     )
 
+    meta = {
+        "youtube": {
+            "titulo": titulo,
+            "descripcion": descripcion,
+            "etiquetas": redes.etiquetas,
+        },
+        "tiktok": {"descripcion": redes.tiktok},
+    }
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)
-        m = metadatos_repo.crear(s, proyecto_id, meta.model_dump())
+        m = metadatos_repo.crear(s, proyecto_id, meta)
         avanzar_estado(p, "METADATOS")
         s.commit()
-        return f"Metadatos v{m.version} generados"
+        return f"Metadatos v{m.version} generados (título, descripción y etiquetas)"
