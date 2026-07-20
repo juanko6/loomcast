@@ -35,6 +35,6 @@ Capas (de HTTP hacia abajo): `routers/` (controllers: validación y JSON, cero l
 
 - ✅ Fase 0 — validación del stack completo en local
 - ✅ Fase 1 — núcleo de texto: ideas, selección, guion editable, metadatos (UI + jobs)
-- ✅ Fase 2 — voz (Qwen3-TTS design-then-clone, por frase) y subtítulos (mlx-whisper, SRT en bloques de ≤3 palabras)
-- ⬜ Fase 3 — escenas, imágenes y clips
-- ⬜ Fase 4 — acabado (upscale, interpolación, armado)
+- ✅ Fase 2 — voz (Qwen3-TTS design-then-clone, narración continua) y subtítulos (mlx-whisper, SRT en bloques de ≤3 palabras)
+- ✅ Fase 3 — escenas (prompts visuales en inglés por segmento), imágenes (Z-Image vía ComfyUI) y **armado estático**: video completo con imágenes fijas, voz, subtítulos compuestos con Pillow y metadatos
+- ⬜ Fase 4 — movimiento (Ken Burns/i2v), upscale ESRGAN e interpolación RIFE

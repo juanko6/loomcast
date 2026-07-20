@@ -147,6 +147,32 @@ async function renderProyecto(id) {
     </div>
 
     <div class="bloque">
+      <h2>Video</h2>
+      ${!p.subtitulos ? `<p class="vacio">Genera la voz y los subtítulos primero.</p>` : `
+        <div class="acciones" style="margin-bottom:12px">
+          <button id="gen-escenas" ${ocupado ? "disabled" : ""}>
+            ${p.escenas.length ? "↻ Regenerar escenas e imágenes" : "🎞 Generar escenas e imágenes"}
+          </button>
+          <button id="armar-video" ${ocupado || !p.escenas.length || !p.escenas.every((e) => e.imagen) ? "disabled" : ""}>
+            🎬 Armar video final
+          </button>
+        </div>
+        ${p.escenas.length ? `
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+            ${p.escenas.map((e) => e.imagen
+              ? `<img src="/api/proyectos/${p.id}/imagenes/${e.orden}?v=${Date.now()}"
+                     title="${esc(e.prompt)}"
+                     style="width:72px;border-radius:8px;aspect-ratio:9/16;object-fit:cover">`
+              : `<div title="${esc(e.prompt)}" style="width:72px;aspect-ratio:9/16;border-radius:8px;
+                     background:var(--panel2);display:flex;align-items:center;justify-content:center;
+                     color:var(--dim);font-size:11px">${e.orden + 1}</div>`).join("")}
+          </div>` : ""}
+        ${p.video_disponible ? `
+          <video controls src="/api/proyectos/${p.id}/video?v=${Date.now()}"
+                 style="width:280px;max-width:100%;border-radius:12px"></video>` : ""}`}
+    </div>
+
+    <div class="bloque">
       <h2>Metadatos</h2>
       ${!m ? `<p class="vacio">Genera el guion primero y luego los metadatos.</p>` : `
         <div class="card">
@@ -225,6 +251,12 @@ document.addEventListener("click", async (ev) => {
       refrescarJobs(); renderVista();
     } else if (b.id === "gen-voz" && vista?.tipo === "proyecto") {
       await api(`/proyectos/${vista.id}/voz`, { method: "POST" });
+      refrescarJobs(); renderVista();
+    } else if (b.id === "gen-escenas" && vista?.tipo === "proyecto") {
+      await api(`/proyectos/${vista.id}/escenas`, { method: "POST" });
+      refrescarJobs(); renderVista();
+    } else if (b.id === "armar-video" && vista?.tipo === "proyecto") {
+      await api(`/proyectos/${vista.id}/video`, { method: "POST" });
       refrescarJobs(); renderVista();
     } else if (b.id === "agregar-frase") {
       const div = document.createElement("div");

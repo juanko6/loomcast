@@ -4,6 +4,7 @@ import json
 from ..config import PROYECTOS_DIR
 from ..db import get_session
 from ..models import avanzar_estado
+from ..repositories import escenas as escenas_repo
 from ..repositories import guiones as guiones_repo
 from ..repositories import ideas as ideas_repo
 from ..repositories import jobs as jobs_repo
@@ -13,6 +14,7 @@ from ..workers import queue
 
 TIPOS_JOB_PROYECTO = [
     "generar_guion", "generar_metadatos", "generar_voz", "generar_subtitulos",
+    "generar_escenas", "generar_imagenes", "armar_video",
 ]
 
 
@@ -43,6 +45,14 @@ def detalle(pid: int) -> dict:
         activos = jobs_repo.activos_de_proyecto(s, pid, TIPOS_JOB_PROYECTO)
         base_dir = PROYECTOS_DIR / p.slug
         srt = base_dir / "subtitulos.srt"
+        escenas = [
+            {
+                "orden": e.orden, "t_inicio": e.t_inicio, "t_fin": e.t_fin,
+                "texto": e.texto, "prompt": e.prompt,
+                "imagen": (base_dir / "imagenes" / f"{e.orden:02d}.png").exists(),
+            }
+            for e in escenas_repo.por_proyecto(s, pid)
+        ]
         return {
             "id": p.id, "slug": p.slug, "estado": p.estado,
             "plantilla": p.plantilla,
@@ -53,6 +63,8 @@ def detalle(pid: int) -> dict:
             "metadatos": json.loads(meta.contenido) if meta else None,
             "voz_disponible": (base_dir / "voz.mp3").exists(),
             "subtitulos": srt.read_text() if srt.exists() else None,
+            "escenas": escenas,
+            "video_disponible": (base_dir / "final.mp4").exists(),
             "jobs_activos": activos,
         }
 
@@ -68,12 +80,12 @@ def editar_guion(pid: int, contenido: dict) -> int:
         return g.version
 
 
-def ruta_audio(pid: int):
+def ruta_archivo(pid: int, *partes: str):
     with get_session() as s:
         p = proyectos_repo.obtener(s, pid)
         if p is None:
             raise ProyectoNoExiste(pid)
-        return PROYECTOS_DIR / p.slug / "voz.mp3"
+        return PROYECTOS_DIR.joinpath(p.slug, *partes)
 
 
 def encolar_etapa(pid: int, tipo: str) -> int:

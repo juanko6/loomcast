@@ -2,7 +2,7 @@
 
 Generador automatizado de videos cortos (30–60 s, formato vertical 9:16) para YouTube Shorts y TikTok, **100% con IA local**.
 
-> Estado: **Fase 2 completada** (2026-07-20) — voz con Qwen3-TTS (design→clone por proyecto, síntesis por frase en lote, atempo 1.05) y subtítulos con mlx-whisper encadenados automáticamente tras la voz. Probado E2E: 13 frases → 59.4 s de audio → 48 bloques SRT. Siguiente: Fase 3 (escenas, imágenes y clips).
+> Estado: **primer video completo generado** (2026-07-20) — pipeline entero funcionando de tema a `final.mp4`: escenas con prompts visuales (LLM, inglés), 12 imágenes Z-Image, armado estático 1080×1920@30 con subtítulos compuestos vía Pillow (el ffmpeg de brew no trae libass) y metadatos completos. Duración 48.2 s. Siguiente: Fase 4 (movimiento Ken Burns/i2v, ESRGAN, RIFE).
 
 ## 1. Decisiones tomadas
 

@@ -48,12 +48,38 @@ def regenerar_subtitulos(pid: int):
     return {"job_id": proyectos_service.encolar_etapa(pid, "generar_subtitulos")}
 
 
-@router.get("/{pid}/audio")
-def audio(pid: int):
+@router.post("/{pid}/escenas")
+def generar_escenas(pid: int):
+    return {"job_id": proyectos_service.encolar_etapa(pid, "generar_escenas")}
+
+
+@router.post("/{pid}/video")
+def armar_video(pid: int):
+    return {"job_id": proyectos_service.encolar_etapa(pid, "armar_video")}
+
+
+def _archivo(pid: int, partes: tuple[str, ...], media_type: str, detalle: str):
     try:
-        mp3 = proyectos_service.ruta_audio(pid)
+        ruta = proyectos_service.ruta_archivo(pid, *partes)
     except proyectos_service.ProyectoNoExiste:
         raise HTTPException(404, "Proyecto no existe")
-    if not mp3.exists():
-        raise HTTPException(404, "Aún no hay voz generada")
-    return FileResponse(mp3, media_type="audio/mpeg")
+    if not ruta.exists():
+        raise HTTPException(404, detalle)
+    return FileResponse(ruta, media_type=media_type)
+
+
+@router.get("/{pid}/audio")
+def audio(pid: int):
+    return _archivo(pid, ("voz.mp3",), "audio/mpeg", "Aún no hay voz generada")
+
+
+@router.get("/{pid}/imagenes/{orden}")
+def imagen(pid: int, orden: int):
+    return _archivo(
+        pid, ("imagenes", f"{orden:02d}.png"), "image/png", "Imagen no generada"
+    )
+
+
+@router.get("/{pid}/video")
+def video(pid: int):
+    return _archivo(pid, ("final.mp4",), "video/mp4", "Aún no hay video final")

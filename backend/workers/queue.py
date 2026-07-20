@@ -5,7 +5,7 @@ import traceback
 
 from ..db import get_session
 from ..repositories import jobs as jobs_repo
-from ..services.pipeline import subtitulos, texto, voz
+from ..services.pipeline import armado, escenas, imagenes, subtitulos, texto, voz
 
 HANDLERS = {
     "generar_ideas": texto.generar_ideas,
@@ -13,10 +13,17 @@ HANDLERS = {
     "generar_metadatos": texto.generar_metadatos,
     "generar_voz": voz.generar_voz,
     "generar_subtitulos": subtitulos.generar_subtitulos,
+    "generar_escenas": escenas.generar_escenas,
+    "generar_imagenes": imagenes.generar_imagenes,
+    "armar_video": armado.armar_video,
 }
 
-# Etapas que se disparan solas al terminar la anterior (sin punto de revisión)
-CADENA = {"generar_voz": "generar_subtitulos"}
+# Etapas que se disparan solas al terminar la anterior. El armado no se
+# encadena: las imágenes tienen punto de revisión humana en la UI.
+CADENA = {
+    "generar_voz": "generar_subtitulos",
+    "generar_escenas": "generar_imagenes",
+}
 
 _cola: "_queue.Queue[int]" = _queue.Queue()
 
