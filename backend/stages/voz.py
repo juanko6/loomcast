@@ -2,9 +2,11 @@
 
 1. VoiceDesign crea un clip de referencia según la descripción de voz de la
    plantilla (voz distinta por proyecto, consistente dentro del video).
-2. El modelo Base convierte ese clip en un voice_clone_prompt reutilizable.
-3. generate_voice_clone sintetiza gancho + frases + cta en lote.
-4. Concatenación con pausas + atempo → voz.wav / voz.mp3.
+2. El modelo Base convierte ese clip en un voice_clone_prompt reutilizable
+   (guardado como voz_ref.wav para futuras regeneraciones parciales).
+3. generate_voice_clone sintetiza el guion COMPLETO en una sola pasada:
+   la narración fluye como relato continuo y las pausas las da la puntuación.
+4. atempo → voz.wav / voz.mp3.
 """
 import gc
 import json
@@ -72,14 +74,13 @@ def generar_voz(proyecto_id: int) -> str:
         slug, plantilla = p.slug, p.plantilla
 
     g = json.loads(guion_row.contenido)
-    frases = [g["gancho"], *g["frases"], g["cta"]]
+    texto_completo = " ".join([g["gancho"], *g["frases"], g["cta"]])
     pl = plantillas.cargar(plantilla)
     voz_cfg = pl["voz"]
     ritmo = pl["ritmo"]
 
     base_dir = PROYECTOS_DIR / slug
-    voces_dir = base_dir / "voces"
-    voces_dir.mkdir(parents=True, exist_ok=True)
+    base_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Referencia con VoiceDesign
     design = _cargar_modelo(MODELO_DESIGN)
@@ -90,26 +91,18 @@ def generar_voz(proyecto_id: int) -> str:
     sf.write(base_dir / "voz_ref.wav", ref, sr)
     _liberar(design)
 
-    # 2-3. Clonar la referencia y sintetizar todas las frases en lote
+    # 2-3. Clonar la referencia y narrar el guion completo en una sola pasada
     base = _cargar_modelo(MODELO_BASE)
     prompt = base.create_voice_clone_prompt(ref_audio=(ref, sr), ref_text=REF_TEXT)
     wavs, sr = base.generate_voice_clone(
-        text=frases,
-        language=[voz_cfg["language"]] * len(frases),
+        text=texto_completo,
+        language=voz_cfg["language"],
         voice_clone_prompt=prompt,
+        max_new_tokens=8192,
     )
     _liberar(base)
 
-    # 4. Guardar por frase y concatenar con pausas
-    pausa = np.zeros(int(sr * ritmo.get("pausa_entre_frases_s", 0.3)), np.float32)
-    piezas: list[np.ndarray] = []
-    for n, w in enumerate(wavs):
-        w = np.asarray(w, dtype=np.float32)
-        sf.write(voces_dir / f"{n:02d}.wav", w, sr)
-        piezas.append(w)
-        if n < len(wavs) - 1:
-            piezas.append(pausa)
-    sf.write(base_dir / "voz_raw.wav", np.concatenate(piezas), sr)
+    sf.write(base_dir / "voz_raw.wav", np.asarray(wavs[0], dtype=np.float32), sr)
 
     atempo = ritmo.get("atempo", 1.0)
     subprocess.run(
@@ -128,4 +121,4 @@ def generar_voz(proyecto_id: int) -> str:
         p = s.get(Proyecto, proyecto_id)
         avanzar_estado(p, "VOZ")
         s.commit()
-    return f"Voz generada: {len(frases)} frases, {dur:.1f}s (atempo {atempo})"
+    return f"Voz generada (narración continua): {dur:.1f}s (atempo {atempo})"
