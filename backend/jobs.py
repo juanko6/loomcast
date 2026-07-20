@@ -6,13 +6,18 @@ from datetime import datetime, timezone
 
 from .db import get_session
 from .models import Job
-from .stages import texto
+from .stages import subtitulos, texto, voz
 
 HANDLERS = {
     "generar_ideas": texto.generar_ideas,
     "generar_guion": texto.generar_guion,
     "generar_metadatos": texto.generar_metadatos,
+    "generar_voz": voz.generar_voz,
+    "generar_subtitulos": subtitulos.generar_subtitulos,
 }
+
+# Etapas que se disparan solas al terminar la anterior (sin punto de revisión)
+CADENA = {"generar_voz": "generar_subtitulos"}
 
 _cola: "queue.Queue[int]" = queue.Queue()
 
@@ -46,6 +51,8 @@ def _procesar(job_id: int) -> None:
         job.log = log
         job.finished_at = datetime.now(timezone.utc)
         s.commit()
+    if estado == "ok" and tipo in CADENA:
+        encolar(CADENA[tipo], ref_id)
 
 
 def _loop() -> None:

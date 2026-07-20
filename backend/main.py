@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import jobs, llm, plantillas
-from .config import COMFY_URL
+from .config import COMFY_URL, PROYECTOS_DIR
 from .db import get_session, init_db
 from .models import Guion, Idea, Job, Metadatos, Proyecto, Tema
 
@@ -187,10 +187,15 @@ def detalle_proyecto(pid: int):
         activos = (
             s.query(Job).filter(
                 Job.ref_id == pid,
-                Job.tipo.in_(["generar_guion", "generar_metadatos"]),
+                Job.tipo.in_([
+                    "generar_guion", "generar_metadatos",
+                    "generar_voz", "generar_subtitulos",
+                ]),
                 Job.estado.in_(["pendiente", "corriendo"]),
             ).count()
         )
+        base_dir = PROYECTOS_DIR / p.slug
+        srt = base_dir / "subtitulos.srt"
         return {
             "id": p.id, "slug": p.slug, "estado": p.estado,
             "plantilla": p.plantilla,
@@ -199,6 +204,8 @@ def detalle_proyecto(pid: int):
             "guion": json.loads(guion.contenido) if guion else None,
             "guion_version": guion.version if guion else 0,
             "metadatos": json.loads(meta.contenido) if meta else None,
+            "voz_disponible": (base_dir / "voz.mp3").exists(),
+            "subtitulos": srt.read_text() if srt.exists() else None,
             "jobs_activos": activos,
         }
 
@@ -234,6 +241,28 @@ def regenerar_guion(pid: int):
 @app.post("/api/proyectos/{pid}/metadatos")
 def generar_metadatos(pid: int):
     return {"job_id": jobs.encolar("generar_metadatos", pid)}
+
+
+@app.post("/api/proyectos/{pid}/voz")
+def generar_voz(pid: int):
+    return {"job_id": jobs.encolar("generar_voz", pid)}
+
+
+@app.post("/api/proyectos/{pid}/subtitulos")
+def regenerar_subtitulos(pid: int):
+    return {"job_id": jobs.encolar("generar_subtitulos", pid)}
+
+
+@app.get("/api/proyectos/{pid}/audio")
+def audio_proyecto(pid: int):
+    with get_session() as s:
+        p = s.get(Proyecto, pid)
+        if p is None:
+            raise HTTPException(404, "Proyecto no existe")
+        mp3 = PROYECTOS_DIR / p.slug / "voz.mp3"
+    if not mp3.exists():
+        raise HTTPException(404, "Aún no hay voz generada")
+    return FileResponse(mp3, media_type="audio/mpeg")
 
 
 # ---------- jobs ----------

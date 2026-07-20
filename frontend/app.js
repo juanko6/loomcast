@@ -128,6 +128,25 @@ async function renderProyecto(id) {
     </div>
 
     <div class="bloque">
+      <h2>Voz y subtítulos</h2>
+      ${!g ? `<p class="vacio">Primero el guion.</p>` : `
+        <div class="acciones" style="margin-bottom:12px">
+          <button id="gen-voz" ${ocupado ? "disabled" : ""}>
+            ${p.voz_disponible ? "↻ Regenerar voz (nueva voz)" : "🎙 Generar voz"}
+          </button>
+        </div>
+        ${p.voz_disponible ? `
+          <audio controls src="/api/proyectos/${p.id}/audio?v=${Date.now()}"
+                 style="width:100%;margin-bottom:12px"></audio>` : ""}
+        ${p.subtitulos ? `
+          <details>
+            <summary style="cursor:pointer;color:var(--dim)">Ver subtítulos (.srt)</summary>
+            <pre class="meta-desc" style="max-height:260px;overflow:auto;background:var(--panel);
+                 padding:10px;border-radius:8px;margin-top:8px">${esc(p.subtitulos)}</pre>
+          </details>` : ""}`}
+    </div>
+
+    <div class="bloque">
       <h2>Metadatos</h2>
       ${!m ? `<p class="vacio">Genera el guion primero y luego los metadatos.</p>` : `
         <div class="card">
@@ -203,6 +222,9 @@ document.addEventListener("click", async (ev) => {
       refrescarJobs(); renderVista();
     } else if (b.id === "gen-meta" && vista?.tipo === "proyecto") {
       await api(`/proyectos/${vista.id}/metadatos`, { method: "POST" });
+      refrescarJobs(); renderVista();
+    } else if (b.id === "gen-voz" && vista?.tipo === "proyecto") {
+      await api(`/proyectos/${vista.id}/voz`, { method: "POST" });
       refrescarJobs(); renderVista();
     } else if (b.id === "agregar-frase") {
       const div = document.createElement("div");

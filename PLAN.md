@@ -2,7 +2,7 @@
 
 Generador automatizado de videos cortos (30–60 s, formato vertical 9:16) para YouTube Shorts y TikTok, **100% con IA local**.
 
-> Estado: **Fase 1 completada** (2026-07-18) — backend FastAPI + SQLite + worker de jobs, cliente llama.cpp (razonamiento desactivado por petición), plantilla `curiosidades`, UI de revisión, probado end-to-end con Qwen3.6-27B. Siguiente: Fase 2 (voz y subtítulos).
+> Estado: **Fase 2 completada** (2026-07-20) — voz con Qwen3-TTS (design→clone por proyecto, síntesis por frase en lote, atempo 1.05) y subtítulos con mlx-whisper encadenados automáticamente tras la voz. Probado E2E: 13 frases → 59.4 s de audio → 48 bloques SRT. Siguiente: Fase 3 (escenas, imágenes y clips).
 
 ## 1. Decisiones tomadas
 
@@ -128,7 +128,7 @@ proyectos/<slug>/
 
 1. ~~**Fase 0 — Validación del entorno**~~ ✅ **Completada** (2026-07-18): todo el stack validado, mediciones y cambios de diseño en [fase0/RESULTADOS.md](fase0/RESULTADOS.md). La memoria se gestiona descargando Z-Image entre etapas con `POST /free` de ComfyUI (~20 GB liberados); TTS (~5 GB) + Whisper (~2 GB) + LLM conviven sin problema.
 2. ~~**Fase 1 — Núcleo texto**~~ ✅ **Completada** (2026-07-18): FastAPI + SQLite + worker en hilo, etapas 0–3 con UI de revisión/edición y plantilla `curiosidades`. Nota clave: las peticiones al LLM mandan `chat_template_kwargs: {enable_thinking: false}` — con el modo razonamiento activo, generar 8 ideas tardaba 6+ min; sin él, segundos.
-3. **Fase 2 — Audio**: etapas 4–5 (voz Qwen3-TTS + subtítulos).
+3. ~~**Fase 2 — Audio**~~ ✅ **Completada** (2026-07-20): etapas 4–5. VoiceDesign genera la referencia según la plantilla → el modelo Base la clona y sintetiza todas las frases en lote → concatenación con pausas de 0.3 s + atempo 1.05 → `voz.wav/mp3`. Whisper corre encadenado y produce `palabras.json` (insumo de escenas) + `subtitulos.srt`. La UI tiene reproductor y vista del SRT.
 4. **Fase 3 — Visual**: etapas 6–8 (escenas, imágenes vía Comfy, clips Ken Burns).
 5. **Fase 4 — Acabado**: etapas 9–11 (ESRGAN, RIFE, armado final con marca de agua opcional).
 6. **Fase 5 — Pulido**: cola robusta, reintentos, i2v opcional, plantilla `historia` y luego `drama-chisme`, empaquetado Tauri si se decide.

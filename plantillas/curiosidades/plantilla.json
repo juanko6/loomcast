@@ -14,6 +14,8 @@
   },
   "ritmo": {
     "duracion_objetivo_s": 45,
-    "duracion_escena_s": 4
+    "duracion_escena_s": 4,
+    "atempo": 1.05,
+    "pausa_entre_frases_s": 0.3
   }
 }
