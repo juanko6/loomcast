@@ -13,6 +13,18 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+ORDEN_ESTADOS = [
+    "IDEA", "GUION", "METADATOS", "VOZ", "SUBTITULOS", "ESCENAS",
+    "IMAGENES", "UPSCALE", "CLIPS", "INTERPOLADO", "FINAL",
+]
+
+
+def avanzar_estado(proyecto: "Proyecto", nuevo: str) -> None:
+    """El estado solo avanza (re-ejecutar una etapa no lo retrocede)."""
+    if ORDEN_ESTADOS.index(nuevo) > ORDEN_ESTADOS.index(proyecto.estado):
+        proyecto.estado = nuevo
+
+
 class Tema(Base):
     __tablename__ = "temas"
 

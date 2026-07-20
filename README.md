@@ -27,6 +27,10 @@ python3.12 -m venv .venv
 # UI en http://127.0.0.1:8700
 ```
 
+## Arquitectura del backend
+
+Capas (de HTTP hacia abajo): `routers/` (controllers: validación y JSON, cero lógica) → `services/` (reglas de negocio; `services/pipeline/` son las etapas de generación) → `repositories/` (consultas a SQLite y carga de plantillas) → `models.py` (ORM + máquina de estados). Transversales: `clients/` (adaptadores a llama-server y Qwen3-TTS), `workers/queue.py` (cola de jobs en un hilo, uno a la vez, con encadenado y recuperación), `schemas.py` (contratos Pydantic de la API).
+
 ## Estado
 
 - ✅ Fase 0 — validación del stack completo en local

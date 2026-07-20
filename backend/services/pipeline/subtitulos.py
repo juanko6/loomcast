@@ -6,11 +6,11 @@ en puntuación fuerte o pausas largas).
 """
 import json
 
-from .. import plantillas
-from ..config import PROYECTOS_DIR
-from ..db import get_session
-from ..models import Proyecto
-from .voz import avanzar_estado
+from ...config import PROYECTOS_DIR
+from ...db import get_session
+from ...repositories import plantillas as plantillas_repo
+from ...repositories import proyectos as proyectos_repo
+from ...models import avanzar_estado
 
 MODELO_WHISPER = "mlx-community/whisper-large-v3-turbo"
 PAUSA_CORTE_S = 0.5
@@ -57,7 +57,7 @@ def generar_subtitulos(proyecto_id: int) -> str:
     import mlx_whisper
 
     with get_session() as s:
-        p = s.get(Proyecto, proyecto_id)
+        p = proyectos_repo.obtener(s, proyecto_id)
         if p is None:
             raise ValueError(f"Proyecto {proyecto_id} no existe")
         slug, plantilla = p.slug, p.plantilla
@@ -84,7 +84,7 @@ def generar_subtitulos(proyecto_id: int) -> str:
     with open(base_dir / "palabras.json", "w") as f:
         json.dump(palabras, f, ensure_ascii=False, indent=1)
 
-    pl = plantillas.cargar(plantilla)
+    pl = plantillas_repo.cargar(plantilla)
     max_palabras = pl["subtitulos"].get("max_palabras_por_bloque", 3)
     bloques = _bloques(palabras, max_palabras)
 
@@ -95,7 +95,7 @@ def generar_subtitulos(proyecto_id: int) -> str:
     (base_dir / "subtitulos.srt").write_text(srt)
 
     with get_session() as s:
-        p = s.get(Proyecto, proyecto_id)
+        p = proyectos_repo.obtener(s, proyecto_id)
         avanzar_estado(p, "SUBTITULOS")
         s.commit()
     return f"{len(bloques)} bloques de subtítulos ({len(palabras)} palabras)"

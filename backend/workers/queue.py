@@ -1,12 +1,11 @@
-"""Worker de jobs en un hilo: las etapas LLM/GPU corren una a la vez."""
-import queue
+"""Cola de jobs en un hilo: las etapas LLM/GPU corren una a la vez."""
+import queue as _queue
 import threading
 import traceback
-from datetime import datetime, timezone
 
-from .db import get_session
-from .models import Job
-from .stages import subtitulos, texto, voz
+from ..db import get_session
+from ..repositories import jobs as jobs_repo
+from ..services.pipeline import subtitulos, texto, voz
 
 HANDLERS = {
     "generar_ideas": texto.generar_ideas,
@@ -19,15 +18,14 @@ HANDLERS = {
 # Etapas que se disparan solas al terminar la anterior (sin punto de revisión)
 CADENA = {"generar_voz": "generar_subtitulos"}
 
-_cola: "queue.Queue[int]" = queue.Queue()
+_cola: "_queue.Queue[int]" = _queue.Queue()
 
 
 def encolar(tipo: str, ref_id: int) -> int:
     if tipo not in HANDLERS:
         raise ValueError(f"Tipo de job desconocido: {tipo}")
     with get_session() as s:
-        job = Job(tipo=tipo, ref_id=ref_id)
-        s.add(job)
+        job = jobs_repo.crear(s, tipo, ref_id)
         s.commit()
         job_id = job.id
     _cola.put(job_id)
@@ -36,20 +34,16 @@ def encolar(tipo: str, ref_id: int) -> int:
 
 def _procesar(job_id: int) -> None:
     with get_session() as s:
-        job = s.get(Job, job_id)
-        job.estado = "corriendo"
+        job = jobs_repo.obtener(s, job_id)
+        jobs_repo.marcar_corriendo(s, job)
         s.commit()
         tipo, ref_id = job.tipo, job.ref_id
     try:
-        resultado = HANDLERS[tipo](ref_id)
-        estado, log = "ok", resultado
+        estado, log = "ok", HANDLERS[tipo](ref_id)
     except Exception:
         estado, log = "error", traceback.format_exc(limit=5)
     with get_session() as s:
-        job = s.get(Job, job_id)
-        job.estado = estado
-        job.log = log
-        job.finished_at = datetime.now(timezone.utc)
+        jobs_repo.finalizar(s, jobs_repo.obtener(s, job_id), estado, log)
         s.commit()
     if estado == "ok" and tipo in CADENA:
         encolar(CADENA[tipo], ref_id)
@@ -67,9 +61,7 @@ def arrancar_worker() -> None:
 def recuperar_pendientes() -> None:
     """Re-encola jobs que quedaron a medias si el server se reinició."""
     with get_session() as s:
-        pendientes = (
-            s.query(Job).filter(Job.estado.in_(["pendiente", "corriendo"])).all()
-        )
+        pendientes = jobs_repo.activos(s)
         for j in pendientes:
             j.estado = "pendiente"
         s.commit()

@@ -1,0 +1,63 @@
+"""Lógica de negocio de temas e ideas propuestas."""
+from ..db import get_session
+from ..repositories import ideas as ideas_repo
+from ..repositories import plantillas as plantillas_repo
+from ..repositories import proyectos as proyectos_repo
+from ..repositories import temas as temas_repo
+from ..workers import queue
+
+
+class TemaNoExiste(LookupError):
+    pass
+
+
+class PlantillaInvalida(ValueError):
+    pass
+
+
+def crear_tema(texto: str, plantilla: str) -> dict:
+    if plantilla not in plantillas_repo.listar():
+        raise PlantillaInvalida(plantilla)
+    with get_session() as s:
+        tema = temas_repo.crear(s, texto.strip(), plantilla)
+        s.commit()
+        tema_id = tema.id
+    job_id = queue.encolar("generar_ideas", tema_id)
+    return {"tema_id": tema_id, "job_id": job_id}
+
+
+def listar_temas() -> list[dict]:
+    with get_session() as s:
+        out = []
+        for t in temas_repo.listar(s):
+            ideas = ideas_repo.por_tema(s, t.id)
+            out.append({
+                "id": t.id,
+                "texto": t.texto,
+                "plantilla": t.plantilla,
+                "n_ideas": len(ideas),
+                "n_aprobadas": sum(1 for i in ideas if i.estado == "aprobada"),
+            })
+        return out
+
+
+def ideas_de_tema(tema_id: int) -> list[dict]:
+    with get_session() as s:
+        con_proyecto = {
+            p.idea_id: p.id for p in proyectos_repo.listar(s)
+        }
+        return [
+            {
+                "id": i.id, "titulo": i.titulo, "gancho": i.gancho,
+                "resumen": i.resumen, "estado": i.estado,
+                "proyecto_id": con_proyecto.get(i.id),
+            }
+            for i in ideas_repo.por_tema(s, tema_id)
+        ]
+
+
+def pedir_mas_ideas(tema_id: int) -> int:
+    with get_session() as s:
+        if temas_repo.obtener(s, tema_id) is None:
+            raise TemaNoExiste(tema_id)
+    return queue.encolar("generar_ideas", tema_id)

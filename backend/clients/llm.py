@@ -4,7 +4,7 @@ import re
 
 import httpx
 
-from .config import LLM_MODEL, LLM_TEMPERATURE, LLM_TIMEOUT_S, LLM_URL
+from ..config import LLM_MODEL, LLM_TEMPERATURE, LLM_TIMEOUT_S, LLM_URL
 
 
 class LLMError(RuntimeError):
