@@ -14,6 +14,18 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 def init_db() -> None:
     Base.metadata.create_all(engine)
+    _migrar()
+
+
+def _migrar() -> None:
+    """Migraciones mínimas: create_all no altera tablas existentes."""
+    from sqlalchemy import text
+
+    with engine.connect() as c:
+        cols = [r[1] for r in c.execute(text("PRAGMA table_info(proyectos)"))]
+        if "voz" not in cols:
+            c.execute(text("ALTER TABLE proyectos ADD COLUMN voz VARCHAR"))
+            c.commit()
 
 
 def get_session() -> Session:

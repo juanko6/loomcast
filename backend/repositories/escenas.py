@@ -18,3 +18,13 @@ def por_proyecto(s: Session, proyecto_id: int) -> list[Escena]:
         .order_by(Escena.orden)
         .all()
     )
+
+
+def actualizar_prompts(s: Session, proyecto_id: int, prompts: dict[int, str]) -> int:
+    """Reemplaza el prompt visual de las escenas indicadas (por orden)."""
+    n = 0
+    for e in por_proyecto(s, proyecto_id):
+        if e.orden in prompts:
+            e.prompt = prompts[e.orden]
+            n += 1
+    return n

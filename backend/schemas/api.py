@@ -15,3 +15,21 @@ class GuionIn(BaseModel):
     gancho: str
     frases: list[str]
     cta: str
+
+
+class VozNuevaIn(BaseModel):
+    nombre: str
+    instruct: str
+
+
+class VozSeleccionIn(BaseModel):
+    voz: str  # slug de la voz del banco
+
+
+class EscenaPromptIn(BaseModel):
+    orden: int
+    prompt: str
+
+
+class EscenasIn(BaseModel):
+    escenas: list[EscenaPromptIn]

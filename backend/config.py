@@ -16,4 +16,5 @@ COMFY_URL: str = _cfg["comfy"]["url"].rstrip("/")
 
 PROYECTOS_DIR: Path = ROOT / _cfg["paths"]["proyectos"]
 PLANTILLAS_DIR: Path = ROOT / _cfg["paths"]["plantillas"]
+VOCES_DIR: Path = ROOT / _cfg["paths"]["voces"]
 DB_PATH: Path = ROOT / _cfg["paths"]["db"]

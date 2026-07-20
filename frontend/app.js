@@ -1,4 +1,4 @@
-/* Loomcast — UI Fase 1: temas → ideas → guion → metadatos */
+/* Loomcast — UI: tema → ideas → guion → voz → metadatos → escenas → video */
 const $ = (sel) => document.querySelector(sel);
 const panel = $("#panel");
 
@@ -19,6 +19,7 @@ const esc = (t) =>
 // ---------- estado global ----------
 let vista = null; // {tipo: "tema"|"proyecto", id}
 let jobsPrevios = 0;
+let voces = []; // banco de voces cacheado
 
 // ---------- salud y jobs ----------
 async function refrescarSalud() {
@@ -35,8 +36,8 @@ async function refrescarJobs() {
     const badge = $("#jobs-badge");
     badge.classList.toggle("oculto", jobs.length === 0);
     if (jobs.length) badge.textContent = `${jobs.length} job(s) en cola`;
-    // si un job terminó, recargar la vista actual y las listas
     if (jobsPrevios > 0 && jobs.length < jobsPrevios) {
+      voces = await api("/voces");
       cargarListas();
       renderVista();
     }
@@ -88,23 +89,13 @@ async function renderTema(id) {
     <button class="sec" id="mas-ideas">＋ Generar más ideas</button>`;
 }
 
-// ---------- vista: detalle de proyecto ----------
-async function renderProyecto(id) {
-  const p = await api(`/proyectos/${id}`);
+// ---------- bloques del proyecto ----------
+function bloqueGuion(p, ocupado) {
   const g = p.guion;
-  const m = p.metadatos;
-  const ocupado = p.jobs_activos > 0;
-
-  panel.innerHTML = `
+  return `
     <div class="bloque">
-      <span class="estado-chip">${esc(p.estado)}</span>
-      <h2 style="margin-top:8px">${esc(p.idea?.titulo ?? p.slug)}</h2>
-      ${ocupado ? `<p class="spinner">Trabajando… (guion o metadatos en curso)</p>` : ""}
-    </div>
-
-    <div class="bloque">
-      <h2>Guion ${g ? `(v${p.guion_version})` : ""}</h2>
-      ${!g ? `<p class="vacio">Aún no hay guion.</p>` : `
+      <h2>1 · Guion ${g ? `(v${p.guion_version})` : ""}</h2>
+      ${!g ? `<p class="vacio">Generando el guion…</p>` : `
         <form id="form-guion">
           <label>Gancho</label>
           <input id="g-gancho" value="${esc(g.gancho)}">
@@ -122,59 +113,69 @@ async function renderProyecto(id) {
           <div class="acciones" style="margin-top:10px">
             <button type="submit">Guardar guion editado</button>
             <button type="button" class="sec" id="regenerar-guion" ${ocupado ? "disabled" : ""}>↻ Regenerar con LLM</button>
-            <button type="button" id="gen-meta" ${ocupado ? "disabled" : ""}>Generar metadatos →</button>
           </div>
         </form>`}
-    </div>
+    </div>`;
+}
 
+function bloqueVoz(p, ocupado) {
+  if (!p.guion) return "";
+  const listas = voces.filter((v) => v.disponible);
+  const opciones = listas.map((v) =>
+    `<option value="${esc(v.slug)}" ${p.voz === v.slug ? "selected" : ""}>${esc(v.nombre)}</option>`
+  ).join("");
+  const vozSel = listas.find((v) => v.slug === p.voz);
+  return `
     <div class="bloque">
-      <h2>Voz y subtítulos</h2>
-      ${!g ? `<p class="vacio">Primero el guion.</p>` : `
-        <div class="acciones" style="margin-bottom:12px">
-          <button id="gen-voz" ${ocupado ? "disabled" : ""}>
-            ${p.voz_disponible ? "↻ Regenerar voz (nueva voz)" : "🎙 Generar voz"}
-          </button>
+      <h2>2 · Voz</h2>
+      <label>Elige una voz del banco</label>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <select id="sel-voz" style="margin:0;flex:1">
+          <option value="">— sin elegir —</option>
+          ${opciones}
+        </select>
+        <button type="button" class="sec" id="preview-voz" ${vozSel ? "" : "disabled"}>▶ Escuchar</button>
+      </div>
+      ${vozSel ? `<audio id="audio-preview-voz" src="/api/voces/${vozSel.slug}/audio" style="display:none"></audio>
+        <p class="resumen" style="margin-bottom:8px">${esc(vozSel.instruct)}</p>` : ""}
+      <details style="margin-bottom:12px">
+        <summary style="cursor:pointer;color:var(--dim)">＋ Crear una voz nueva</summary>
+        <div style="margin-top:8px">
+          <input id="voz-nombre" placeholder="Nombre (ej: Narrador Épico)">
+          <textarea id="voz-instruct" rows="2"
+            placeholder="Describe cómo suena: voz masculina grave, tono misterioso, ritmo pausado…"></textarea>
+          <button type="button" class="sec" id="crear-voz">Crear voz (VoiceDesign)</button>
         </div>
-        ${p.voz_disponible ? `
-          <audio controls src="/api/proyectos/${p.id}/audio?v=${Date.now()}"
-                 style="width:100%;margin-bottom:12px"></audio>` : ""}
-        ${p.subtitulos ? `
-          <details>
-            <summary style="cursor:pointer;color:var(--dim)">Ver subtítulos (.srt)</summary>
-            <pre class="meta-desc" style="max-height:260px;overflow:auto;background:var(--panel);
-                 padding:10px;border-radius:8px;margin-top:8px">${esc(p.subtitulos)}</pre>
-          </details>` : ""}`}
-    </div>
+      </details>
+      <div class="acciones" style="margin-bottom:12px">
+        <button id="gen-voz" ${ocupado || !p.voz ? "disabled" : ""}>
+          ${p.voz_disponible ? "↻ Regenerar narración" : "🎙 Generar narración"}
+        </button>
+      </div>
+      ${p.voz_disponible ? `
+        <audio controls src="/api/proyectos/${p.id}/audio?v=${Date.now()}"
+               style="width:100%;margin-bottom:12px"></audio>` : ""}
+      ${p.subtitulos ? `
+        <details>
+          <summary style="cursor:pointer;color:var(--dim)">Ver subtítulos (.srt)</summary>
+          <pre class="meta-desc" style="max-height:240px;overflow:auto;background:var(--panel);
+               padding:10px;border-radius:8px;margin-top:8px">${esc(p.subtitulos)}</pre>
+        </details>` : ""}
+    </div>`;
+}
 
+function bloqueMetadatos(p, ocupado) {
+  if (!p.voz_disponible) return "";
+  const m = p.metadatos;
+  return `
     <div class="bloque">
-      <h2>Video</h2>
-      ${!p.subtitulos ? `<p class="vacio">Genera la voz y los subtítulos primero.</p>` : `
-        <div class="acciones" style="margin-bottom:12px">
-          <button id="gen-escenas" ${ocupado ? "disabled" : ""}>
-            ${p.escenas.length ? "↻ Regenerar escenas e imágenes" : "🎞 Generar escenas e imágenes"}
-          </button>
-          <button id="armar-video" ${ocupado || !p.escenas.length || !p.escenas.every((e) => e.imagen) ? "disabled" : ""}>
-            🎬 Armar video final
-          </button>
-        </div>
-        ${p.escenas.length ? `
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
-            ${p.escenas.map((e) => e.imagen
-              ? `<img src="/api/proyectos/${p.id}/imagenes/${e.orden}?v=${Date.now()}"
-                     title="${esc(e.prompt)}"
-                     style="width:72px;border-radius:8px;aspect-ratio:9/16;object-fit:cover">`
-              : `<div title="${esc(e.prompt)}" style="width:72px;aspect-ratio:9/16;border-radius:8px;
-                     background:var(--panel2);display:flex;align-items:center;justify-content:center;
-                     color:var(--dim);font-size:11px">${e.orden + 1}</div>`).join("")}
-          </div>` : ""}
-        ${p.video_disponible ? `
-          <video controls src="/api/proyectos/${p.id}/video?v=${Date.now()}"
-                 style="width:280px;max-width:100%;border-radius:12px"></video>` : ""}`}
-    </div>
-
-    <div class="bloque">
-      <h2>Metadatos</h2>
-      ${!m ? `<p class="vacio">Genera el guion primero y luego los metadatos.</p>` : `
+      <h2>3 · Metadatos</h2>
+      <div class="acciones" style="margin-bottom:12px">
+        <button id="gen-meta" ${ocupado ? "disabled" : ""}>
+          ${m ? "↻ Regenerar metadatos" : "🏷 Generar título, descripción y etiquetas"}
+        </button>
+      </div>
+      ${!m ? `<p class="vacio">Genera los metadatos cuando la narración esté lista.</p>` : `
         <div class="card">
           <h3>YouTube</h3>
           <p><b>${esc(m.youtube.titulo)}</b></p>
@@ -186,6 +187,80 @@ async function renderProyecto(id) {
           <pre class="meta-desc">${esc(m.tiktok.descripcion)}</pre>
         </div>`}
     </div>`;
+}
+
+function bloqueEscenas(p, ocupado) {
+  if (!p.subtitulos) return "";
+  const hayEscenas = p.escenas.length > 0;
+  const hayImagenes = p.imagenes_completas;
+  return `
+    <div class="bloque">
+      <h2>4 · Escenas e imágenes</h2>
+      <div class="acciones" style="margin-bottom:12px">
+        <button id="gen-escenas" class="${hayEscenas ? "sec" : ""}" ${ocupado ? "disabled" : ""}>
+          ${hayEscenas ? "↻ Regenerar prompts de escenas" : "🎞 Generar prompts de escenas"}
+        </button>
+      </div>
+      ${!hayEscenas ? `<p class="vacio">Genera las escenas: el LLM propone un prompt visual por segmento, que puedes editar antes de crear las imágenes.</p>` : `
+        <form id="form-escenas">
+          <p class="resumen">Revisa y edita cada prompt visual. Cuando estés conforme, genera las imágenes.</p>
+          ${p.escenas.map((e) => `
+            <div class="escena-row">
+              <div class="escena-cab">
+                <span class="estado-chip">#${e.orden + 1} · ${e.t_inicio.toFixed(1)}–${e.t_fin.toFixed(1)}s</span>
+                <span class="meta">${esc(e.texto)}</span>
+              </div>
+              <div style="display:flex;gap:8px;align-items:flex-start">
+                ${e.imagen
+                  ? `<img src="/api/proyectos/${p.id}/imagenes/${e.orden}?v=${Date.now()}"
+                         style="width:54px;border-radius:6px;aspect-ratio:9/16;object-fit:cover;flex-shrink:0">`
+                  : `<div style="width:54px;aspect-ratio:9/16;border-radius:6px;flex-shrink:0;
+                         background:var(--panel2);display:flex;align-items:center;justify-content:center;
+                         color:var(--dim);font-size:11px">${e.orden + 1}</div>`}
+                <textarea class="escena-prompt" data-orden="${e.orden}" rows="3">${esc(e.prompt)}</textarea>
+              </div>
+            </div>`).join("")}
+          <div class="acciones" style="margin-top:10px">
+            <button type="submit" class="sec">Guardar prompts editados</button>
+            <button type="button" id="gen-imagenes" ${ocupado ? "disabled" : ""}>
+              ${hayImagenes ? "↻ Regenerar imágenes" : "✓ Aceptar y generar imágenes"}
+            </button>
+          </div>
+        </form>`}
+    </div>`;
+}
+
+function bloqueVideo(p, ocupado) {
+  if (!p.imagenes_completas) return "";
+  return `
+    <div class="bloque">
+      <h2>5 · Video final</h2>
+      <div class="acciones" style="margin-bottom:12px">
+        <button id="armar-video" ${ocupado ? "disabled" : ""}>
+          ${p.video_disponible ? "↻ Rearmar video" : "🎬 Armar video final"}
+        </button>
+      </div>
+      ${p.video_disponible ? `
+        <video controls src="/api/proyectos/${p.id}/video?v=${Date.now()}"
+               style="width:280px;max-width:100%;border-radius:12px"></video>` : ""}
+    </div>`;
+}
+
+// ---------- vista: detalle de proyecto ----------
+async function renderProyecto(id) {
+  const p = await api(`/proyectos/${id}`);
+  const ocupado = p.jobs_activos > 0;
+  panel.innerHTML = `
+    <div class="bloque">
+      <span class="estado-chip">${esc(p.estado)}</span>
+      <h2 style="margin-top:8px">${esc(p.idea?.titulo ?? p.slug)}</h2>
+      ${ocupado ? `<p class="spinner">Trabajando… (un job en curso)</p>` : ""}
+    </div>
+    ${bloqueGuion(p, ocupado)}
+    ${bloqueVoz(p, ocupado)}
+    ${bloqueMetadatos(p, ocupado)}
+    ${bloqueEscenas(p, ocupado)}
+    ${bloqueVideo(p, ocupado)}`;
 }
 
 // ---------- render según vista ----------
@@ -219,6 +294,8 @@ $("#form-tema").addEventListener("submit", async (ev) => {
   refrescarJobs();
 });
 
+const pid = () => vista.id;
+
 document.addEventListener("click", async (ev) => {
   const b = ev.target;
   const li = b.closest?.("[data-tema]");
@@ -243,20 +320,33 @@ document.addEventListener("click", async (ev) => {
       await api(`/temas/${vista.id}/ideas`, { method: "POST" });
       refrescarJobs();
       b.textContent = "Generando más ideas…"; b.disabled = true;
-    } else if (b.id === "regenerar-guion" && vista?.tipo === "proyecto") {
-      await api(`/proyectos/${vista.id}/guion/regenerar`, { method: "POST" });
+    } else if (b.id === "regenerar-guion") {
+      await api(`/proyectos/${pid()}/guion/regenerar`, { method: "POST" });
       refrescarJobs(); renderVista();
-    } else if (b.id === "gen-meta" && vista?.tipo === "proyecto") {
-      await api(`/proyectos/${vista.id}/metadatos`, { method: "POST" });
+    } else if (b.id === "preview-voz") {
+      $("#audio-preview-voz")?.play();
+    } else if (b.id === "crear-voz") {
+      const nombre = $("#voz-nombre").value.trim();
+      const instruct = $("#voz-instruct").value.trim();
+      if (!nombre || !instruct) return;
+      await api("/voces", { method: "POST", body: { nombre, instruct } });
+      b.textContent = "Creando voz…"; b.disabled = true;
+      refrescarJobs();
+    } else if (b.id === "gen-voz") {
+      await api(`/proyectos/${pid()}/voz`, { method: "POST" });
       refrescarJobs(); renderVista();
-    } else if (b.id === "gen-voz" && vista?.tipo === "proyecto") {
-      await api(`/proyectos/${vista.id}/voz`, { method: "POST" });
+    } else if (b.id === "gen-meta") {
+      await api(`/proyectos/${pid()}/metadatos`, { method: "POST" });
       refrescarJobs(); renderVista();
-    } else if (b.id === "gen-escenas" && vista?.tipo === "proyecto") {
-      await api(`/proyectos/${vista.id}/escenas`, { method: "POST" });
+    } else if (b.id === "gen-escenas") {
+      await api(`/proyectos/${pid()}/escenas`, { method: "POST" });
       refrescarJobs(); renderVista();
-    } else if (b.id === "armar-video" && vista?.tipo === "proyecto") {
-      await api(`/proyectos/${vista.id}/video`, { method: "POST" });
+    } else if (b.id === "gen-imagenes") {
+      await guardarPrompts();
+      await api(`/proyectos/${pid()}/imagenes`, { method: "POST" });
+      refrescarJobs(); renderVista();
+    } else if (b.id === "armar-video") {
+      await api(`/proyectos/${pid()}/video`, { method: "POST" });
       refrescarJobs(); renderVista();
     } else if (b.id === "agregar-frase") {
       const div = document.createElement("div");
@@ -271,21 +361,45 @@ document.addEventListener("click", async (ev) => {
   }
 });
 
+document.addEventListener("change", async (ev) => {
+  if (ev.target.id === "sel-voz" && vista?.tipo === "proyecto") {
+    const voz = ev.target.value;
+    if (voz) await api(`/proyectos/${pid()}/voz`, { method: "PUT", body: { voz } });
+    renderVista();
+  }
+});
+
+async function guardarPrompts() {
+  const escenas = [...document.querySelectorAll(".escena-prompt")].map((t) => ({
+    orden: +t.dataset.orden, prompt: t.value.trim(),
+  }));
+  await api(`/proyectos/${pid()}/escenas`, { method: "PUT", body: { escenas } });
+}
+
 document.addEventListener("submit", async (ev) => {
-  if (ev.target.id !== "form-guion") return;
   ev.preventDefault();
-  const frases = [...document.querySelectorAll("#g-frases input")]
-    .map((i) => i.value.trim()).filter(Boolean);
-  await api(`/proyectos/${vista.id}/guion`, {
-    method: "PUT",
-    body: { gancho: $("#g-gancho").value.trim(), frases, cta: $("#g-cta").value.trim() },
-  });
-  renderVista();
+  try {
+    if (ev.target.id === "form-guion") {
+      const frases = [...document.querySelectorAll("#g-frases input")]
+        .map((i) => i.value.trim()).filter(Boolean);
+      await api(`/proyectos/${pid()}/guion`, {
+        method: "PUT",
+        body: { gancho: $("#g-gancho").value.trim(), frases, cta: $("#g-cta").value.trim() },
+      });
+      renderVista();
+    } else if (ev.target.id === "form-escenas") {
+      await guardarPrompts();
+      renderVista();
+    }
+  } catch (e) {
+    panel.insertAdjacentHTML("afterbegin", `<div class="error-box">${esc(e.message)}</div>`);
+  }
 });
 
 // ---------- arranque ----------
 (async function init() {
-  const plantillas = await api("/plantillas");
+  const [plantillas, bancoVoces] = await Promise.all([api("/plantillas"), api("/voces")]);
+  voces = bancoVoces;
   $("#tema-plantilla").innerHTML =
     plantillas.map((p) => `<option>${esc(p)}</option>`).join("");
   cargarListas();

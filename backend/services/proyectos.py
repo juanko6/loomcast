@@ -10,6 +10,7 @@ from ..repositories import ideas as ideas_repo
 from ..repositories import jobs as jobs_repo
 from ..repositories import metadatos as metadatos_repo
 from ..repositories import proyectos as proyectos_repo
+from ..repositories import voces as voces_repo
 from ..workers import queue
 
 TIPOS_JOB_PROYECTO = [
@@ -17,8 +18,15 @@ TIPOS_JOB_PROYECTO = [
     "generar_escenas", "generar_imagenes", "armar_video",
 ]
 
+# El estado del proyecto NO retrocede, pero editar escenas invalida imágenes
+# ya generadas; la UI lo maneja mostrando el botón de regenerar imágenes.
+
 
 class ProyectoNoExiste(LookupError):
+    pass
+
+
+class VozNoDisponible(ValueError):
     pass
 
 
@@ -53,9 +61,10 @@ def detalle(pid: int) -> dict:
             }
             for e in escenas_repo.por_proyecto(s, pid)
         ]
+        todas_imagenes = bool(escenas) and all(e["imagen"] for e in escenas)
         return {
             "id": p.id, "slug": p.slug, "estado": p.estado,
-            "plantilla": p.plantilla,
+            "plantilla": p.plantilla, "voz": p.voz,
             "idea": {"titulo": idea.titulo, "gancho": idea.gancho,
                      "resumen": idea.resumen} if idea else None,
             "guion": json.loads(guion.contenido) if guion else None,
@@ -64,6 +73,7 @@ def detalle(pid: int) -> dict:
             "voz_disponible": (base_dir / "voz.mp3").exists(),
             "subtitulos": srt.read_text() if srt.exists() else None,
             "escenas": escenas,
+            "imagenes_completas": todas_imagenes,
             "video_disponible": (base_dir / "final.mp4").exists(),
             "jobs_activos": activos,
         }
@@ -78,6 +88,27 @@ def editar_guion(pid: int, contenido: dict) -> int:
         avanzar_estado(p, "GUION")
         s.commit()
         return g.version
+
+
+def seleccionar_voz(pid: int, voz_slug: str) -> None:
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        if voces_repo.por_slug(s, voz_slug) is None:
+            raise VozNoDisponible(voz_slug)
+        p.voz = voz_slug
+        s.commit()
+
+
+def editar_prompts_escenas(pid: int, prompts: dict[int, str]) -> int:
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        n = escenas_repo.actualizar_prompts(s, pid, prompts)
+        s.commit()
+        return n
 
 
 def ruta_archivo(pid: int, *partes: str):

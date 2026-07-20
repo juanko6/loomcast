@@ -18,6 +18,8 @@ class Proyecto(Base):
     idea_id: Mapped[int] = mapped_column(ForeignKey("ideas.id"))
     slug: Mapped[str] = mapped_column(unique=True)
     plantilla: Mapped[str] = mapped_column(default="curiosidades")
+    # Slug de la voz del banco elegida para narrar este proyecto
+    voz: Mapped[str | None] = mapped_column(default=None)
     estado: Mapped[str] = mapped_column(default="IDEA")
     created_at: Mapped[datetime] = mapped_column(default=now_utc)
 

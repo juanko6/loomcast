@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .db import init_db
-from .routers import ideas, jobs, proyectos, sistema, temas
+from .routers import ideas, jobs, proyectos, sistema, temas, voces
 from .workers import queue
 
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
@@ -26,6 +26,7 @@ app = FastAPI(title="Loomcast", lifespan=lifespan)
 app.include_router(sistema.router)
 app.include_router(temas.router)
 app.include_router(ideas.router)
+app.include_router(voces.router)
 app.include_router(proyectos.router)
 app.include_router(jobs.router)
 

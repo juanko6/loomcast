@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from ..schemas import GuionIn
+from ..schemas import EscenasIn, GuionIn, VozSeleccionIn
 from ..services import proyectos as proyectos_service
 
 router = APIRouter(prefix="/api/proyectos", tags=["proyectos"])
@@ -38,6 +38,17 @@ def generar_metadatos(pid: int):
     return {"job_id": proyectos_service.encolar_etapa(pid, "generar_metadatos")}
 
 
+@router.put("/{pid}/voz")
+def seleccionar_voz(pid: int, body: VozSeleccionIn):
+    try:
+        proyectos_service.seleccionar_voz(pid, body.voz)
+        return {"ok": True}
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+    except proyectos_service.VozNoDisponible:
+        raise HTTPException(400, "Voz no disponible")
+
+
 @router.post("/{pid}/voz")
 def generar_voz(pid: int):
     return {"job_id": proyectos_service.encolar_etapa(pid, "generar_voz")}
@@ -51,6 +62,20 @@ def regenerar_subtitulos(pid: int):
 @router.post("/{pid}/escenas")
 def generar_escenas(pid: int):
     return {"job_id": proyectos_service.encolar_etapa(pid, "generar_escenas")}
+
+
+@router.put("/{pid}/escenas")
+def editar_escenas(pid: int, body: EscenasIn):
+    try:
+        prompts = {e.orden: e.prompt for e in body.escenas}
+        return {"actualizadas": proyectos_service.editar_prompts_escenas(pid, prompts)}
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+
+
+@router.post("/{pid}/imagenes")
+def generar_imagenes(pid: int):
+    return {"job_id": proyectos_service.encolar_etapa(pid, "generar_imagenes")}
 
 
 @router.post("/{pid}/video")
