@@ -1,12 +1,24 @@
 # Configuración de Loomcast — servicios locales
 
 [llm]
-# llama-server (API OpenAI-compatible) — puerto de los scripts de ~/models
-url = "http://127.0.0.1:8001"
-# Nombre del modelo (informativo; llama-server usa el que tenga cargado)
+# llama-server (API OpenAI-compatible). Loomcast NO impone ajustes del modelo:
+# el sampling (--temp/--top-p/--top-k), contexto y reasoning los define TU
+# script de arranque. Aquí solo se apunta al puerto donde levantaste el modelo.
+url = "http://127.0.0.1:9876"
+# Nombre del modelo: informativo; llama-server usa el que tenga cargado.
 model = "local"
-temperature = 0.8
 timeout_s = 600
+max_tokens = 4096
+
+# Opcional — descoméntalo SOLO si quieres que Loomcast fuerce la temperatura
+# por encima de la de tu script. Si se omite, manda tu llama-server.
+# temperature = 0.8
+
+# Apaga el "pensamiento" del modelo en las tareas del pipeline (son de formato
+# JSON y no lo necesitan; con reasoning activo tardan 5-10x más).
+# Qwen3/3.6: { enable_thinking = false }. Otra familia: ajusta la clave o
+# borra la línea y desactiva el reasoning en tu script.
+chat_template_kwargs = { enable_thinking = false }
 
 [comfy]
 url = "http://127.0.0.1:8188"

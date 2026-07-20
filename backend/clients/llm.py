@@ -11,7 +11,14 @@ from typing import TypeVar
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from ..config import LLM_MODEL, LLM_TEMPERATURE, LLM_TIMEOUT_S, LLM_URL
+from ..config import (
+    LLM_CHAT_TEMPLATE_KWARGS,
+    LLM_MAX_TOKENS,
+    LLM_MODEL,
+    LLM_TEMPERATURE,
+    LLM_TIMEOUT_S,
+    LLM_URL,
+)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -54,18 +61,20 @@ def chat(system: str, user: str, salida: type[T]) -> T:
     soporta (4xx), reintenta en modo texto. En ambos casos la respuesta
     pasa por la validación Pydantic antes de devolverse.
     """
+    # El sampling lo define el llama-server (tu script de arranque); Loomcast
+    # solo añade temperature o chat_template_kwargs si están en config.toml.
     base = {
         "model": LLM_MODEL,
-        "temperature": LLM_TEMPERATURE,
-        "max_tokens": 4096,
-        # Las etapas del pipeline no necesitan modo razonamiento (Qwen3/3.6):
-        # sin esto el modelo "piensa" miles de tokens antes del JSON.
-        "chat_template_kwargs": {"enable_thinking": False},
+        "max_tokens": LLM_MAX_TOKENS,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
     }
+    if LLM_TEMPERATURE is not None:
+        base["temperature"] = LLM_TEMPERATURE
+    if LLM_CHAT_TEMPLATE_KWARGS:
+        base["chat_template_kwargs"] = LLM_CHAT_TEMPLATE_KWARGS
     with httpx.Client(timeout=LLM_TIMEOUT_S) as client:
         con_schema = base | {
             "response_format": {
