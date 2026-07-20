@@ -5,12 +5,23 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
 
 from .db import init_db
 from .routers import ideas, jobs, proyectos, sistema, temas, voces
 from .workers import queue
 
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
+
+
+class NoCacheStatic(StaticFiles):
+    """Sirve el frontend forzando revalidación: al iterar rápido, el navegador
+    no debe quedarse con app.js/style.css viejos en caché."""
+
+    def file_response(self, *args, **kwargs) -> Response:
+        resp = super().file_response(*args, **kwargs)
+        resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return resp
 
 
 @asynccontextmanager
@@ -33,7 +44,9 @@ app.include_router(jobs.router)
 
 @app.get("/")
 def index():
-    return FileResponse(FRONTEND / "index.html")
+    return FileResponse(
+        FRONTEND / "index.html", headers={"Cache-Control": "no-cache, must-revalidate"}
+    )
 
 
-app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
+app.mount("/static", NoCacheStatic(directory=FRONTEND), name="static")
