@@ -14,6 +14,7 @@ from ...repositories import escenas as escenas_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
 from . import _subtitulos_render as subs
+from ._ffmpeg import args_video
 
 
 def armar_estatico(proyecto_id: int) -> str:
@@ -103,7 +104,7 @@ def armar_estatico(proyecto_id: int) -> str:
         ["ffmpeg", "-loglevel", "error", "-y",
          "-f", "concat", "-safe", "0", "-i", "estatico_concat.txt",
          "-i", "voz.wav", "-vf", "fps=30",
-         "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
+         *args_video(),
          "-c:a", "aac", "-b:a", "192k", "-shortest", "final.mp4"],
         cwd=base, capture_output=True, text=True,
     )

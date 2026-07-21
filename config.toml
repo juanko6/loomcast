@@ -23,6 +23,17 @@ chat_template_kwargs = { enable_thinking = false }
 [comfy]
 url = "http://127.0.0.1:8188"
 
+[video]
+# Codificador para los clips y el armado final.
+#  "hardware" → h264_videotoolbox: usa el motor de medios de Apple, muy poca
+#               CPU y más rápido. Recomendado en Apple Silicon.
+#  "software" → libx264: máxima calidad por bit, pero satura la CPU.
+encoder = "hardware"
+# Bitrate objetivo del modo hardware (VideoToolbox no usa CRF).
+bitrate_mbps = 12
+# Calidad del modo software (CRF: menor = más calidad, ~18 es visualmente sin pérdida).
+crf = 18
+
 [paths]
 proyectos = "proyectos"
 plantillas = "plantillas"

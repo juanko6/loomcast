@@ -11,6 +11,7 @@ from ...db import get_session
 from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
 from ...repositories import proyectos as proyectos_repo
+from ._ffmpeg import args_video
 
 FPS = 60
 ANCHO, ALTO = 1080, 1920
@@ -65,8 +66,7 @@ def generar_clips(proyecto_id: int) -> str:
              "-loop", "1", "-i", str(up_dir / f"{e['orden']:02d}.png"),
              "-vf", _ken_burns_vf(e["orden"], frames),
              "-frames:v", str(frames),
-             "-c:v", "libx264", "-preset", "medium", "-crf", "18",
-             "-pix_fmt", "yuv420p", str(salida)],
+             *args_video(), str(salida)],
             capture_output=True, text=True,
         )
         if r.returncode != 0:

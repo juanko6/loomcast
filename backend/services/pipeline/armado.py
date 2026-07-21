@@ -13,6 +13,7 @@ from ...repositories import escenas as escenas_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
 from . import _subtitulos_render as subs
+from ._ffmpeg import args_video
 
 
 def _rasterizar_transparente(texto, fuente, color, borde, destino):
@@ -78,8 +79,7 @@ def armar_video(proyecto_id: int) -> str:
 
     cmd += ["-filter_complex", filtro,
             "-map", "[vout]", "-map", f"{idx_audio}:a",
-            "-c:v", "libx264", "-preset", "medium", "-crf", "18",
-            "-pix_fmt", "yuv420p", "-r", "60",
+            *args_video(), "-r", "60",
             "-c:a", "aac", "-b:a", "192k", "-shortest", "final.mp4"]
 
     r = subprocess.run(cmd, cwd=base, capture_output=True, text=True)

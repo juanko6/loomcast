@@ -19,6 +19,11 @@ LLM_CHAT_TEMPLATE_KWARGS: dict = _llm.get("chat_template_kwargs", {})
 
 COMFY_URL: str = _cfg["comfy"]["url"].rstrip("/")
 
+_video = _cfg.get("video", {})
+VIDEO_ENCODER: str = _video.get("encoder", "hardware")
+VIDEO_BITRATE_MBPS: int = _video.get("bitrate_mbps", 12)
+VIDEO_CRF: int = _video.get("crf", 18)
+
 PROYECTOS_DIR: Path = ROOT / _cfg["paths"]["proyectos"]
 PLANTILLAS_DIR: Path = ROOT / _cfg["paths"]["plantillas"]
 VOCES_DIR: Path = ROOT / _cfg["paths"]["voces"]
