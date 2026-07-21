@@ -234,6 +234,7 @@ const ETAPA_VIDEO = {
   armar_estatico: "Armando video estático…",
   generar_upscale: "Reescalando imágenes (ESRGAN)…",
   generar_clips: "Generando movimiento (Ken Burns 60fps)…",
+  generar_i2v: "Animando escenas (i2v) + RIFE…",
   armar_video: "Armando video final (subtítulos + voz)…",
 };
 
@@ -242,8 +243,8 @@ const MODOS_VIDEO = [
     desc: "Imágenes fijas + subtítulos + voz. ~30s. Ideal para iterar guion/voz/prompts." },
   { id: "kenburns", nombre: "Ken Burns (con movimiento)",
     desc: "ESRGAN + zoom/paneo a 60fps. Más nítido y vistoso. ~2-3 min." },
-  { id: "i2v", nombre: "Image-to-video (Fase 5)", disabled: true,
-    desc: "Movimiento real generado por IA (WAN 2.2). Próximamente." },
+  { id: "i2v", nombre: "Image-to-video (movimiento IA)",
+    desc: "Anima cada escena con tu workflow i2v de ComfyUI + RIFE a 60fps. Lo más vistoso, lo más lento." },
 ];
 
 function bloqueVideo(p, ocupado) {

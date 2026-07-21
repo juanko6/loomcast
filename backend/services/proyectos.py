@@ -16,7 +16,7 @@ from ..workers import queue
 TIPOS_JOB_PROYECTO = [
     "generar_guion", "generar_metadatos", "generar_voz", "generar_subtitulos",
     "generar_escenas", "generar_imagenes", "generar_upscale", "generar_clips",
-    "armar_video", "armar_estatico",
+    "generar_i2v", "armar_video", "armar_estatico",
 ]
 
 # El estado del proyecto NO retrocede, pero editar escenas invalida imágenes
@@ -131,6 +131,7 @@ def encolar_etapa(pid: int, tipo: str) -> int:
 MODOS_VIDEO = {
     "estatico": "armar_estatico",
     "kenburns": "generar_upscale",
+    "i2v": "generar_i2v",
 }
 
 

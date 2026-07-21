@@ -34,6 +34,22 @@ bitrate_mbps = 12
 # Calidad del modo software (CRF: menor = más calidad, ~18 es visualmente sin pérdida).
 crf = 18
 
+[i2v]
+# Modo image-to-video (movimiento generado por IA). Agnóstico al motor: apunta
+# a un workflow de ComfyUI en formato API que TÚ exportas y ajustas (LTX-Video,
+# WAN, etc.). El workflow debe incluir los placeholders {IMAGE}, {PROMPT} y
+# {SEED}, y un nodo que guarde el video (VHS_VideoCombine / SaveVideo).
+workflow = "workflows/i2v_api.json"
+# fps que produce tu modelo i2v (para saber cuánto interpola RIFE).
+fps_origen = 24
+# fps final tras la interpolación (múltiplo del origen: 24→48, 24→72…).
+fps_final = 48
+
+[rife]
+# rife-ncnn-vulkan (descargado en Fase 0). Corre en GPU vía Vulkan/MoltenVK.
+bin = "tools/rife-ncnn-vulkan-20221029-macos/rife-ncnn-vulkan"
+modelo = "rife-v4.6"
+
 [paths]
 proyectos = "proyectos"
 plantillas = "plantillas"

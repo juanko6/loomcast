@@ -11,6 +11,7 @@ from ..services.pipeline import (
     clips,
     crear_voz,
     escenas,
+    i2v,
     imagenes,
     subtitulos,
     texto,
@@ -29,18 +30,21 @@ HANDLERS = {
     "generar_imagenes": imagenes.generar_imagenes,
     "generar_upscale": upscale.generar_upscale,
     "generar_clips": clips.generar_clips,
+    "generar_i2v": i2v.generar_i2v,
     "armar_video": armado.armar_video,
     "armar_estatico": armado_estatico.armar_estatico,
 }
 
 # Etapas que se disparan solas al terminar la anterior:
 #  - voz → subtítulos (sin revisión intermedia)
-#  - el video con movimiento es una cadena: upscale → clips → armado
+#  - Ken Burns: upscale → clips → armado
+#  - i2v: i2v → armado
 # Las escenas NO encadenan a imágenes: los prompts se revisan/editan primero.
 CADENA = {
     "generar_voz": "generar_subtitulos",
     "generar_upscale": "generar_clips",
     "generar_clips": "armar_video",
+    "generar_i2v": "armar_video",
 }
 
 _cola: "_queue.Queue[int]" = _queue.Queue()

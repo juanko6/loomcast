@@ -6,11 +6,12 @@ from pathlib import Path
 
 import httpx
 
-from ..config import COMFY_URL, ROOT
+from ..config import COMFY_URL, I2V_WORKFLOW, ROOT
 
 WORKFLOW_ZIMAGE = ROOT / "workflows" / "z_image_turbo_api.json"
 WORKFLOW_ESRGAN = ROOT / "workflows" / "esrgan_api.json"
 TIMEOUT_S = 600
+EXT_VIDEO = (".mp4", ".webm", ".mkv", ".mov", ".gif")
 
 
 class ComfyError(RuntimeError):
@@ -61,6 +62,35 @@ def _descargar_primera_imagen(c: httpx.Client, entry: dict, destino: Path) -> No
     destino.write_bytes(r.content)
 
 
+def _descargar_primer_video(c: httpx.Client, entry: dict, destino: Path) -> None:
+    """Descarga el primer archivo de video de la salida (VHS_VideoCombine,
+    SaveVideo, etc.). ComfyUI lo expone bajo claves como 'gifs' o 'videos'."""
+    archivos = [
+        f
+        for out in entry.get("outputs", {}).values()
+        for clave, lista in out.items()
+        if isinstance(lista, list)
+        for f in lista
+        if isinstance(f, dict) and "filename" in f
+    ]
+    videos = [f for f in archivos if f["filename"].lower().endswith(EXT_VIDEO)]
+    elegido = (videos or archivos)
+    if not elegido:
+        raise ComfyError(
+            "El workflow i2v terminó sin producir un archivo de video. "
+            "Revisa que tenga un nodo de guardado (VHS_VideoCombine / SaveVideo)."
+        )
+    f = elegido[0]
+    r = c.get(
+        f"{COMFY_URL}/view",
+        params={"filename": f["filename"], "subfolder": f.get("subfolder", ""),
+                "type": f.get("type", "output")},
+    )
+    if r.status_code >= 400:
+        raise ComfyError(f"No se pudo descargar {f['filename']}")
+    destino.write_bytes(r.content)
+
+
 def _subir_imagen(c: httpx.Client, origen: Path) -> str:
     """Sube una imagen al input/ de ComfyUI; devuelve el nombre con el que quedó."""
     r = c.post(
@@ -91,6 +121,31 @@ def upscale_imagen(origen: Path, destino: Path) -> None:
         wf["load"]["inputs"]["image"] = nombre
         entry = _encolar_y_esperar(c, wf)
         _descargar_primera_imagen(c, entry, destino)
+
+
+def generar_video_i2v(imagen: Path, prompt: str, seed: int, destino: Path) -> None:
+    """Anima una imagen con el workflow i2v configurable (LTX, WAN, etc.).
+
+    El workflow (config: [i2v].workflow) debe traer los placeholders {IMAGE},
+    {PROMPT} y {SEED} en cualquier valor de texto de sus nodos.
+    """
+    wf_path = ROOT / I2V_WORKFLOW
+    if not wf_path.exists():
+        raise ComfyError(
+            f"No existe el workflow i2v en {wf_path}. Exporta tu workflow de "
+            "ComfyUI en formato API con los placeholders {IMAGE}, {PROMPT} y "
+            "{SEED}, y ponlo en esa ruta (o ajusta config.toml [i2v].workflow)."
+        )
+    with httpx.Client(timeout=30) as c:
+        nombre = _subir_imagen(c, imagen)
+        crudo = wf_path.read_text()
+        wf = json.loads(
+            crudo.replace("{IMAGE}", nombre)
+            .replace("{PROMPT}", json.dumps(prompt)[1:-1])
+            .replace("{SEED}", str(seed))
+        )
+        entry = _encolar_y_esperar(c, wf)
+        _descargar_primer_video(c, entry, destino)
 
 
 def liberar_memoria() -> None:

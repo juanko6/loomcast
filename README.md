@@ -51,5 +51,14 @@ Voces reutilizables generadas con Qwen3-TTS VoiceDesign, guardadas en `voces/<sl
 - ✅ Fase 4 — **video con modos de generación** seleccionables:
   - **Estático** (rápido, ~30s): imágenes fijas + subtítulos quemados + voz. Para iterar.
   - **Ken Burns** (con movimiento): Real-ESRGAN x4 → zoom/paneo nativo a 60fps → subtítulos superpuestos (`overlay` ffmpeg) + voz. Cadena upscale→clips→armado.
-  - **Image-to-video** (Fase 5): placeholder en la UI.
-- ⬜ Fase 5 — i2v (WAN 2.2) + RIFE, plantillas `historia`/`drama-chisme`, música, empaquetado
+  - **Image-to-video** (movimiento IA): anima cada escena con un workflow i2v de ComfyUI + RIFE a 60fps (ver abajo).
+- ⬜ Fase 5 (resto) — plantillas `historia`/`drama-chisme`, música, empaquetado
+
+## Modo i2v (image-to-video)
+
+Agnóstico al motor: apuntas `config.toml [i2v].workflow` a un workflow de ComfyUI **en formato API** que tú exportas y ajustas (LTX-Video, WAN, etc.). Requisitos del workflow:
+
+- Incluir los placeholders `{IMAGE}` (nombre del archivo subido), `{PROMPT}` (prompt de la escena) y `{SEED}` en los valores de texto de sus nodos.
+- Terminar en un nodo que guarde video (`VHS_VideoCombine` o `SaveVideo`).
+
+Por cada escena, Loomcast sube la imagen, ejecuta el workflow, interpola el clip con **RIFE** (`config.toml [i2v].fps_origen`→`fps_final`) y lo ajusta a la duración del segmento de voz. Luego el armado con movimiento superpone subtítulos y voz. RIFE usa `rife-ncnn-vulkan` (Fase 0) por GPU; ajusta su ruta en `config.toml [rife]`.
