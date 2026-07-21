@@ -1,0 +1,18 @@
+{
+  "load": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "{IMAGE}" }
+  },
+  "model": {
+    "class_type": "UpscaleModelLoader",
+    "inputs": { "model_name": "RealESRGAN_x4plus.pth" }
+  },
+  "upscale": {
+    "class_type": "ImageUpscaleWithModel",
+    "inputs": { "upscale_model": ["model", 0], "image": ["load", 0] }
+  },
+  "save": {
+    "class_type": "SaveImage",
+    "inputs": { "images": ["upscale", 0], "filename_prefix": "loomcast_up" }
+  }
+}

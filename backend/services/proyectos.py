@@ -51,6 +51,7 @@ def detalle(pid: int) -> dict:
         guion = guiones_repo.ultimo(s, pid)
         meta = metadatos_repo.ultimo(s, pid)
         activos = jobs_repo.activos_de_proyecto(s, pid, TIPOS_JOB_PROYECTO)
+        job_activo = jobs_repo.tipo_activo_de_proyecto(s, pid, TIPOS_JOB_PROYECTO)
         base_dir = PROYECTOS_DIR / p.slug
         srt = base_dir / "subtitulos.srt"
         escenas = [
@@ -76,6 +77,7 @@ def detalle(pid: int) -> dict:
             "imagenes_completas": todas_imagenes,
             "video_disponible": (base_dir / "final.mp4").exists(),
             "jobs_activos": activos,
+            "job_activo": job_activo,
         }
 
 

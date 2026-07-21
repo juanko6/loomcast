@@ -230,16 +230,27 @@ function bloqueEscenas(p, ocupado) {
     </div>`;
 }
 
+const ETAPA_VIDEO = {
+  generar_upscale: "Reescalando imágenes (ESRGAN)…",
+  generar_clips: "Generando movimiento (Ken Burns 60fps)…",
+  armar_video: "Armando video final (subtítulos + voz)…",
+};
+
 function bloqueVideo(p, ocupado) {
   if (!p.imagenes_completas) return "";
+  const enVideo = ETAPA_VIDEO[p.job_activo];
   return `
     <div class="bloque">
-      <h2>5 · Video final</h2>
+      <h2>5 · Video final (con movimiento)</h2>
       <div class="acciones" style="margin-bottom:12px">
-        <button id="armar-video" ${ocupado ? "disabled" : ""}>
-          ${p.video_disponible ? "↻ Rearmar video" : "🎬 Armar video final"}
+        <button id="gen-video" ${ocupado ? "disabled" : ""}>
+          ${p.video_disponible ? "↻ Rehacer video" : "🎬 Generar video final"}
         </button>
       </div>
+      ${enVideo ? `<p class="spinner">${esc(enVideo)}</p>` : ""}
+      <p class="resumen" style="margin-bottom:12px">
+        Reescala las imágenes con ESRGAN, aplica zoom/paneo a 60fps y superpone los subtítulos sobre la voz.
+      </p>
       ${p.video_disponible ? `
         <video controls src="/api/proyectos/${p.id}/video?v=${Date.now()}"
                style="width:280px;max-width:100%;border-radius:12px"></video>` : ""}
@@ -345,7 +356,7 @@ document.addEventListener("click", async (ev) => {
       await guardarPrompts();
       await api(`/proyectos/${pid()}/imagenes`, { method: "POST" });
       refrescarJobs(); renderVista();
-    } else if (b.id === "armar-video") {
+    } else if (b.id === "gen-video") {
       await api(`/proyectos/${pid()}/video`, { method: "POST" });
       refrescarJobs(); renderVista();
     } else if (b.id === "agregar-frase") {

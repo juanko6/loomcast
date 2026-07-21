@@ -2,7 +2,7 @@
 
 Generador automatizado de videos cortos (30–60 s, formato vertical 9:16) para YouTube Shorts y TikTok, **100% con IA local**.
 
-> Estado: **primer video completo generado** (2026-07-20) — pipeline entero funcionando de tema a `final.mp4`: escenas con prompts visuales (LLM, inglés), 12 imágenes Z-Image, armado estático 1080×1920@30 con subtítulos compuestos vía Pillow (el ffmpeg de brew no trae libass) y metadatos completos. Duración 48.2 s. Siguiente: Fase 4 (movimiento Ken Burns/i2v, ESRGAN, RIFE).
+> Estado: **Fase 4 completada** (2026-07-21) — video con movimiento de punta a punta: ESRGAN x4 por imagen → Ken Burns nativo 60fps por escena → armado con subtítulos superpuestos (`overlay` de ffmpeg, sin libass) y voz. Banco de 6 voces, flujo por pasos con revisión humana, LLM agnóstico al modelo (config apunta solo a la conexión). RIFE reservado para el i2v de la Fase 5. Siguiente: Fase 5 (i2v opcional + RIFE, plantillas nuevas, empaquetado).
 
 ## 1. Decisiones tomadas
 

@@ -79,8 +79,9 @@ def generar_imagenes(pid: int):
 
 
 @router.post("/{pid}/video")
-def armar_video(pid: int):
-    return {"job_id": proyectos_service.encolar_etapa(pid, "armar_video")}
+def generar_video(pid: int):
+    """Dispara la cadena de video con movimiento: upscale → clips → armado."""
+    return {"job_id": proyectos_service.encolar_etapa(pid, "generar_upscale")}
 
 
 def _archivo(pid: int, partes: tuple[str, ...], media_type: str, detalle: str):

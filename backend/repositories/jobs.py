@@ -29,6 +29,17 @@ def activos_de_proyecto(s: Session, pid: int, tipos: list[str]) -> int:
     )
 
 
+def tipo_activo_de_proyecto(s: Session, pid: int, tipos: list[str]) -> str | None:
+    """Tipo del job en curso/pendiente del proyecto (para mostrar la etapa)."""
+    job = (
+        s.query(Job)
+        .filter(Job.ref_id == pid, Job.tipo.in_(tipos), Job.estado.in_(ACTIVOS))
+        .order_by(Job.id)
+        .first()
+    )
+    return job.tipo if job else None
+
+
 def marcar_corriendo(s: Session, job: Job) -> None:
     job.estado = "corriendo"
 

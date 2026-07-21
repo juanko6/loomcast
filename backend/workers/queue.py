@@ -7,11 +7,13 @@ from ..db import get_session
 from ..repositories import jobs as jobs_repo
 from ..services.pipeline import (
     armado,
+    clips,
     crear_voz,
     escenas,
     imagenes,
     subtitulos,
     texto,
+    upscale,
     voz,
 )
 
@@ -24,12 +26,20 @@ HANDLERS = {
     "generar_subtitulos": subtitulos.generar_subtitulos,
     "generar_escenas": escenas.generar_escenas,
     "generar_imagenes": imagenes.generar_imagenes,
+    "generar_upscale": upscale.generar_upscale,
+    "generar_clips": clips.generar_clips,
     "armar_video": armado.armar_video,
 }
 
-# Etapas que se disparan solas al terminar la anterior. Las escenas NO
-# encadenan a imágenes: los prompts se revisan/editan en la UI primero.
-CADENA = {"generar_voz": "generar_subtitulos"}
+# Etapas que se disparan solas al terminar la anterior:
+#  - voz → subtítulos (sin revisión intermedia)
+#  - el video con movimiento es una cadena: upscale → clips → armado
+# Las escenas NO encadenan a imágenes: los prompts se revisan/editan primero.
+CADENA = {
+    "generar_voz": "generar_subtitulos",
+    "generar_upscale": "generar_clips",
+    "generar_clips": "armar_video",
+}
 
 _cola: "_queue.Queue[int]" = _queue.Queue()
 
