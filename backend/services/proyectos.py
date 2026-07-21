@@ -15,7 +15,8 @@ from ..workers import queue
 
 TIPOS_JOB_PROYECTO = [
     "generar_guion", "generar_metadatos", "generar_voz", "generar_subtitulos",
-    "generar_escenas", "generar_imagenes", "armar_video",
+    "generar_escenas", "generar_imagenes", "generar_upscale", "generar_clips",
+    "armar_video", "armar_estatico",
 ]
 
 # El estado del proyecto NO retrocede, pero editar escenas invalida imágenes
@@ -123,3 +124,21 @@ def ruta_archivo(pid: int, *partes: str):
 
 def encolar_etapa(pid: int, tipo: str) -> int:
     return queue.encolar(tipo, pid)
+
+
+# Modo de video → job con el que arranca. El estático es un solo job; el de
+# movimiento (Ken Burns) es una cadena upscale → clips → armado.
+MODOS_VIDEO = {
+    "estatico": "armar_estatico",
+    "kenburns": "generar_upscale",
+}
+
+
+class ModoVideoInvalido(ValueError):
+    pass
+
+
+def generar_video(pid: int, modo: str) -> int:
+    if modo not in MODOS_VIDEO:
+        raise ModoVideoInvalido(modo)
+    return queue.encolar(MODOS_VIDEO[modo], pid)

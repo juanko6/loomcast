@@ -231,26 +231,43 @@ function bloqueEscenas(p, ocupado) {
 }
 
 const ETAPA_VIDEO = {
+  armar_estatico: "Armando video estático…",
   generar_upscale: "Reescalando imágenes (ESRGAN)…",
   generar_clips: "Generando movimiento (Ken Burns 60fps)…",
   armar_video: "Armando video final (subtítulos + voz)…",
 };
 
+const MODOS_VIDEO = [
+  { id: "estatico", nombre: "Estático (rápido)",
+    desc: "Imágenes fijas + subtítulos + voz. ~30s. Ideal para iterar guion/voz/prompts." },
+  { id: "kenburns", nombre: "Ken Burns (con movimiento)",
+    desc: "ESRGAN + zoom/paneo a 60fps. Más nítido y vistoso. ~2-3 min." },
+  { id: "i2v", nombre: "Image-to-video (Fase 5)", disabled: true,
+    desc: "Movimiento real generado por IA (WAN 2.2). Próximamente." },
+];
+
 function bloqueVideo(p, ocupado) {
   if (!p.imagenes_completas) return "";
   const enVideo = ETAPA_VIDEO[p.job_activo];
+  const modoSel = window.__modoVideo || "kenburns";
   return `
     <div class="bloque">
-      <h2>5 · Video final (con movimiento)</h2>
+      <h2>5 · Video final</h2>
+      <label>Modo de generación</label>
+      <div id="modos-video" style="margin-bottom:10px">
+        ${MODOS_VIDEO.map((m) => `
+          <label class="modo-opcion ${m.disabled ? "off" : ""}">
+            <input type="radio" name="modo-video" value="${m.id}"
+              ${m.id === modoSel ? "checked" : ""} ${m.disabled ? "disabled" : ""}>
+            <span><b>${esc(m.nombre)}</b><br><span class="meta">${esc(m.desc)}</span></span>
+          </label>`).join("")}
+      </div>
       <div class="acciones" style="margin-bottom:12px">
         <button id="gen-video" ${ocupado ? "disabled" : ""}>
-          ${p.video_disponible ? "↻ Rehacer video" : "🎬 Generar video final"}
+          ${p.video_disponible ? "↻ Rehacer video" : "🎬 Generar video"}
         </button>
       </div>
       ${enVideo ? `<p class="spinner">${esc(enVideo)}</p>` : ""}
-      <p class="resumen" style="margin-bottom:12px">
-        Reescala las imágenes con ESRGAN, aplica zoom/paneo a 60fps y superpone los subtítulos sobre la voz.
-      </p>
       ${p.video_disponible ? `
         <video controls src="/api/proyectos/${p.id}/video?v=${Date.now()}"
                style="width:280px;max-width:100%;border-radius:12px"></video>` : ""}
@@ -357,7 +374,8 @@ document.addEventListener("click", async (ev) => {
       await api(`/proyectos/${pid()}/imagenes`, { method: "POST" });
       refrescarJobs(); renderVista();
     } else if (b.id === "gen-video") {
-      await api(`/proyectos/${pid()}/video`, { method: "POST" });
+      const modo = document.querySelector('input[name="modo-video"]:checked')?.value || "kenburns";
+      await api(`/proyectos/${pid()}/video`, { method: "POST", body: { modo } });
       refrescarJobs(); renderVista();
     } else if (b.id === "agregar-frase") {
       const div = document.createElement("div");
@@ -377,6 +395,8 @@ document.addEventListener("change", async (ev) => {
     const voz = ev.target.value;
     if (voz) await api(`/proyectos/${pid()}/voz`, { method: "PUT", body: { voz } });
     renderVista();
+  } else if (ev.target.name === "modo-video") {
+    window.__modoVideo = ev.target.value; // recordar el modo elegido
   }
 });
 

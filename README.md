@@ -48,5 +48,8 @@ Voces reutilizables generadas con Qwen3-TTS VoiceDesign, guardadas en `voces/<sl
 - ✅ Fase 2 — voz (Qwen3-TTS design-then-clone, narración continua) y subtítulos (mlx-whisper, SRT en bloques de ≤3 palabras)
 - ✅ Fase 3 — escenas (prompts visuales en inglés por segmento, **editables antes de generar**), imágenes (Z-Image vía ComfyUI) y **armado estático**: video completo con imágenes fijas, voz, subtítulos compuestos con Pillow y metadatos
 - ✅ Banco de voces + flujo de creación por pasos con revisión humana
-- ✅ Fase 4 — **video con movimiento**: upscale Real-ESRGAN x4 por imagen → Ken Burns nativo a 60fps por escena (zoom/paneo alternado) → armado con subtítulos superpuestos (PNG transparentes + `overlay` de ffmpeg) y voz. Cadena upscale→clips→armado
-- ⬜ Fase 5 — i2v opcional (WAN 2.2) + RIFE, plantillas `historia`/`drama-chisme`, música, empaquetado
+- ✅ Fase 4 — **video con modos de generación** seleccionables:
+  - **Estático** (rápido, ~30s): imágenes fijas + subtítulos quemados + voz. Para iterar.
+  - **Ken Burns** (con movimiento): Real-ESRGAN x4 → zoom/paneo nativo a 60fps → subtítulos superpuestos (`overlay` ffmpeg) + voz. Cadena upscale→clips→armado.
+  - **Image-to-video** (Fase 5): placeholder en la UI.
+- ⬜ Fase 5 — i2v (WAN 2.2) + RIFE, plantillas `historia`/`drama-chisme`, música, empaquetado

@@ -7,6 +7,7 @@ from ..db import get_session
 from ..repositories import jobs as jobs_repo
 from ..services.pipeline import (
     armado,
+    armado_estatico,
     clips,
     crear_voz,
     escenas,
@@ -29,6 +30,7 @@ HANDLERS = {
     "generar_upscale": upscale.generar_upscale,
     "generar_clips": clips.generar_clips,
     "armar_video": armado.armar_video,
+    "armar_estatico": armado_estatico.armar_estatico,
 }
 
 # Etapas que se disparan solas al terminar la anterior:

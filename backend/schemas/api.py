@@ -33,3 +33,7 @@ class EscenaPromptIn(BaseModel):
 
 class EscenasIn(BaseModel):
     escenas: list[EscenaPromptIn]
+
+
+class VideoIn(BaseModel):
+    modo: str = "kenburns"  # estatico | kenburns

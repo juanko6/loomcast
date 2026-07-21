@@ -5,6 +5,7 @@ from .api import (
     EstadoIdeaIn,
     GuionIn,
     TemaIn,
+    VideoIn,
     VozNuevaIn,
     VozSeleccionIn,
 )
@@ -26,7 +27,7 @@ from .plantilla import (
 
 __all__ = [
     "EscenaPromptIn", "EscenasIn", "EstadoIdeaIn", "GuionIn", "TemaIn",
-    "VozNuevaIn", "VozSeleccionIn",
+    "VideoIn", "VozNuevaIn", "VozSeleccionIn",
     "DescripcionLLM", "EscenaLLM", "EtiquetasLLM",
     "GuionLLM", "IdeaLLM", "IdeasLLM", "TituloLLM",
     "Plantilla", "RitmoPlantilla", "SubtitulosPlantilla", "VozPlantilla",

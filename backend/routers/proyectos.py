@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from ..schemas import EscenasIn, GuionIn, VozSeleccionIn
+from ..schemas import EscenasIn, GuionIn, VideoIn, VozSeleccionIn
 from ..services import proyectos as proyectos_service
 
 router = APIRouter(prefix="/api/proyectos", tags=["proyectos"])
@@ -79,9 +79,13 @@ def generar_imagenes(pid: int):
 
 
 @router.post("/{pid}/video")
-def generar_video(pid: int):
-    """Dispara la cadena de video con movimiento: upscale → clips → armado."""
-    return {"job_id": proyectos_service.encolar_etapa(pid, "generar_upscale")}
+def generar_video(pid: int, body: VideoIn):
+    """Genera el video en el modo pedido: 'estatico' (rápido) o 'kenburns'
+    (con movimiento: cadena upscale → clips → armado)."""
+    try:
+        return {"job_id": proyectos_service.generar_video(pid, body.modo)}
+    except proyectos_service.ModoVideoInvalido:
+        raise HTTPException(400, "Modo de video inválido")
 
 
 def _archivo(pid: int, partes: tuple[str, ...], media_type: str, detalle: str):
