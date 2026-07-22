@@ -17,6 +17,7 @@ TIPOS_JOB_PROYECTO = [
     "generar_guion", "generar_metadatos", "generar_voz", "generar_subtitulos",
     "generar_escenas", "generar_imagenes", "generar_upscale", "generar_clips",
     "generar_i2v", "armar_video", "armar_estatico",
+    "regenerar_imagen", "regenerar_clip", "generar_clips_mixto",
 ]
 
 # El estado del proyecto NO retrocede, pero editar escenas invalida imágenes
@@ -43,6 +44,29 @@ def listar() -> list[dict]:
         return out
 
 
+def _escena_dict(e, base_dir) -> dict:
+    img = base_dir / "imagenes" / f"{e.orden:02d}.png"
+    clip = base_dir / "clips" / f"{e.orden:02d}.mp4"
+    tiene_img, tiene_clip = img.exists(), clip.exists()
+    return {
+        "orden": e.orden, "t_inicio": e.t_inicio, "t_fin": e.t_fin,
+        "texto": e.texto, "prompt": e.prompt,
+        "prompt_movimiento": e.prompt_movimiento or "",
+        "imagen": tiene_img,
+        "clip": tiene_clip,
+        "modo": e.modo or "",
+        "clip_modo": e.clip_modo or "",
+        "imagen_s": e.imagen_s or 0,
+        "clip_s": e.clip_s or 0,
+        # El clip se hizo con la imagen anterior si esta se regeneró después.
+        # Se deduce de las fechas de los archivos, sin marcas que mantener.
+        "clip_viejo": (
+            tiene_img and tiene_clip
+            and img.stat().st_mtime > clip.stat().st_mtime
+        ),
+    }
+
+
 def detalle(pid: int) -> dict:
     with get_session() as s:
         p = proyectos_repo.obtener(s, pid)
@@ -55,14 +79,7 @@ def detalle(pid: int) -> dict:
         job_activo = jobs_repo.tipo_activo_de_proyecto(s, pid, TIPOS_JOB_PROYECTO)
         base_dir = PROYECTOS_DIR / p.slug
         srt = base_dir / "subtitulos.srt"
-        escenas = [
-            {
-                "orden": e.orden, "t_inicio": e.t_inicio, "t_fin": e.t_fin,
-                "texto": e.texto, "prompt": e.prompt,
-                "imagen": (base_dir / "imagenes" / f"{e.orden:02d}.png").exists(),
-            }
-            for e in escenas_repo.por_proyecto(s, pid)
-        ]
+        escenas = [_escena_dict(e, base_dir) for e in escenas_repo.por_proyecto(s, pid)]
         todas_imagenes = bool(escenas) and all(e["imagen"] for e in escenas)
         return {
             "id": p.id, "slug": p.slug, "estado": p.estado,
@@ -104,7 +121,7 @@ def seleccionar_voz(pid: int, voz_slug: str) -> None:
         s.commit()
 
 
-def editar_prompts_escenas(pid: int, prompts: dict[int, str]) -> int:
+def editar_prompts_escenas(pid: int, prompts: dict[int, dict]) -> int:
     with get_session() as s:
         p = proyectos_repo.obtener(s, pid)
         if p is None:
@@ -122,8 +139,24 @@ def ruta_archivo(pid: int, *partes: str):
         return PROYECTOS_DIR.joinpath(p.slug, *partes)
 
 
-def encolar_etapa(pid: int, tipo: str) -> int:
-    return queue.encolar(tipo, pid)
+def encolar_etapa(pid: int, tipo: str, **params) -> int:
+    return queue.encolar(tipo, pid, **params)
+
+
+def fijar_modo_escenas(pid: int, modos: dict[int, str]) -> int:
+    """Guarda con qué modo debe animarse cada escena. `generar_video` lo respeta,
+    de modo que un mismo video puede mezclar estático, Ken Burns e i2v."""
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        n = 0
+        for e in escenas_repo.por_proyecto(s, pid):
+            if e.orden in modos:
+                e.modo = modos[e.orden]
+                n += 1
+        s.commit()
+        return n
 
 
 # Modo de video → job con el que arranca. El estático es un solo job; el de
@@ -132,6 +165,8 @@ MODOS_VIDEO = {
     "estatico": "armar_estatico",
     "kenburns": "generar_upscale",
     "i2v": "generar_i2v",
+    # Respeta el modo elegido en cada escena: el video puede mezclarlos.
+    "mixto": "generar_clips_mixto",
 }
 
 

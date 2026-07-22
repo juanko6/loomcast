@@ -6,14 +6,14 @@ su ventana de tiempo) y añade la narración.
 """
 import subprocess
 
-from ...config import PROYECTOS_DIR
+from ...config import PROYECTOS_DIR, VIDEO_COLA_FINAL_S
 from ...db import get_session
 from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
 from . import _subtitulos_render as subs
-from ._ffmpeg import args_video
+from ._ffmpeg import args_video, duracion
 
 
 def _rasterizar_transparente(texto, fuente, color, borde, destino):
@@ -69,26 +69,38 @@ def armar_video(proyecto_id: int) -> str:
 
     cadena, prev = [], "[0:v]"
     for i, b in enumerate(bloques):
-        etiqueta = "[vout]" if i == len(bloques) - 1 else f"[o{i}]"
+        etiqueta = f"[o{i}]"
         cadena.append(
             f"{prev}[{i + 1}:v]overlay=0:0"
             f":enable='between(t,{b['start']:.3f},{b['end']:.3f})'{etiqueta}"
         )
         prev = etiqueta
-    filtro = "[0:v]null[vout]" if not bloques else ";".join(cadena)
+
+    # El video termina con las imágenes, no con la voz: dura lo que duren los
+    # clips y, si se quedan cortos, se congela el último cuadro para dejar una
+    # cola tras la última palabra en vez de cortar en seco.
+    dur_audio = sf.info(base / "voz.wav").duration
+    dur_clips = sum(duracion(base / "clips" / f"{o:02d}.mp4") for o in ordenes)
+    objetivo = max(dur_clips, dur_audio + VIDEO_COLA_FINAL_S)
+    cadena.append(f"{prev}tpad=stop_mode=clone:stop_duration={objetivo:.3f}[vout]")
+    filtro = ";".join(cadena)
 
     cmd += ["-filter_complex", filtro,
             "-map", "[vout]", "-map", f"{idx_audio}:a",
             *args_video(), "-r", "60",
-            "-c:a", "aac", "-b:a", "192k", "-shortest", "final.mp4"]
+            "-c:a", "aac", "-b:a", "192k",
+            # apad + -t: el audio se rellena con silencio hasta el final del
+            # video, para que no quede un stream de audio más corto.
+            "-af", "apad", "-t", f"{objetivo:.3f}", "final.mp4"]
 
     r = subprocess.run(cmd, cwd=base, capture_output=True, text=True)
     if r.returncode != 0:
         raise RuntimeError(f"ffmpeg falló: {r.stderr[-800:]}")
 
-    dur = sf.info(base / "voz.wav").duration
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)
         avanzar_estado(p, "FINAL")
         s.commit()
-    return f"Video (movimiento): {len(ordenes)} escenas, {dur:.1f}s → final.mp4"
+    cola = objetivo - dur_audio
+    return (f"Video (movimiento): {len(ordenes)} escenas, {objetivo:.1f}s "
+            f"({cola:.1f}s tras la voz) → final.mp4")

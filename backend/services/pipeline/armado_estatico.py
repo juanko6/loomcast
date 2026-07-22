@@ -7,7 +7,7 @@ Ideal para iterar guion/voz/prompts sin esperar el render con movimiento.
 """
 import subprocess
 
-from ...config import PROYECTOS_DIR
+from ...config import PROYECTOS_DIR, VIDEO_COLA_FINAL_S
 from ...db import get_session
 from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
@@ -100,12 +100,17 @@ def armar_estatico(proyecto_id: int) -> str:
     lineas.append(f"file 'armado/{stills[clave]}'")
     (base / "estatico_concat.txt").write_text("\n".join(lineas) + "\n")
 
+    # El último still se repite sin duración, así que se sostiene hasta donde
+    # marque -t: eso deja una cola tras la voz en lugar de cortar en seco sobre
+    # la última palabra.
+    objetivo = dur_audio + VIDEO_COLA_FINAL_S
     r = subprocess.run(
         ["ffmpeg", "-loglevel", "error", "-y",
          "-f", "concat", "-safe", "0", "-i", "estatico_concat.txt",
          "-i", "voz.wav", "-vf", "fps=30",
          *args_video(),
-         "-c:a", "aac", "-b:a", "192k", "-shortest", "final.mp4"],
+         "-c:a", "aac", "-b:a", "192k",
+         "-af", "apad", "-t", f"{objetivo:.3f}", "final.mp4"],
         cwd=base, capture_output=True, text=True,
     )
     if r.returncode != 0:
@@ -115,4 +120,5 @@ def armar_estatico(proyecto_id: int) -> str:
         p = proyectos_repo.obtener(s, proyecto_id)
         avanzar_estado(p, "FINAL")
         s.commit()
-    return f"Video (estático): {len(escenas)} escenas, {dur_audio:.1f}s → final.mp4"
+    return (f"Video (estático): {len(escenas)} escenas, {objetivo:.1f}s "
+            f"({VIDEO_COLA_FINAL_S:.1f}s tras la voz) → final.mp4")

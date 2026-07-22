@@ -1,8 +1,9 @@
 """Etapa 6 — ESCENAS: segmentar la narración y generar prompts visuales.
 
 Divide el audio en intervalos de ~duracion_escena_s (cortando en límites de
-palabra según palabras.json) y pide al LLM un prompt de imagen en inglés por
-escena, con el guion completo como contexto y el estilo de la plantilla.
+palabra según palabras.json) y pide al LLM dos prompts en inglés por escena —
+el visual (para la imagen) y el de movimiento (para el modo i2v) —, con el
+guion completo como contexto y el estilo de la plantilla.
 """
 import json
 import math
@@ -78,10 +79,11 @@ def generar_escenas(proyecto_id: int) -> str:
             f"Current voice-over segment:\n```markdown\n{seg['texto']}\n```\n\n"
             f"Template visual style: {pl['estilo_visual']}"
         )
-        prompt = llm.chat(system, user, EscenaLLM).prompt
+        r = llm.chat(system, user, EscenaLLM)
         escenas.append(seg | {
             "orden": len(escenas),
-            "prompt": prompt,
+            "prompt": r.prompt,
+            "prompt_movimiento": r.prompt_movimiento,
             "seed": random.randint(0, 2**31 - 1),
         })
 
@@ -90,4 +92,4 @@ def generar_escenas(proyecto_id: int) -> str:
         escenas_repo.reemplazar_todas(s, proyecto_id, escenas)
         avanzar_estado(p, "ESCENAS")
         s.commit()
-    return f"{len(escenas)} escenas con prompt visual"
+    return f"{len(escenas)} escenas con prompt visual y de movimiento"

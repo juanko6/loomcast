@@ -6,6 +6,12 @@
       "runtimeExecutable": "/Users/juanko.dev/Documents/loomcast/.venv/bin/uvicorn",
       "runtimeArgs": ["backend.main:app", "--host", "127.0.0.1", "--port", "8700"],
       "port": 8700
+    },
+    {
+      "name": "comfyui",
+      "runtimeExecutable": "/Users/juanko.dev/Documents/ComfyUI/venv/bin/python",
+      "runtimeArgs": ["/Users/juanko.dev/Documents/ComfyUI/ComfyUI/main.py", "--port", "8188"],
+      "port": 8188
     }
   ]
 }

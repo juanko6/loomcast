@@ -27,6 +27,24 @@ def _migrar() -> None:
             c.execute(text("ALTER TABLE proyectos ADD COLUMN voz VARCHAR"))
             c.commit()
 
+        cols = [r[1] for r in c.execute(text("PRAGMA table_info(escenas)"))]
+        nuevas = {
+            "prompt_movimiento": "TEXT DEFAULT ''",
+            "modo": "VARCHAR DEFAULT ''",
+            "clip_modo": "VARCHAR DEFAULT ''",
+            "imagen_s": "FLOAT DEFAULT 0",
+            "clip_s": "FLOAT DEFAULT 0",
+        }
+        for col, tipo in nuevas.items():
+            if col not in cols:
+                c.execute(text(f"ALTER TABLE escenas ADD COLUMN {col} {tipo}"))
+        c.commit()
+
+        cols = [r[1] for r in c.execute(text("PRAGMA table_info(jobs)"))]
+        if "params" not in cols:
+            c.execute(text("ALTER TABLE jobs ADD COLUMN params TEXT DEFAULT '{}'"))
+            c.commit()
+
 
 def get_session() -> Session:
     return SessionLocal()

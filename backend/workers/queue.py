@@ -1,4 +1,5 @@
 """Cola de jobs en un hilo: las etapas LLM/GPU corren una a la vez."""
+import json
 import queue as _queue
 import threading
 import traceback
@@ -10,6 +11,7 @@ from ..services.pipeline import (
     armado_estatico,
     clips,
     crear_voz,
+    escena_individual,
     escenas,
     i2v,
     imagenes,
@@ -28,6 +30,9 @@ HANDLERS = {
     "generar_subtitulos": subtitulos.generar_subtitulos,
     "generar_escenas": escenas.generar_escenas,
     "generar_imagenes": imagenes.generar_imagenes,
+    "regenerar_imagen": imagenes.regenerar_imagen,
+    "regenerar_clip": escena_individual.regenerar_clip,
+    "generar_clips_mixto": escena_individual.generar_clips_mixto,
     "generar_upscale": upscale.generar_upscale,
     "generar_clips": clips.generar_clips,
     "generar_i2v": i2v.generar_i2v,
@@ -45,16 +50,19 @@ CADENA = {
     "generar_upscale": "generar_clips",
     "generar_clips": "armar_video",
     "generar_i2v": "armar_video",
+    "generar_clips_mixto": "armar_video",
 }
 
 _cola: "_queue.Queue[int]" = _queue.Queue()
 
 
-def encolar(tipo: str, ref_id: int) -> int:
+def encolar(tipo: str, ref_id: int, **params) -> int:
+    """Encola un job. Los `params` extra se guardan en JSON y llegan al handler
+    como kwargs: sirven para jobs que actúan sobre una escena concreta."""
     if tipo not in HANDLERS:
         raise ValueError(f"Tipo de job desconocido: {tipo}")
     with get_session() as s:
-        job = jobs_repo.crear(s, tipo, ref_id)
+        job = jobs_repo.crear(s, tipo, ref_id, json.dumps(params))
         s.commit()
         job_id = job.id
     _cola.put(job_id)
@@ -67,13 +75,16 @@ def _procesar(job_id: int) -> None:
         jobs_repo.marcar_corriendo(s, job)
         s.commit()
         tipo, ref_id = job.tipo, job.ref_id
+        params = json.loads(job.params or "{}")
     try:
-        estado, log = "ok", HANDLERS[tipo](ref_id)
+        estado, log = "ok", HANDLERS[tipo](ref_id, **params)
     except Exception:
         estado, log = "error", traceback.format_exc(limit=5)
     with get_session() as s:
         jobs_repo.finalizar(s, jobs_repo.obtener(s, job_id), estado, log)
         s.commit()
+    # Las regeneraciones de una sola escena no encadenan: rearmar el video
+    # entero en cada retoque costaría más que el propio retoque.
     if estado == "ok" and tipo in CADENA:
         encolar(CADENA[tipo], ref_id)
 

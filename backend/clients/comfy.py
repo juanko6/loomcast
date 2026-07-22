@@ -6,11 +6,11 @@ from pathlib import Path
 
 import httpx
 
-from ..config import COMFY_URL, I2V_WORKFLOW, ROOT
+from ..config import COMFY_TIMEOUT_S, COMFY_URL, I2V_FRAMES, I2V_WORKFLOW, ROOT
 
 WORKFLOW_ZIMAGE = ROOT / "workflows" / "z_image_turbo_api.json"
 WORKFLOW_ESRGAN = ROOT / "workflows" / "esrgan_api.json"
-TIMEOUT_S = 600
+TIMEOUT_S = COMFY_TIMEOUT_S
 EXT_VIDEO = (".mp4", ".webm", ".mkv", ".mov", ".gif")
 
 
@@ -127,14 +127,16 @@ def generar_video_i2v(imagen: Path, prompt: str, seed: int, destino: Path) -> No
     """Anima una imagen con el workflow i2v configurable (LTX, WAN, etc.).
 
     El workflow (config: [i2v].workflow) debe traer los placeholders {IMAGE},
-    {PROMPT} y {SEED} en cualquier valor de texto de sus nodos.
+    {PROMPT}, {SEED} y {FRAMES} en cualquier valor de sus nodos. {SEED} y
+    {FRAMES} se sustituyen sin comillas, así que van como valor numérico.
     """
     wf_path = ROOT / I2V_WORKFLOW
     if not wf_path.exists():
         raise ComfyError(
             f"No existe el workflow i2v en {wf_path}. Exporta tu workflow de "
-            "ComfyUI en formato API con los placeholders {IMAGE}, {PROMPT} y "
-            "{SEED}, y ponlo en esa ruta (o ajusta config.toml [i2v].workflow)."
+            "ComfyUI en formato API con los placeholders {IMAGE}, {PROMPT}, "
+            "{SEED} y {FRAMES}, y ponlo en esa ruta (o ajusta config.toml "
+            "[i2v].workflow)."
         )
     with httpx.Client(timeout=30) as c:
         nombre = _subir_imagen(c, imagen)
@@ -143,6 +145,7 @@ def generar_video_i2v(imagen: Path, prompt: str, seed: int, destino: Path) -> No
             crudo.replace("{IMAGE}", nombre)
             .replace("{PROMPT}", json.dumps(prompt)[1:-1])
             .replace("{SEED}", str(seed))
+            .replace("{FRAMES}", str(I2V_FRAMES))
         )
         entry = _encolar_y_esperar(c, wf)
         _descargar_primer_video(c, entry, destino)

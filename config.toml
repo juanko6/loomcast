@@ -22,6 +22,10 @@ chat_template_kwargs = { enable_thinking = false }
 
 [comfy]
 url = "http://127.0.0.1:8188"
+# Cuánto espera Loomcast a que ComfyUI termine un workflow antes de darlo por
+# perdido. Debe cubrir el clip i2v más lento: con 21 cuadros ronda los 250 s,
+# pero si el equipo se suspende o se ralentiza conviene margen de sobra.
+timeout_s = 1800
 
 [video]
 # Codificador para los clips y el armado final.
@@ -33,6 +37,10 @@ encoder = "hardware"
 bitrate_mbps = 12
 # Calidad del modo software (CRF: menor = más calidad, ~18 es visualmente sin pérdida).
 crf = 18
+# Segundos de imagen que quedan tras acabar la narración, para que el video no
+# corte en seco sobre la última palabra. Si los clips ya duran más que la voz,
+# manda su duración y esta cola no se aplica. 0 = cortar con el audio.
+cola_final_s = 1.5
 
 [i2v]
 # Modo image-to-video (movimiento generado por IA). Agnóstico al motor: apunta
@@ -40,10 +48,17 @@ crf = 18
 # WAN, etc.). El workflow debe incluir los placeholders {IMAGE}, {PROMPT} y
 # {SEED}, y un nodo que guarde el video (VHS_VideoCombine / SaveVideo).
 workflow = "workflows/i2v_api.json"
+# Cuadros que genera el modelo i2v por escena (placeholder {FRAMES} del
+# workflow). Más cuadros = más recorrido de movimiento y menos estiramiento de
+# RIFE, pero el coste sube lineal (~12 s por cuadro en M3 Max). HunyuanVideo
+# exige la forma 4n+1: 13, 17, 21, 25…
+frames = 21
 # fps que produce tu modelo i2v (para saber cuánto interpola RIFE).
 fps_origen = 24
-# fps final tras la interpolación (múltiplo del origen: 24→48, 24→72…).
-fps_final = 48
+# fps de los clips i2v tras la interpolación. Déjalo en 60: es el ritmo al que
+# el armado concatena los clips, así que cualquier otro valor obliga a ffmpeg a
+# duplicar cuadros al final. RIFE genera los que hagan falta sin coste extra.
+fps_final = 60
 
 [rife]
 # rife-ncnn-vulkan (descargado en Fase 0). Corre en GPU vía Vulkan/MoltenVK.

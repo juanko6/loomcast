@@ -84,6 +84,15 @@ pre.meta-desc { white-space: pre-wrap; font: inherit; color: var(--texto); }
 .escena-cab { display: flex; gap: 10px; align-items: baseline; margin-bottom: 8px; }
 .escena-cab .meta { font-size: 13px; }
 .escena-prompt { margin: 0; font-size: 13px; line-height: 1.4; }
+/* Prompt de movimiento: secundario, solo lo usa el modo i2v */
+.escena-movimiento { margin: 0; font-size: 12px; line-height: 1.4;
+                     color: var(--dim); background: var(--panel2); }
+
+/* Acciones por escena: regenerar su imagen o su clip de forma aislada */
+.escena-acciones { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.escena-acciones .meta { font-size: 11px; }
+button.mini, select.mini { font-size: 11px; padding: 3px 8px; margin: 0; }
+.estado-chip.aviso { background: #8a5a00; }
 label { display: block; font-size: 13px; color: var(--dim); margin-bottom: 4px; }
 
 .modo-opcion { display: flex; gap: 10px; align-items: flex-start; cursor: pointer;

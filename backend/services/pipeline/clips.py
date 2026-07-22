@@ -5,6 +5,8 @@ lento renderizado directamente a 60fps (suave, sin interpolación). Se alterna
 zoom-in / zoom-out por escena para dar variedad al montaje.
 """
 import subprocess
+import time
+from pathlib import Path
 
 from ...config import PROYECTOS_DIR
 from ...db import get_session
@@ -34,6 +36,38 @@ def _ken_burns_vf(orden: int, frames: int) -> str:
     )
 
 
+def clip_ken_burns(imagen: Path, orden: int, dur: float, salida: Path) -> None:
+    """Un clip con zoom/paneo lento sobre `imagen`, de `dur` segundos."""
+    frames = max(1, round(dur * FPS))
+    r = subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-y",
+         "-loop", "1", "-i", str(imagen),
+         "-vf", _ken_burns_vf(orden, frames),
+         "-frames:v", str(frames),
+         *args_video(), str(salida)],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        raise RuntimeError(f"ffmpeg (escena {orden}) falló: {r.stderr[-500:]}")
+
+
+def clip_estatico(imagen: Path, dur: float, salida: Path) -> None:
+    """Un clip de imagen fija, del mismo tamaño y fps que los demás modos, para
+    que el armado pueda concatenarlo junto a clips con movimiento."""
+    frames = max(1, round(dur * FPS))
+    r = subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-y",
+         "-loop", "1", "-i", str(imagen),
+         "-vf", (f"scale={ANCHO}:{ALTO}:force_original_aspect_ratio=increase"
+                 f":flags=lanczos,crop={ANCHO}:{ALTO},fps={FPS}"),
+         "-frames:v", str(frames),
+         *args_video(), str(salida)],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        raise RuntimeError(f"ffmpeg estático falló: {r.stderr[-500:]}")
+
+
 def generar_clips(proyecto_id: int) -> str:
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)
@@ -59,18 +93,13 @@ def generar_clips(proyecto_id: int) -> str:
         raise ValueError(f"Faltan imágenes reescaladas de las escenas {faltantes}")
 
     for e in escenas:
-        frames = max(1, round(e["dur"] * FPS))
-        salida = clips_dir / f"{e['orden']:02d}.mp4"
-        r = subprocess.run(
-            ["ffmpeg", "-loglevel", "error", "-y",
-             "-loop", "1", "-i", str(up_dir / f"{e['orden']:02d}.png"),
-             "-vf", _ken_burns_vf(e["orden"], frames),
-             "-frames:v", str(frames),
-             *args_video(), str(salida)],
-            capture_output=True, text=True,
-        )
-        if r.returncode != 0:
-            raise RuntimeError(f"ffmpeg (escena {e['orden']}) falló: {r.stderr[-500:]}")
+        t0 = time.time()
+        clip_ken_burns(up_dir / f"{e['orden']:02d}.png", e["orden"], e["dur"],
+                       clips_dir / f"{e['orden']:02d}.mp4")
+        with get_session() as s:
+            escenas_repo.anotar_clip(s, proyecto_id, e["orden"], "kenburns",
+                                     time.time() - t0)
+            s.commit()
 
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)

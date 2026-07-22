@@ -5,7 +5,20 @@ medios de Apple: muy poca CPU y más rápido. El software (libx264) da la mejor
 calidad por bit a costa de CPU. Los filtros (zoompan, overlay) siguen en CPU
 en ambos casos: no son acelerables por hardware.
 """
+import subprocess
+from pathlib import Path
+
 from ...config import VIDEO_BITRATE_MBPS, VIDEO_CRF, VIDEO_ENCODER
+
+
+def duracion(archivo: Path) -> float:
+    """Duración en segundos de un archivo de video o audio (0.0 si falla)."""
+    r = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=nokey=1:noprint_wrappers=1", str(archivo)],
+        capture_output=True, text=True,
+    )
+    return float(r.stdout.strip() or 0)
 
 
 def args_video() -> list[str]:

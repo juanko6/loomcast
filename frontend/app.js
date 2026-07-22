@@ -189,6 +189,38 @@ function bloqueMetadatos(p, ocupado) {
     </div>`;
 }
 
+const NOMBRE_MODO = { estatico: "Estático", kenburns: "Ken Burns", i2v: "i2v" };
+
+// Controles por escena: regenerar su imagen o su clip sin tocar las demás.
+function escenaAcciones(e, ocupado) {
+  const dis = ocupado ? "disabled" : "";
+  const estado = [];
+  if (e.imagen_s) estado.push(`img ${e.imagen_s}s`);
+  if (e.clip) {
+    // Los clips hechos antes de que se registrara el modo no tienen forma de
+    // saberlo: se dice explícitamente en vez de mostrar un signo suelto.
+    estado.push(e.clip_modo
+      ? `clip ${NOMBRE_MODO[e.clip_modo]}${e.clip_s ? ` · ${e.clip_s}s` : ""}`
+      : `clip (modo sin registrar)`);
+  }
+  return `
+    <div class="escena-acciones">
+      <button type="button" class="mini" data-regen-img="${e.orden}" ${dis}
+              title="Genera otra imagen distinta (seed nuevo)">↻ Otra imagen</button>
+      <button type="button" class="mini sec" data-regen-img-seed="${e.orden}" ${dis}
+              title="Rehace la imagen con el mismo seed: solo cambia si editaste el prompt">↻ Mismo seed</button>
+      <select class="escena-modo mini" data-orden="${e.orden}" style="width:auto;margin:0">
+        ${["estatico", "kenburns", "i2v"].map((m) =>
+          `<option value="${m}" ${(e.modo || "kenburns") === m ? "selected" : ""}>${NOMBRE_MODO[m]}</option>`
+        ).join("")}
+      </select>
+      <button type="button" class="mini" data-regen-clip="${e.orden}" ${dis}
+              ${!e.imagen ? "disabled title='Genera antes la imagen'" : ""}>↻ Clip</button>
+      ${estado.length ? `<span class="meta">${estado.join(" · ")}</span>` : ""}
+      ${e.clip_viejo ? `<span class="estado-chip aviso">clip desactualizado</span>` : ""}
+    </div>`;
+}
+
 function bloqueEscenas(p, ocupado) {
   if (!p.subtitulos) return "";
   const hayEscenas = p.escenas.length > 0;
@@ -203,7 +235,7 @@ function bloqueEscenas(p, ocupado) {
       </div>
       ${!hayEscenas ? `<p class="vacio">Genera las escenas: el LLM propone un prompt visual por segmento, que puedes editar antes de crear las imágenes.</p>` : `
         <form id="form-escenas">
-          <p class="resumen">Revisa y edita cada prompt visual. Cuando estés conforme, genera las imágenes.</p>
+          <p class="resumen">Revisa y edita cada escena: arriba el prompt visual (imagen), abajo el de movimiento (solo lo usa el modo i2v). Cuando estés conforme, genera las imágenes.</p>
           ${p.escenas.map((e) => `
             <div class="escena-row">
               <div class="escena-cab">
@@ -217,10 +249,25 @@ function bloqueEscenas(p, ocupado) {
                   : `<div style="width:54px;aspect-ratio:9/16;border-radius:6px;flex-shrink:0;
                          background:var(--panel2);display:flex;align-items:center;justify-content:center;
                          color:var(--dim);font-size:11px">${e.orden + 1}</div>`}
-                <textarea class="escena-prompt" data-orden="${e.orden}" rows="3">${esc(e.prompt)}</textarea>
+                <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                  <textarea class="escena-prompt" data-orden="${e.orden}" rows="3"
+                            placeholder="Prompt visual (imagen)">${esc(e.prompt)}</textarea>
+                  <textarea class="escena-movimiento" data-orden="${e.orden}" rows="2"
+                            placeholder="Prompt de movimiento (solo modo i2v)">${esc(e.prompt_movimiento || "")}</textarea>
+                  ${escenaAcciones(e, ocupado)}
+                </div>
               </div>
             </div>`).join("")}
-          <div class="acciones" style="margin-top:10px">
+          <div class="acciones" style="margin-top:10px;align-items:center">
+            <label class="meta" style="display:flex;gap:6px;align-items:center;margin:0">
+              Modo de todas:
+              <select id="modo-todas" style="width:auto;margin:0">
+                <option value="">— elegir —</option>
+                <option value="estatico">Estático</option>
+                <option value="kenburns">Ken Burns</option>
+                <option value="i2v">i2v</option>
+              </select>
+            </label>
             <button type="submit" class="sec">Guardar prompts editados</button>
             <button type="button" id="gen-imagenes" ${ocupado ? "disabled" : ""}>
               ${hayImagenes ? "↻ Regenerar imágenes" : "✓ Aceptar y generar imágenes"}
@@ -235,6 +282,9 @@ const ETAPA_VIDEO = {
   generar_upscale: "Reescalando imágenes (ESRGAN)…",
   generar_clips: "Generando movimiento (Ken Burns 60fps)…",
   generar_i2v: "Animando escenas (i2v) + RIFE…",
+  generar_clips_mixto: "Generando clips (modo por escena)…",
+  regenerar_imagen: "Regenerando una imagen…",
+  regenerar_clip: "Regenerando un clip…",
   armar_video: "Armando video final (subtítulos + voz)…",
 };
 
@@ -245,6 +295,8 @@ const MODOS_VIDEO = [
     desc: "ESRGAN + zoom/paneo a 60fps. Más nítido y vistoso. ~2-3 min." },
   { id: "i2v", nombre: "Image-to-video (movimiento IA)",
     desc: "Anima cada escena con tu workflow i2v de ComfyUI + RIFE a 60fps. Lo más vistoso, lo más lento." },
+  { id: "mixto", nombre: "Mixto (modo por escena)",
+    desc: "Usa el modo elegido en cada escena arriba. Salta las que ya tengan su clip hecho con ese modo." },
 ];
 
 function bloqueVideo(p, ocupado) {
@@ -374,6 +426,25 @@ document.addEventListener("click", async (ev) => {
       await guardarPrompts();
       await api(`/proyectos/${pid()}/imagenes`, { method: "POST" });
       refrescarJobs(); renderVista();
+    } else if (b.dataset?.regenImg || b.dataset?.regenImgSeed) {
+      // Regenerar la imagen de una escena: con seed nuevo (otra distinta) o
+      // con el mismo (solo cambia si se editó el prompt).
+      const nuevoSeed = !!b.dataset.regenImg;
+      const orden = +(b.dataset.regenImg ?? b.dataset.regenImgSeed);
+      await guardarPrompts();
+      await api(`/proyectos/${pid()}/escenas/${orden}/imagen`, {
+        method: "POST", body: { nuevo_seed: nuevoSeed },
+      });
+      refrescarJobs(); renderVista();
+    } else if (b.dataset?.regenClip) {
+      const orden = +b.dataset.regenClip;
+      const sel = document.querySelector(`.escena-modo[data-orden="${orden}"]`);
+      await guardarPrompts();
+      await guardarModos();
+      await api(`/proyectos/${pid()}/escenas/${orden}/clip`, {
+        method: "POST", body: { modo: sel ? sel.value : "" },
+      });
+      refrescarJobs(); renderVista();
     } else if (b.id === "gen-video") {
       const modo = document.querySelector('input[name="modo-video"]:checked')?.value || "kenburns";
       await api(`/proyectos/${pid()}/video`, { method: "POST", body: { modo } });
@@ -398,13 +469,34 @@ document.addEventListener("change", async (ev) => {
     renderVista();
   } else if (ev.target.name === "modo-video") {
     window.__modoVideo = ev.target.value; // recordar el modo elegido
+  } else if (ev.target.id === "modo-todas") {
+    // Atajo: poner el mismo modo en todas las escenas, sin perder el control
+    // fino de cada una (que sigue editable después).
+    const modo = ev.target.value;
+    if (!modo) return;
+    document.querySelectorAll(".escena-modo").forEach((s) => { s.value = modo; });
+    ev.target.value = "";
+    await guardarModos();
+  } else if (ev.target.classList?.contains("escena-modo")) {
+    await guardarModos();
   }
 });
 
-async function guardarPrompts() {
-  const escenas = [...document.querySelectorAll(".escena-prompt")].map((t) => ({
-    orden: +t.dataset.orden, prompt: t.value.trim(),
+async function guardarModos() {
+  const escenas = [...document.querySelectorAll(".escena-modo")].map((s) => ({
+    orden: +s.dataset.orden, modo: s.value,
   }));
+  if (escenas.length) {
+    await api(`/proyectos/${pid()}/escenas/modos`, { method: "PUT", body: { escenas } });
+  }
+}
+
+async function guardarPrompts() {
+  const escenas = [...document.querySelectorAll(".escena-prompt")].map((t) => {
+    const orden = +t.dataset.orden;
+    const mov = document.querySelector(`.escena-movimiento[data-orden="${orden}"]`);
+    return { orden, prompt: t.value.trim(), prompt_movimiento: mov ? mov.value.trim() : null };
+  });
   await api(`/proyectos/${pid()}/escenas`, { method: "PUT", body: { escenas } });
 }
 

@@ -12,7 +12,10 @@ tools/
 fase0/rife_test/
 fase0/*.wav
 proyectos/
+pruebas_i2v/
 *.db
+# Videos de referencia (pesan ~100 MB; son material de consulta, no fuente)
+referencias/*.mp4
 
 # macOS
 .DS_Store

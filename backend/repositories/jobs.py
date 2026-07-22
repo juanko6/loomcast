@@ -7,8 +7,8 @@ from ..models import Job
 ACTIVOS = ["pendiente", "corriendo"]
 
 
-def crear(s: Session, tipo: str, ref_id: int) -> Job:
-    job = Job(tipo=tipo, ref_id=ref_id)
+def crear(s: Session, tipo: str, ref_id: int, params: str = "{}") -> Job:
+    job = Job(tipo=tipo, ref_id=ref_id, params=params)
     s.add(job)
     return job
 

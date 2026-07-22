@@ -39,3 +39,5 @@ class EtiquetasLLM(BaseModel):
 
 class EscenaLLM(BaseModel):
     prompt: str = Field(min_length=20)
+    # Qué se mueve en la escena; solo lo usa el modo i2v
+    prompt_movimiento: str = Field(min_length=20)

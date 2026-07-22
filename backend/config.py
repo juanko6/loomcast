@@ -18,14 +18,17 @@ LLM_TEMPERATURE: float | None = _llm.get("temperature")
 LLM_CHAT_TEMPLATE_KWARGS: dict = _llm.get("chat_template_kwargs", {})
 
 COMFY_URL: str = _cfg["comfy"]["url"].rstrip("/")
+COMFY_TIMEOUT_S: float = _cfg["comfy"].get("timeout_s", 1800)
 
 _video = _cfg.get("video", {})
 VIDEO_ENCODER: str = _video.get("encoder", "hardware")
 VIDEO_BITRATE_MBPS: int = _video.get("bitrate_mbps", 12)
 VIDEO_CRF: int = _video.get("crf", 18)
+VIDEO_COLA_FINAL_S: float = _video.get("cola_final_s", 1.5)
 
 _i2v = _cfg.get("i2v", {})
 I2V_WORKFLOW: str = _i2v.get("workflow", "workflows/i2v_api.json")
+I2V_FRAMES: int = _i2v.get("frames", 21)
 I2V_FPS_ORIGEN: int = _i2v.get("fps_origen", 24)
 I2V_FPS_FINAL: int = _i2v.get("fps_final", 48)
 

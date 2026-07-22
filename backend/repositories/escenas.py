@@ -20,11 +20,29 @@ def por_proyecto(s: Session, proyecto_id: int) -> list[Escena]:
     )
 
 
-def actualizar_prompts(s: Session, proyecto_id: int, prompts: dict[int, str]) -> int:
-    """Reemplaza el prompt visual de las escenas indicadas (por orden)."""
+def anotar_clip(s: Session, proyecto_id: int, orden: int, modo: str,
+                segundos: float) -> None:
+    """Deja constancia de con qué modo y en cuánto tiempo se hizo un clip, para
+    que la UI pueda decir qué se está mirando cuando el video mezcla modos."""
+    for e in por_proyecto(s, proyecto_id):
+        if e.orden == orden:
+            e.clip_modo, e.clip_s = modo, round(segundos, 1)
+
+
+def actualizar_prompts(s: Session, proyecto_id: int, prompts: dict[int, dict]) -> int:
+    """Reemplaza los prompts (visual y de movimiento) de las escenas indicadas.
+
+    `prompts` va indexado por orden; de cada escena solo se tocan las claves
+    presentes, para que editar uno de los dos prompts no borre el otro.
+    """
     n = 0
     for e in por_proyecto(s, proyecto_id):
-        if e.orden in prompts:
-            e.prompt = prompts[e.orden]
-            n += 1
+        campos = prompts.get(e.orden)
+        if campos is None:
+            continue
+        if "prompt" in campos:
+            e.prompt = campos["prompt"]
+        if "prompt_movimiento" in campos:
+            e.prompt_movimiento = campos["prompt_movimiento"]
+        n += 1
     return n

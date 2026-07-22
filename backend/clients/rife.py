@@ -14,7 +14,21 @@ class RifeError(RuntimeError):
     pass
 
 
-def interpolar(entrada: Path, salida: Path, fps_origen: int, fps_final: int) -> None:
+def interpolar(
+    entrada: Path,
+    salida: Path,
+    fps_origen: int,
+    fps_final: int,
+    frames: int | None = None,
+) -> None:
+    """Interpola `entrada` a `fps_final` y la escribe en `salida`.
+
+    Por defecto multiplica los cuadros por fps_final/fps_origen, lo que asume
+    que el clip ya dura lo que tiene que durar. Si se pasa `frames`, RIFE
+    genera exactamente esa cantidad: sirve para clips i2v cortos que hay que
+    estirar hasta la duración de su escena, donde el factor por fps dejaría
+    demasiados cuadros repetidos.
+    """
     bin_path = ROOT / RIFE_BIN
     if not bin_path.exists():
         raise RifeError(
@@ -25,7 +39,6 @@ def interpolar(entrada: Path, salida: Path, fps_origen: int, fps_final: int) -> 
     if not modelo_dir.exists():
         raise RifeError(f"No se encontró el modelo RIFE en {modelo_dir}")
 
-    factor = max(2, round(fps_final / fps_origen))
     with tempfile.TemporaryDirectory() as tmp:
         din, dout = Path(tmp) / "in", Path(tmp) / "out"
         din.mkdir()
@@ -40,9 +53,12 @@ def interpolar(entrada: Path, salida: Path, fps_origen: int, fps_final: int) -> 
         if n_in == 0:
             raise RifeError("ffmpeg no extrajo cuadros del clip i2v")
 
+        n_out = frames if frames else n_in * max(2, round(fps_final / fps_origen))
+        n_out = max(n_out, n_in)
+
         r = subprocess.run(
             [str(bin_path), "-i", str(din), "-o", str(dout),
-             "-m", str(modelo_dir), "-n", str(n_in * factor), "-f", "%08d.png"],
+             "-m", str(modelo_dir), "-n", str(n_out), "-f", "%08d.png"],
             capture_output=True, text=True,
         )
         if r.returncode != 0:

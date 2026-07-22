@@ -1,7 +1,15 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from ..schemas import EscenasIn, GuionIn, VideoIn, VozSeleccionIn
+from ..schemas import (
+    EscenasIn,
+    GuionIn,
+    ModosEscenasIn,
+    RegenerarClipIn,
+    RegenerarImagenIn,
+    VideoIn,
+    VozSeleccionIn,
+)
 from ..services import proyectos as proyectos_service
 
 router = APIRouter(prefix="/api/proyectos", tags=["proyectos"])
@@ -67,7 +75,14 @@ def generar_escenas(pid: int):
 @router.put("/{pid}/escenas")
 def editar_escenas(pid: int, body: EscenasIn):
     try:
-        prompts = {e.orden: e.prompt for e in body.escenas}
+        prompts = {
+            e.orden: (
+                {"prompt": e.prompt}
+                if e.prompt_movimiento is None
+                else {"prompt": e.prompt, "prompt_movimiento": e.prompt_movimiento}
+            )
+            for e in body.escenas
+        }
         return {"actualizadas": proyectos_service.editar_prompts_escenas(pid, prompts)}
     except proyectos_service.ProyectoNoExiste:
         raise HTTPException(404, "Proyecto no existe")
@@ -76,6 +91,30 @@ def editar_escenas(pid: int, body: EscenasIn):
 @router.post("/{pid}/imagenes")
 def generar_imagenes(pid: int):
     return {"job_id": proyectos_service.encolar_etapa(pid, "generar_imagenes")}
+
+
+@router.post("/{pid}/escenas/{orden}/imagen")
+def regenerar_imagen(pid: int, orden: int, body: RegenerarImagenIn):
+    """Regenera la imagen de una sola escena."""
+    return {"job_id": proyectos_service.encolar_etapa(
+        pid, "regenerar_imagen", orden=orden, nuevo_seed=body.nuevo_seed)}
+
+
+@router.post("/{pid}/escenas/{orden}/clip")
+def regenerar_clip(pid: int, orden: int, body: RegenerarClipIn):
+    """Regenera el clip de una sola escena en el modo indicado."""
+    return {"job_id": proyectos_service.encolar_etapa(
+        pid, "regenerar_clip", orden=orden, modo=body.modo)}
+
+
+@router.put("/{pid}/escenas/modos")
+def fijar_modos(pid: int, body: ModosEscenasIn):
+    """Fija el modo de animación de cada escena, que respeta 'generar video'."""
+    try:
+        modos = {e.orden: e.modo for e in body.escenas}
+        return {"actualizadas": proyectos_service.fijar_modo_escenas(pid, modos)}
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
 
 
 @router.post("/{pid}/video")
