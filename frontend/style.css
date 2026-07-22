@@ -93,6 +93,22 @@ pre.meta-desc { white-space: pre-wrap; font: inherit; color: var(--texto); }
 .escena-acciones .meta { font-size: 11px; }
 button.mini, select.mini { font-size: 11px; padding: 3px 8px; margin: 0; }
 .estado-chip.aviso { background: #8a5a00; }
+.estado-chip.en-cola { background: var(--acento); }
+
+/* Visor a pantalla completa (imagen o clip de una escena) */
+#visor { position: fixed; inset: 0; z-index: 50; display: flex;
+         flex-direction: column; align-items: center; justify-content: center;
+         gap: 10px; padding: 24px; background: rgba(0, 0, 0, .88); }
+#visor.oculto { display: none; }
+#visor-contenido img, #visor-contenido video {
+  max-width: min(92vw, 520px); max-height: 82vh; border-radius: 10px;
+  display: block; }
+#visor-pie { margin: 0; text-align: center; }
+#visor-cerrar { position: absolute; top: 16px; right: 20px; width: auto;
+                padding: 6px 12px; background: var(--panel); }
+/* La miniatura de la escena invita a ampliarse */
+.escena-miniatura { cursor: zoom-in; transition: opacity .15s; }
+.escena-miniatura:hover { opacity: .75; }
 label { display: block; font-size: 13px; color: var(--dim); margin-bottom: 4px; }
 
 .modo-opcion { display: flex; gap: 10px; align-items: flex-start; cursor: pointer;

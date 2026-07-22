@@ -149,6 +149,14 @@ def imagen(pid: int, orden: int):
     )
 
 
+@router.get("/{pid}/clips/{orden}")
+def clip(pid: int, orden: int):
+    """Clip de una escena, para previsualizarlo sin armar el video entero."""
+    return _archivo(
+        pid, ("clips", f"{orden:02d}.mp4"), "video/mp4", "Clip no generado"
+    )
+
+
 @router.get("/{pid}/video")
 def video(pid: int):
     return _archivo(pid, ("final.mp4",), "video/mp4", "Aún no hay video final")

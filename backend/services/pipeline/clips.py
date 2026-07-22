@@ -36,6 +36,24 @@ def _ken_burns_vf(orden: int, frames: int) -> str:
     )
 
 
+def pendientes_de_modo(clips_dir: Path, escenas: list[dict], modo: str,
+                       forzar: bool = False) -> list[dict]:
+    """Escenas cuyo clip hay que (re)generar para el modo pedido.
+
+    Hace falta si no existe el archivo o si el que hay se hizo con otro modo:
+    así una tanda cortada a medias se reanuda, pero cambiar de modo nunca deja
+    el video armado con clips del modo anterior. Los clips anteriores al
+    registro de `clip_modo` cuentan como desconocidos y se rehacen.
+    """
+    if forzar:
+        return list(escenas)
+    return [
+        e for e in escenas
+        if not (clips_dir / f"{e['orden']:02d}.mp4").exists()
+        or e.get("clip_modo") != modo
+    ]
+
+
 def clip_ken_burns(imagen: Path, orden: int, dur: float, salida: Path) -> None:
     """Un clip con zoom/paneo lento sobre `imagen`, de `dur` segundos."""
     frames = max(1, round(dur * FPS))
@@ -68,13 +86,16 @@ def clip_estatico(imagen: Path, dur: float, salida: Path) -> None:
         raise RuntimeError(f"ffmpeg estático falló: {r.stderr[-500:]}")
 
 
-def generar_clips(proyecto_id: int) -> str:
+def generar_clips(proyecto_id: int, forzar: bool = False) -> str:
+    """Clip Ken Burns por escena. Salta las que ya tengan uno hecho con este
+    mismo modo, de modo que reanudar una tanda no rehaga lo ya generado."""
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)
         if p is None:
             raise ValueError(f"Proyecto {proyecto_id} no existe")
         escenas = [
-            {"orden": e.orden, "dur": e.t_fin - e.t_inicio}
+            {"orden": e.orden, "dur": e.t_fin - e.t_inicio,
+             "clip_modo": e.clip_modo}
             for e in escenas_repo.por_proyecto(s, proyecto_id)
         ]
         slug = p.slug
@@ -92,7 +113,11 @@ def generar_clips(proyecto_id: int) -> str:
     if faltantes:
         raise ValueError(f"Faltan imágenes reescaladas de las escenas {faltantes}")
 
-    for e in escenas:
+    pendientes = pendientes_de_modo(clips_dir, escenas, "kenburns", forzar)
+    if not pendientes:
+        return f"Los {len(escenas)} clips Ken Burns ya estaban hechos"
+
+    for e in pendientes:
         t0 = time.time()
         clip_ken_burns(up_dir / f"{e['orden']:02d}.png", e["orden"], e["dur"],
                        clips_dir / f"{e['orden']:02d}.mp4")
@@ -105,4 +130,6 @@ def generar_clips(proyecto_id: int) -> str:
         p = proyectos_repo.obtener(s, proyecto_id)
         avanzar_estado(p, "CLIPS")
         s.commit()
-    return f"{len(escenas)} clips Ken Burns a {FPS}fps"
+    saltadas = len(escenas) - len(pendientes)
+    reanudado = f" ({saltadas} ya estaban)" if saltadas else ""
+    return f"{len(pendientes)} clips Ken Burns a {FPS}fps{reanudado}"

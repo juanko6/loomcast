@@ -191,9 +191,29 @@ function bloqueMetadatos(p, ocupado) {
 
 const NOMBRE_MODO = { estatico: "Estático", kenburns: "Ken Burns", i2v: "i2v" };
 
+// ---------- visor de imagen / clip ----------
+function abrirVisor(html, pie) {
+  $("#visor-contenido").innerHTML = html;
+  $("#visor-pie").textContent = pie || "";
+  $("#visor").classList.remove("oculto");
+}
+
+function cerrarVisor() {
+  $("#visor").classList.add("oculto");
+  $("#visor-contenido").innerHTML = ""; // corta la reproducción del clip
+}
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") cerrarVisor();
+});
+
 // Controles por escena: regenerar su imagen o su clip sin tocar las demás.
-function escenaAcciones(e, ocupado) {
-  const dis = ocupado ? "disabled" : "";
+function escenaAcciones(e) {
+  // Estos botones NO se bloquean cuando hay trabajo en curso: la cola procesa
+  // de uno en uno igualmente, así que se pueden dejar varias escenas pedidas y
+  // seguir usando la app. Solo se bloquea la escena que ya está en la cola,
+  // para no encolarla dos veces.
+  const dis = e.en_cola ? "disabled" : "";
   const estado = [];
   if (e.imagen_s) estado.push(`img ${e.imagen_s}s`);
   if (e.clip) {
@@ -216,6 +236,11 @@ function escenaAcciones(e, ocupado) {
       </select>
       <button type="button" class="mini" data-regen-clip="${e.orden}" ${dis}
               ${!e.imagen ? "disabled title='Genera antes la imagen'" : ""}>↻ Clip</button>
+      ${e.clip ? `<button type="button" class="mini sec" data-ver-clip="${e.orden}"
+                          title="Reproducir el clip de esta escena">▶ Ver clip</button>` : ""}
+      ${e.en_cola
+        ? `<span class="estado-chip en-cola">⏳ ${e.en_cola === "imagen" ? "imagen" : "clip"} en cola</span>`
+        : ""}
       ${estado.length ? `<span class="meta">${estado.join(" · ")}</span>` : ""}
       ${e.clip_viejo ? `<span class="estado-chip aviso">clip desactualizado</span>` : ""}
     </div>`;
@@ -244,7 +269,9 @@ function bloqueEscenas(p, ocupado) {
               </div>
               <div style="display:flex;gap:8px;align-items:flex-start">
                 ${e.imagen
-                  ? `<img src="/api/proyectos/${p.id}/imagenes/${e.orden}?v=${Date.now()}"
+                  ? `<img class="escena-miniatura" data-ver-img="${e.orden}"
+                         title="Ver la imagen en grande"
+                         src="/api/proyectos/${p.id}/imagenes/${e.orden}?v=${Date.now()}"
                          style="width:54px;border-radius:6px;aspect-ratio:9/16;object-fit:cover;flex-shrink:0">`
                   : `<div style="width:54px;aspect-ratio:9/16;border-radius:6px;flex-shrink:0;
                          background:var(--panel2);display:flex;align-items:center;justify-content:center;
@@ -254,7 +281,7 @@ function bloqueEscenas(p, ocupado) {
                             placeholder="Prompt visual (imagen)">${esc(e.prompt)}</textarea>
                   <textarea class="escena-movimiento" data-orden="${e.orden}" rows="2"
                             placeholder="Prompt de movimiento (solo modo i2v)">${esc(e.prompt_movimiento || "")}</textarea>
-                  ${escenaAcciones(e, ocupado)}
+                  ${escenaAcciones(e)}
                 </div>
               </div>
             </div>`).join("")}
@@ -331,6 +358,7 @@ function bloqueVideo(p, ocupado) {
 async function renderProyecto(id) {
   const p = await api(`/proyectos/${id}`);
   const ocupado = p.jobs_activos > 0;
+  window.__escenas = p.escenas; // lo consulta el visor para etiquetar el clip
   panel.innerHTML = `
     <div class="bloque">
       <span class="estado-chip">${esc(p.estado)}</span>
@@ -379,6 +407,26 @@ const pid = () => vista.id;
 
 document.addEventListener("click", async (ev) => {
   const b = ev.target;
+
+  // Visor: se atiende antes que nada porque vive fuera del panel
+  if (b.id === "visor" || b.id === "visor-cerrar") return cerrarVisor();
+  if (b.dataset?.verImg !== undefined && b.dataset.verImg !== "") {
+    const o = +b.dataset.verImg;
+    return abrirVisor(
+      `<img src="/api/proyectos/${pid()}/imagenes/${o}?v=${Date.now()}">`,
+      `Escena ${o + 1} · imagen`);
+  }
+  if (b.dataset?.verClip) {
+    const o = +b.dataset.verClip;
+    const e = (window.__escenas || []).find((x) => x.orden === o) || {};
+    return abrirVisor(
+      // muted: los clips no llevan audio (se generan con -an) y sin ello el
+      // navegador bloquea el autoplay.
+      `<video src="/api/proyectos/${pid()}/clips/${o}?v=${Date.now()}"
+              controls autoplay loop muted playsinline></video>`,
+      `Escena ${o + 1} · clip ${NOMBRE_MODO[e.clip_modo] || ""}`.trim());
+  }
+
   const li = b.closest?.("[data-tema]");
   if (li) return irA("tema", +li.dataset.tema);
   const lp = b.closest?.("[data-proyecto]");

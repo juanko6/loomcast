@@ -40,6 +40,28 @@ def tipo_activo_de_proyecto(s: Session, pid: int, tipos: list[str]) -> str | Non
     return job.tipo if job else None
 
 
+def escenas_en_cola(s: Session, pid: int) -> dict[int, str]:
+    """Escenas del proyecto con una regeneración pendiente o en curso, mapeadas
+    a lo que se está rehaciendo ('imagen' o 'clip'). Permite que la UI las marque
+    en vez de bloquear los botones mientras la cola trabaja."""
+    import json
+
+    out = {}
+    jobs = (
+        s.query(Job)
+        .filter(Job.ref_id == pid,
+                Job.tipo.in_(["regenerar_imagen", "regenerar_clip"]),
+                Job.estado.in_(ACTIVOS))
+        .order_by(Job.id)
+        .all()
+    )
+    for j in jobs:
+        orden = json.loads(j.params or "{}").get("orden")
+        if orden is not None:
+            out[orden] = "imagen" if j.tipo == "regenerar_imagen" else "clip"
+    return out
+
+
 def marcar_corriendo(s: Session, job: Job) -> None:
     job.estado = "corriendo"
 

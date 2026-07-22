@@ -44,7 +44,7 @@ def listar() -> list[dict]:
         return out
 
 
-def _escena_dict(e, base_dir) -> dict:
+def _escena_dict(e, base_dir, en_cola=None) -> dict:
     img = base_dir / "imagenes" / f"{e.orden:02d}.png"
     clip = base_dir / "clips" / f"{e.orden:02d}.mp4"
     tiene_img, tiene_clip = img.exists(), clip.exists()
@@ -64,6 +64,9 @@ def _escena_dict(e, base_dir) -> dict:
             tiene_img and tiene_clip
             and img.stat().st_mtime > clip.stat().st_mtime
         ),
+        # 'imagen' | 'clip' si esta escena tiene una regeneración esperando en
+        # la cola; None si no.
+        "en_cola": (en_cola or {}).get(e.orden),
     }
 
 
@@ -79,7 +82,9 @@ def detalle(pid: int) -> dict:
         job_activo = jobs_repo.tipo_activo_de_proyecto(s, pid, TIPOS_JOB_PROYECTO)
         base_dir = PROYECTOS_DIR / p.slug
         srt = base_dir / "subtitulos.srt"
-        escenas = [_escena_dict(e, base_dir) for e in escenas_repo.por_proyecto(s, pid)]
+        en_cola = jobs_repo.escenas_en_cola(s, pid)
+        escenas = [_escena_dict(e, base_dir, en_cola)
+                   for e in escenas_repo.por_proyecto(s, pid)]
         todas_imagenes = bool(escenas) and all(e["imagen"] for e in escenas)
         return {
             "id": p.id, "slug": p.slug, "estado": p.estado,

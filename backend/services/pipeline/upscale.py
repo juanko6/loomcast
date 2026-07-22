@@ -32,8 +32,17 @@ def generar_upscale(proyecto_id: int) -> str:
     if faltantes:
         raise ValueError(f"Faltan imágenes de las escenas {faltantes}")
 
+    # Se rehace solo lo que hace falta: el que no existe y el que quedó viejo
+    # porque su imagen se regeneró después. Comparar fechas evita repetir 12
+    # pasadas de ESRGAN cuando solo cambió una escena.
+    pendientes = []
+    for o in ordenes:
+        origen, destino = origen_dir / f"{o:02d}.png", destino_dir / f"{o:02d}.png"
+        if not destino.exists() or origen.stat().st_mtime > destino.stat().st_mtime:
+            pendientes.append(o)
+
     try:
-        for o in ordenes:
+        for o in pendientes:
             comfy.upscale_imagen(
                 origen_dir / f"{o:02d}.png", destino_dir / f"{o:02d}.png"
             )
@@ -44,4 +53,6 @@ def generar_upscale(proyecto_id: int) -> str:
         p = proyectos_repo.obtener(s, proyecto_id)
         avanzar_estado(p, "UPSCALE")
         s.commit()
-    return f"{len(ordenes)} imágenes reescaladas con ESRGAN x4"
+    saltadas = len(ordenes) - len(pendientes)
+    reanudado = f" ({saltadas} ya estaban al día)" if saltadas else ""
+    return f"{len(pendientes)} imágenes reescaladas con ESRGAN x4{reanudado}"

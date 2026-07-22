@@ -18,7 +18,7 @@ from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
 from ...repositories import proyectos as proyectos_repo
 from ._ffmpeg import args_video, duracion
-from .clips import ALTO, ANCHO
+from .clips import ALTO, ANCHO, pendientes_de_modo
 
 
 def clip_i2v(imagen: Path, prompt: str, seed: int, dur: float, salida: Path) -> None:
@@ -57,10 +57,11 @@ def clip_i2v(imagen: Path, prompt: str, seed: int, dur: float, salida: Path) -> 
 def generar_i2v(proyecto_id: int, forzar: bool = False) -> str:
     """Genera un clip animado por escena.
 
-    Reanudable: las escenas que ya tienen su clip se saltan, para que un corte
-    a mitad (suspensión, timeout de ComfyUI) no obligue a repetir lo ya hecho.
-    Con `forzar` se regeneran todas, que es lo que hace falta tras cambiar los
-    prompts de movimiento.
+    Reanudable: se saltan las escenas que ya tienen un clip hecho en modo i2v,
+    para que un corte a mitad (suspensión, timeout de ComfyUI) no obligue a
+    repetir lo ya hecho. Un clip de otro modo sí se rehace: si no, cambiar a
+    i2v armaría el video con los clips del modo anterior. Con `forzar` se
+    regeneran todas, que es lo que hace falta tras cambiar los prompts.
     """
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)
@@ -71,7 +72,8 @@ def generar_i2v(proyecto_id: int, forzar: bool = False) -> str:
             # una imagen fija y genera clips casi estáticos. Las escenas
             # anteriores a ese campo caen de vuelta al visual.
             {"orden": e.orden, "prompt": e.prompt_movimiento or e.prompt,
-             "seed": e.seed, "dur": e.t_fin - e.t_inicio}
+             "seed": e.seed, "dur": e.t_fin - e.t_inicio,
+             "clip_modo": e.clip_modo}
             for e in escenas_repo.por_proyecto(s, proyecto_id)
         ]
         slug = p.slug
@@ -89,10 +91,7 @@ def generar_i2v(proyecto_id: int, forzar: bool = False) -> str:
     if faltantes:
         raise ValueError(f"Faltan imágenes de las escenas {faltantes}")
 
-    pendientes = escenas if forzar else [
-        e for e in escenas
-        if not (clips_dir / f"{e['orden']:02d}.mp4").exists()
-    ]
+    pendientes = pendientes_de_modo(clips_dir, escenas, "i2v", forzar)
     saltadas = len(escenas) - len(pendientes)
     if not pendientes:
         return f"{len(escenas)} clips i2v ya estaban generados (nada que hacer)"
