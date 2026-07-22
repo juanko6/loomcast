@@ -54,6 +54,8 @@ async function cargarListas() {
     <li data-tema="${t.id}" class="${vista?.tipo === "tema" && vista.id === t.id ? "activo" : ""}">
       <span>${esc(t.texto.slice(0, 40))}</span>
       <span class="meta">${t.n_aprobadas}/${t.n_ideas} ✓</span>
+      <button class="borrar-tema" data-borrar-tema="${t.id}"
+              data-texto="${esc(t.texto.slice(0, 40))}" title="Borrar tema">🗑</button>
     </li>`).join("") || `<li class="meta">Sin temas aún</li>`;
   $("#lista-proyectos").innerHTML = proyectos.map((p) => `
     <li data-proyecto="${p.id}" class="${vista?.tipo === "proyecto" && vista.id === p.id ? "activo" : ""}">
@@ -350,8 +352,44 @@ function bloqueVideo(p, ocupado) {
       ${enVideo ? `<p class="spinner">${esc(enVideo)}</p>` : ""}
       ${p.video_disponible ? `
         <video controls src="/api/proyectos/${p.id}/video?v=${Date.now()}"
-               style="width:280px;max-width:100%;border-radius:12px"></video>` : ""}
+               style="width:280px;max-width:100%;border-radius:12px"></video>
+        <div class="acciones" style="margin-top:8px">
+          <button type="button" class="mini sec" id="ver-final">⤢ Ver en grande</button>
+          <a class="boton mini sec" href="/api/proyectos/${p.id}/video"
+             download="${esc(p.slug)}.mp4">⬇ Descargar</a>
+          <button type="button" class="mini peligro" id="borrar-video">🗑 Borrar video</button>
+        </div>` : ""}
+      ${bloqueVersiones(p)}
+      <div class="acciones" style="margin-top:16px;border-top:1px solid var(--borde);padding-top:12px">
+        <button type="button" class="mini peligro" id="borrar-proyecto" ${ocupado ? "disabled" : ""}>
+          🗑 Borrar proyecto entero
+        </button>
+        <span class="meta">Borra el guion, la voz, las imágenes, los clips y los videos.</span>
+      </div>
     </div>`;
+}
+
+// Montajes anteriores: al rehacer el video, el que había se guarda en vez de
+// perderse.
+function bloqueVersiones(p) {
+  if (!p.versiones?.length) return "";
+  const total = p.versiones.reduce((a, v) => a + v.mb, 0).toFixed(0);
+  return `
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;color:var(--dim)">
+        Versiones anteriores (${p.versiones.length} · ${total} MB)
+      </summary>
+      <div style="margin-top:8px">
+        ${p.versiones.map((v) => `
+          <div class="version-row">
+            <span class="meta">${esc(v.fecha)} · ${v.mb} MB</span>
+            <button type="button" class="mini sec" data-ver-version="${esc(v.nombre)}">▶ Ver</button>
+            <a class="boton mini sec" href="/api/proyectos/${p.id}/versiones/${esc(v.nombre)}"
+               download="${esc(v.nombre)}">⬇</a>
+            <button type="button" class="mini peligro" data-borrar-version="${esc(v.nombre)}">🗑</button>
+          </div>`).join("")}
+      </div>
+    </details>`;
 }
 
 // ---------- vista: detalle de proyecto ----------
@@ -427,6 +465,23 @@ document.addEventListener("click", async (ev) => {
       `Escena ${o + 1} · clip ${NOMBRE_MODO[e.clip_modo] || ""}`.trim());
   }
 
+  // Borrados: van antes de la navegación porque el botón vive dentro del <li>
+  if (b.dataset?.borrarTema) {
+    if (!confirm(`¿Borrar el tema «${b.dataset.texto}» y todas sus ideas?\n\n` +
+                 `Esto no se puede deshacer.`)) return;
+    try {
+      const r = await api(`/temas/${b.dataset.borrarTema}`, { method: "DELETE" });
+      if (vista?.tipo === "tema" && vista.id === +b.dataset.borrarTema) {
+        vista = null;
+        panel.innerHTML = `<p class="vacio">Tema borrado (${r.ideas} ideas).</p>`;
+      }
+      cargarListas();
+    } catch (e) {
+      alert(String(e.message || e));
+    }
+    return;
+  }
+
   const li = b.closest?.("[data-tema]");
   if (li) return irA("tema", +li.dataset.tema);
   const lp = b.closest?.("[data-proyecto]");
@@ -493,6 +548,45 @@ document.addEventListener("click", async (ev) => {
         method: "POST", body: { modo: sel ? sel.value : "" },
       });
       refrescarJobs(); renderVista();
+    } else if (b.id === "ver-final") {
+      abrirVisor(
+        `<video src="/api/proyectos/${pid()}/video?v=${Date.now()}"
+                controls autoplay playsinline></video>`, "Video final");
+    } else if (b.dataset?.verVersion) {
+      const n = b.dataset.verVersion;
+      abrirVisor(
+        `<video src="/api/proyectos/${pid()}/versiones/${n}" controls autoplay
+                playsinline></video>`, n);
+    } else if (b.dataset?.borrarVersion) {
+      const n = b.dataset.borrarVersion;
+      if (!confirm(`¿Borrar la versión ${n}?\n\nEsto no se puede deshacer.`)) return;
+      await api(`/proyectos/${pid()}/versiones/${n}`, { method: "DELETE" });
+      renderVista();
+    } else if (b.id === "borrar-video") {
+      const conVers = confirm(
+        "¿Borrar el video final?\n\n" +
+        "Aceptar: borra también las versiones anteriores.\n" +
+        "Cancelar: te pregunto solo por el video final.");
+      if (!conVers && !confirm("¿Borrar solo el video final?")) return;
+      const r = await api(`/proyectos/${pid()}/video?con_versiones=${conVers}`,
+                          { method: "DELETE" });
+      alert(`Borrado: ${r.final} video final, ${r.versiones} versiones.`);
+      renderVista();
+    } else if (b.id === "borrar-proyecto") {
+      const t = document.querySelector("#panel h2")?.textContent?.trim() || "";
+      if (!confirm(`¿Borrar el proyecto «${t}» POR COMPLETO?\n\n` +
+                   `Se pierden guion, voz, subtítulos, imágenes, clips y videos.\n` +
+                   `Esto no se puede deshacer.`)) return;
+      if (!confirm("Confirma otra vez: se borra la carpeta entera del proyecto.")) return;
+      try {
+        const r = await api(`/proyectos/${pid()}`, { method: "DELETE" });
+        vista = null;
+        panel.innerHTML = `<p class="vacio">Proyecto «${esc(r.slug)}» borrado
+                           (${r.archivos} archivos).</p>`;
+        cargarListas();
+      } catch (e) {
+        alert(String(e.message || e));
+      }
     } else if (b.id === "gen-video") {
       const modo = document.querySelector('input[name="modo-video"]:checked')?.value || "kenburns";
       await api(`/proyectos/${pid()}/video`, { method: "POST", body: { modo } });

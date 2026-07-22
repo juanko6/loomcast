@@ -14,7 +14,7 @@ from ...repositories import escenas as escenas_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
 from . import _subtitulos_render as subs
-from ._ffmpeg import args_video
+from ._ffmpeg import archivar_final, args_video
 
 
 def armar_estatico(proyecto_id: int) -> str:
@@ -104,6 +104,7 @@ def armar_estatico(proyecto_id: int) -> str:
     # marque -t: eso deja una cola tras la voz en lugar de cortar en seco sobre
     # la última palabra.
     objetivo = dur_audio + VIDEO_COLA_FINAL_S
+    archivada = archivar_final(base)
     r = subprocess.run(
         ["ffmpeg", "-loglevel", "error", "-y",
          "-f", "concat", "-safe", "0", "-i", "estatico_concat.txt",
@@ -120,5 +121,6 @@ def armar_estatico(proyecto_id: int) -> str:
         p = proyectos_repo.obtener(s, proyecto_id)
         avanzar_estado(p, "FINAL")
         s.commit()
+    guardado = f"; el anterior queda en versiones/{archivada}" if archivada else ""
     return (f"Video (estático): {len(escenas)} escenas, {objetivo:.1f}s "
-            f"({VIDEO_COLA_FINAL_S:.1f}s tras la voz) → final.mp4")
+            f"({VIDEO_COLA_FINAL_S:.1f}s tras la voz) → final.mp4{guardado}")

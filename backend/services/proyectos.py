@@ -1,5 +1,7 @@
 """Lógica de negocio de proyectos: detalle, edición de guion, estados."""
 import json
+import shutil
+from datetime import datetime
 
 from ..config import PROYECTOS_DIR
 from ..db import get_session
@@ -99,6 +101,7 @@ def detalle(pid: int) -> dict:
             "escenas": escenas,
             "imagenes_completas": todas_imagenes,
             "video_disponible": (base_dir / "final.mp4").exists(),
+            "versiones": _versiones(base_dir),
             "jobs_activos": activos,
             "job_activo": job_activo,
         }
@@ -134,6 +137,112 @@ def editar_prompts_escenas(pid: int, prompts: dict[int, dict]) -> int:
         n = escenas_repo.actualizar_prompts(s, pid, prompts)
         s.commit()
         return n
+
+
+def _versiones_dir(slug: str):
+    return PROYECTOS_DIR / slug / "versiones"
+
+
+def _versiones(base_dir) -> list[dict]:
+    """Montajes anteriores archivados, del más reciente al más antiguo."""
+    d = base_dir / "versiones"
+    if not d.exists():
+        return []
+    out = []
+    for f in sorted(d.glob("final_*.mp4"), reverse=True):
+        st = f.stat()
+        out.append({
+            "nombre": f.name,
+            "mb": round(st.st_size / 1e6, 1),
+            "fecha": datetime.fromtimestamp(st.st_mtime).strftime("%d/%m %H:%M"),
+        })
+    return out
+
+
+def _nombre_version_valido(nombre: str) -> bool:
+    """Solo nombres del propio archivador: evita que un nombre con '..' o con
+    separadores saque el borrado fuera de la carpeta de versiones."""
+    return (
+        nombre.startswith("final_")
+        and nombre.endswith(".mp4")
+        and "/" not in nombre
+        and "\\" not in nombre
+        and ".." not in nombre
+    )
+
+
+def listar_versiones(pid: int) -> list[dict]:
+    """Montajes anteriores, del más reciente al más antiguo."""
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        slug = p.slug
+    return _versiones(PROYECTOS_DIR / slug)
+
+
+class VersionNoExiste(LookupError):
+    pass
+
+
+def borrar_version(pid: int, nombre: str) -> None:
+    if not _nombre_version_valido(nombre):
+        raise VersionNoExiste(nombre)
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        slug = p.slug
+    f = _versiones_dir(slug) / nombre
+    if not f.exists():
+        raise VersionNoExiste(nombre)
+    f.unlink()
+
+
+def borrar_video(pid: int, con_versiones: bool = False) -> dict:
+    """Borra el video final y, si se pide, también los montajes archivados."""
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        slug = p.slug
+    base = PROYECTOS_DIR / slug
+    borrados = 0
+    final = base / "final.mp4"
+    if final.exists():
+        final.unlink()
+        borrados += 1
+    versiones = 0
+    if con_versiones and _versiones_dir(slug).exists():
+        for f in _versiones_dir(slug).glob("final_*.mp4"):
+            f.unlink()
+            versiones += 1
+    return {"final": borrados, "versiones": versiones}
+
+
+def borrar_proyecto(pid: int) -> dict:
+    """Borra el proyecto: sus filas en la base y su carpeta en disco."""
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        slug = p.slug
+        activos = jobs_repo.activos_de_proyecto(s, pid, TIPOS_JOB_PROYECTO)
+        if activos:
+            raise ProyectoOcupado(pid)
+        proyectos_repo.borrar(s, pid)
+        s.commit()
+
+    carpeta = PROYECTOS_DIR / slug
+    archivos = 0
+    if carpeta.exists():
+        archivos = sum(1 for _ in carpeta.rglob("*") if _.is_file())
+        shutil.rmtree(carpeta)
+    return {"slug": slug, "archivos": archivos}
+
+
+class ProyectoOcupado(RuntimeError):
+    pass
 
 
 def ruta_archivo(pid: int, *partes: str):

@@ -21,5 +21,17 @@ def por_idea(s: Session, idea_id: int) -> Proyecto | None:
     return s.query(Proyecto).filter(Proyecto.idea_id == idea_id).first()
 
 
+def borrar(s: Session, pid: int) -> None:
+    """Borra el proyecto y todo lo que cuelga de él (escenas, guiones,
+    metadatos y sus jobs). SQLite aquí no tiene ON DELETE CASCADE, así que las
+    dependencias se limpian a mano o quedarían filas huérfanas."""
+    from ..models import Escena, Guion, Job, Metadatos
+
+    for modelo in (Escena, Guion, Metadatos):
+        s.query(modelo).filter(modelo.proyecto_id == pid).delete()
+    s.query(Job).filter(Job.ref_id == pid).delete()
+    s.query(Proyecto).filter(Proyecto.id == pid).delete()
+
+
 def slug_existe(s: Session, slug: str) -> bool:
     return s.query(Proyecto).filter(Proyecto.slug == slug).first() is not None

@@ -127,6 +127,54 @@ def generar_video(pid: int, body: VideoIn):
         raise HTTPException(400, "Modo de video inválido")
 
 
+@router.get("/{pid}/versiones")
+def listar_versiones(pid: int):
+    """Montajes anteriores del video final, del más reciente al más antiguo."""
+    try:
+        return proyectos_service.listar_versiones(pid)
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+
+
+@router.get("/{pid}/versiones/{nombre}")
+def ver_version(pid: int, nombre: str):
+    if not proyectos_service._nombre_version_valido(nombre):
+        raise HTTPException(400, "Nombre de versión inválido")
+    return _archivo(pid, ("versiones", nombre), "video/mp4", "Versión no existe")
+
+
+@router.delete("/{pid}/versiones/{nombre}")
+def borrar_version(pid: int, nombre: str):
+    try:
+        proyectos_service.borrar_version(pid, nombre)
+        return {"borrada": nombre}
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+    except proyectos_service.VersionNoExiste:
+        raise HTTPException(404, "Versión no existe")
+
+
+@router.delete("/{pid}/video")
+def borrar_video(pid: int, con_versiones: bool = False):
+    """Borra el video final; con `con_versiones` también los archivados."""
+    try:
+        return proyectos_service.borrar_video(pid, con_versiones)
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+
+
+@router.delete("/{pid}")
+def borrar_proyecto(pid: int):
+    """Borra el proyecto entero: filas en la base y carpeta en disco."""
+    try:
+        return proyectos_service.borrar_proyecto(pid)
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+    except proyectos_service.ProyectoOcupado:
+        raise HTTPException(409, "El proyecto tiene trabajo en curso; espera a "
+                                 "que termine antes de borrarlo")
+
+
 def _archivo(pid: int, partes: tuple[str, ...], media_type: str, detalle: str):
     try:
         ruta = proyectos_service.ruta_archivo(pid, *partes)

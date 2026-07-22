@@ -13,7 +13,7 @@ from ...repositories import escenas as escenas_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
 from . import _subtitulos_render as subs
-from ._ffmpeg import args_video, duracion
+from ._ffmpeg import archivar_final, args_video, duracion
 
 
 def _rasterizar_transparente(texto, fuente, color, borde, destino):
@@ -93,6 +93,7 @@ def armar_video(proyecto_id: int) -> str:
             # video, para que no quede un stream de audio más corto.
             "-af", "apad", "-t", f"{objetivo:.3f}", "final.mp4"]
 
+    archivada = archivar_final(base)
     r = subprocess.run(cmd, cwd=base, capture_output=True, text=True)
     if r.returncode != 0:
         raise RuntimeError(f"ffmpeg falló: {r.stderr[-800:]}")
@@ -102,5 +103,6 @@ def armar_video(proyecto_id: int) -> str:
         avanzar_estado(p, "FINAL")
         s.commit()
     cola = objetivo - dur_audio
+    guardado = f"; el anterior queda en versiones/{archivada}" if archivada else ""
     return (f"Video (movimiento): {len(ordenes)} escenas, {objetivo:.1f}s "
-            f"({cola:.1f}s tras la voz) → final.mp4")
+            f"({cola:.1f}s tras la voz) → final.mp4{guardado}")

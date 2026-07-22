@@ -30,3 +30,15 @@ def mas_ideas(tema_id: int):
         return {"job_id": temas_service.pedir_mas_ideas(tema_id)}
     except temas_service.TemaNoExiste:
         raise HTTPException(404, "Tema no existe")
+
+
+@router.delete("/{tema_id}")
+def borrar_tema(tema_id: int):
+    """Borra el tema y sus ideas. Falla si alguna idea ya es un proyecto."""
+    try:
+        return temas_service.borrar_tema(tema_id)
+    except temas_service.TemaNoExiste:
+        raise HTTPException(404, "Tema no existe")
+    except temas_service.TemaConProyectos as e:
+        raise HTTPException(409, "Hay proyectos creados desde este tema: "
+                                 f"{', '.join(e.titulos)}. Bórralos primero.")

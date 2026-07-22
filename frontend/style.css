@@ -109,6 +109,22 @@ button.mini, select.mini { font-size: 11px; padding: 3px 8px; margin: 0; }
 /* La miniatura de la escena invita a ampliarse */
 .escena-miniatura { cursor: zoom-in; transition: opacity .15s; }
 .escena-miniatura:hover { opacity: .75; }
+
+/* Fila de una versión archivada del video */
+.version-row { display: flex; gap: 8px; align-items: center; padding: 6px 0;
+               border-bottom: 1px solid var(--borde); }
+.version-row .meta { flex: 1; }
+/* Enlaces que se ven como botón (descargas) */
+a.boton { display: inline-flex; align-items: center; text-decoration: none;
+          border-radius: 8px; border: 1px solid var(--borde);
+          background: var(--panel2); color: var(--texto); }
+a.boton:hover { border-color: var(--acento); }
+/* Botón de borrado en la lista lateral, solo visible al pasar por encima */
+.lista li { position: relative; }
+.lista .borrar-tema { opacity: 0; font-size: 11px; padding: 2px 6px; width: auto;
+                      margin: 0; background: transparent; border: none; }
+.lista li:hover .borrar-tema { opacity: .7; }
+.lista .borrar-tema:hover { opacity: 1; color: var(--peligro, #e5484d); }
 label { display: block; font-size: 13px; color: var(--dim); margin-bottom: 4px; }
 
 .modo-opcion { display: flex; gap: 10px; align-items: flex-start; cursor: pointer;

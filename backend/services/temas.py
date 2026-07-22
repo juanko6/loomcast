@@ -61,3 +61,34 @@ def pedir_mas_ideas(tema_id: int) -> int:
         if temas_repo.obtener(s, tema_id) is None:
             raise TemaNoExiste(tema_id)
     return queue.encolar("generar_ideas", tema_id)
+
+
+class TemaConProyectos(RuntimeError):
+    """El tema tiene ideas que ya se convirtieron en proyectos."""
+
+    def __init__(self, titulos: list[str]):
+        self.titulos = titulos
+        super().__init__(", ".join(titulos))
+
+
+def borrar_tema(tema_id: int) -> dict:
+    """Borra el tema y sus ideas.
+
+    Se niega si alguna idea ya tiene proyecto: esos proyectos llevan guion, voz
+    y video, y borrarlos de rebote por eliminar el tema sería una pérdida
+    desproporcionada. Hay que borrarlos antes, uno a uno y a conciencia.
+    """
+    with get_session() as s:
+        tema = temas_repo.obtener(s, tema_id)
+        if tema is None:
+            raise TemaNoExiste(tema_id)
+        ideas = ideas_repo.por_tema(s, tema_id)
+        con_proyecto = [
+            i.titulo for i in ideas if proyectos_repo.por_idea(s, i.id) is not None
+        ]
+        if con_proyecto:
+            raise TemaConProyectos(con_proyecto)
+        n = len(ideas)
+        temas_repo.borrar(s, tema_id)
+        s.commit()
+    return {"ideas": n}
