@@ -9,6 +9,7 @@ fase0/venv/
 tools/
 
 # Salidas generadas
+logs/
 fase0/rife_test/
 fase0/*.wav
 proyectos/

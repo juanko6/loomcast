@@ -20,10 +20,18 @@ aside { border-right: 1px solid var(--borde); padding: 16px; overflow-y: auto; }
 aside section { margin-bottom: 24px; }
 #panel { padding: 20px 28px; overflow-y: auto; }
 
+#salud { display: flex; align-items: center; }
+/* El selector de modelo vive en la cabecera: hay que deshacer el ancho y el
+   margen que llevan los <select> de los formularios. */
+#llm-modelo { width: auto; max-width: 200px; margin: 0 4px 0 0;
+              padding: 3px 8px; font-size: 12px; background: var(--panel2);
+              color: var(--dim); }
 .dot { padding: 3px 10px; border-radius: 12px; font-size: 12px;
        background: var(--panel2); color: var(--dim); margin-left: 6px; }
 .dot.on { background: #1d3a2e; color: var(--ok); }
 .dot.off { background: #3a1d1d; color: var(--error); }
+/* Descargado a propósito para dejar RAM: ni verde ni rojo. */
+.dot.espera { background: #3a331d; color: #e3b341; }
 .badge { margin-left: 10px; padding: 3px 10px; border-radius: 12px;
          font-size: 12px; background: var(--acento); color: #fff; }
 .oculto { display: none; }

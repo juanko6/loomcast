@@ -1,5 +1,6 @@
 """Carga de config.toml (raíz del proyecto)."""
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -8,14 +9,63 @@ with open(ROOT / "config.toml", "rb") as f:
     _cfg = tomllib.load(f)
 
 _llm = _cfg["llm"]
-LLM_URL: str = _llm["url"].rstrip("/")
-LLM_MODEL: str = _llm.get("model", "local")
-LLM_TIMEOUT_S: float = _llm.get("timeout_s", 600)
-LLM_MAX_TOKENS: int = _llm.get("max_tokens", 4096)
-# None → Loomcast no envía temperature (manda el sampling del llama-server).
-LLM_TEMPERATURE: float | None = _llm.get("temperature")
-# {} → no se envían chat_template_kwargs.
-LLM_CHAT_TEMPLATE_KWARGS: dict = _llm.get("chat_template_kwargs", {})
+LLM_AUTOSTART: bool = _llm.get("autostart", False)
+LLM_INACTIVIDAD_S: float = _llm.get("inactividad_s", 300)
+LLM_ESPERA_ARRANQUE_S: float = _llm.get("espera_arranque_s", 240)
+
+
+@dataclass(frozen=True)
+class ModeloLLM:
+    """Un llama-server declarado en config.toml.
+
+    `comando` es el script que lo levanta; si es None, el modelo es externo:
+    Loomcast lo usa donde esté pero nunca lo arranca ni lo para.
+    """
+
+    id: str
+    nombre: str
+    url: str
+    comando: str | None
+    model: str
+    timeout_s: float
+    max_tokens: int
+    # None → Loomcast no envía temperature (manda el sampling del llama-server).
+    temperature: float | None
+    # {} → no se envían chat_template_kwargs.
+    chat_template_kwargs: dict
+
+    @property
+    def gestionado(self) -> bool:
+        return LLM_AUTOSTART and self.comando is not None
+
+
+def _modelo(bruto: dict) -> ModeloLLM:
+    """Construye un modelo heredando de [llm] lo que no declare."""
+    return ModeloLLM(
+        id=bruto["id"],
+        nombre=bruto.get("nombre", bruto["id"]),
+        url=bruto.get("url", _llm.get("url", "http://127.0.0.1:9876")).rstrip("/"),
+        comando=bruto.get("comando"),
+        model=bruto.get("model", _llm.get("model", "local")),
+        timeout_s=bruto.get("timeout_s", _llm.get("timeout_s", 600)),
+        max_tokens=bruto.get("max_tokens", _llm.get("max_tokens", 4096)),
+        temperature=bruto.get("temperature", _llm.get("temperature")),
+        chat_template_kwargs=bruto.get(
+            "chat_template_kwargs", _llm.get("chat_template_kwargs", {})
+        ),
+    )
+
+
+# Sin [[llm.modelos]] declarados, [llm] describe por sí solo un único modelo
+# externo: config.toml de antes del selector sigue funcionando igual.
+LLM_MODELOS: list[ModeloLLM] = [
+    _modelo(m) for m in _llm.get("modelos", [{"id": "manual", "nombre": "llama-server"}])
+]
+_ids = [m.id for m in LLM_MODELOS]
+if len(_ids) != len(set(_ids)):
+    raise ValueError(f"Hay ids repetidos en [[llm.modelos]] de config.toml: {_ids}")
+
+LLM_LOGS_DIR: Path = ROOT / "logs"
 
 COMFY_URL: str = _cfg["comfy"]["url"].rstrip("/")
 COMFY_TIMEOUT_S: float = _cfg["comfy"].get("timeout_s", 1800)

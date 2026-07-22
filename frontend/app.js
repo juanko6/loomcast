@@ -22,12 +22,34 @@ let jobsPrevios = 0;
 let voces = []; // banco de voces cacheado
 
 // ---------- salud y jobs ----------
+// Un modelo gestionado pasa la mayor parte del tiempo descargado (ámbar): no
+// es un fallo, se carga solo cuando llega una etapa de texto.
+const ESTADO_LLM = {
+  activo: ["on", "levantado por ti, fuera de Loomcast"],
+  cargado: ["on", "cargado en memoria"],
+  en_espera: ["espera", "descargado; se carga solo al generar texto"],
+  caido: ["off", "no responde en su url"],
+};
+
 async function refrescarSalud() {
   try {
     const s = await api("/salud");
-    $("#dot-llm").className = `dot ${s.llm ? "on" : "off"}`;
+    const [clase, detalle] = ESTADO_LLM[s.llm_estado.estado] ?? ["off", ""];
+    const dot = $("#dot-llm");
+    dot.className = `dot ${clase}`;
+    dot.title = `${s.llm_estado.nombre} — ${detalle}`;
     $("#dot-comfy").className = `dot ${s.comfy ? "on" : "off"}`;
   } catch { /* servidor caído; los dots quedan como estén */ }
+}
+
+async function cargarModelosLLM() {
+  const { activo, modelos } = await api("/llm/modelos");
+  const sel = $("#llm-modelo");
+  sel.innerHTML = modelos.map((m) => `
+    <option value="${esc(m.id)}" ${m.id === activo ? "selected" : ""}>${esc(m.nombre)}</option>
+  `).join("");
+  // Con un solo modelo declarado el desplegable no aporta nada.
+  sel.classList.toggle("oculto", modelos.length < 2);
 }
 
 async function refrescarJobs() {
@@ -669,6 +691,11 @@ document.addEventListener("submit", async (ev) => {
   $("#tema-plantilla").innerHTML =
     plantillas.map((p) => `<option>${esc(p)}</option>`).join("");
   cargarListas();
+  await cargarModelosLLM();
+  $("#llm-modelo").addEventListener("change", async (ev) => {
+    await api("/llm/modelo", { method: "POST", body: { id: ev.target.value } });
+    refrescarSalud();
+  });
   refrescarSalud();
   refrescarJobs();
   setInterval(refrescarSalud, 15000);

@@ -20,7 +20,8 @@ Ver [PLAN.md](PLAN.md) para la arquitectura completa y [fase0/RESULTADOS.md](fas
 python3.12 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 
-# 1. llama-server corriendo (puerto en config.toml, por defecto 8001)
+# 1. llama-server: solo si tu modelo no declara `comando` en config.toml
+#    (con `comando`, lo arranca y lo para Loomcast; ver abajo)
 # 2. ComfyUI corriendo (por defecto 8188)
 
 ./.venv/bin/uvicorn backend.main:app --port 8700
@@ -36,6 +37,29 @@ Capas (de HTTP hacia abajo): `routers/` (controllers: validación y JSON, cero l
 Tema → ideas → seleccionar/aprobar → **1** guion (editar/regenerar) → **2** voz (elegir del banco o crear nueva → generar narración) → **3** metadatos → **4** escenas (generar prompts → editarlos → aceptar y generar imágenes) → **5** armar video final.
 
 Puntos de revisión humana: selección de ideas, guion, elección de voz, y **prompts de escena antes de gastar GPU en las imágenes**.
+
+## Ciclo de vida del LLM
+
+Solo cuatro etapas usan el llama-server (ideas, guion, metadatos y prompts de escena); el resto del pipeline pelea por la misma memoria unificada. Por eso el modelo de texto no vive residente: Loomcast lo **carga al empezar una etapa de texto y lo descarga antes de cualquier etapa de voz/GPU**, igual que ya hacía con ComfyUI (`/free`) y Qwen3-TTS.
+
+Declara cada modelo en `[[llm.modelos]]` de `config.toml` con el script que lo levanta:
+
+```toml
+[[llm.modelos]]
+id = "qwen3-30b"
+nombre = "Qwen3 30B A3B"
+comando = "~/scripts/llama-qwen3-30b.sh"
+url = "http://127.0.0.1:9876"
+```
+
+El script se ejecuta tal cual (con `sh`, desde la raíz del proyecto) y **debe quedarse en primer plano**, sin `&` ni `nohup`, para que Loomcast pueda pararlo; su salida va a `logs/llm-<id>.log`. El sampling, el contexto y el reasoning siguen siendo cosa tuya: Loomcast solo lo arranca y lo para.
+
+- **Selector en la cabecera**: elige cuál de tus modelos se usa. Se guarda en la BD y el relevo (parar uno, arrancar otro) ocurre solo. Con un único modelo declarado el desplegable no aparece.
+- **Semáforo LLM**: verde = cargado; **ámbar = descargado a propósito**, se carga solo en la siguiente etapa de texto; rojo = declarado como externo y no responde.
+- **Modelo sin `comando`**: externo. Lo levantas tú y Loomcast no lo toca, como siempre. Lo mismo si pones `autostart = false`.
+- Si encuentra un llama-server ya escuchando en la url del modelo, lo **adopta** en vez de arrancar otro, y no lo para al terminar: puede ser tuyo.
+- Si Loomcast muere de golpe (SIGKILL, cuelgue), al volver a arrancar **recupera la RAM** del llama-server que dejó huérfano (`logs/llm.pid`).
+- `inactividad_s` descarga el modelo tras un rato sin usarse, aunque no haya llegado ninguna etapa de GPU.
 
 ## Banco de voces
 

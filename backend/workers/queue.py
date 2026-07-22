@@ -6,6 +6,7 @@ import traceback
 
 from ..db import get_session
 from ..repositories import jobs as jobs_repo
+from ..services import llm_runtime
 from ..services.pipeline import (
     armado,
     armado_estatico,
@@ -38,6 +39,16 @@ HANDLERS = {
     "generar_i2v": i2v.generar_i2v,
     "armar_video": armado.armar_video,
     "armar_estatico": armado_estatico.armar_estatico,
+}
+
+# Etapas que hablan con el llama-server. El resto (Qwen3-TTS, whisper, ComfyUI,
+# ffmpeg) pelea por la misma memoria unificada, así que antes de cualquiera de
+# ellas se descarga el LLM y así no compiten por la RAM.
+JOBS_LLM = {
+    "generar_ideas",
+    "generar_guion",
+    "generar_metadatos",
+    "generar_escenas",
 }
 
 # Etapas que se disparan solas al terminar la anterior:
@@ -77,7 +88,12 @@ def _procesar(job_id: int) -> None:
         tipo, ref_id = job.tipo, job.ref_id
         params = json.loads(job.params or "{}")
     try:
-        estado, log = "ok", HANDLERS[tipo](ref_id, **params)
+        if tipo in JOBS_LLM:
+            with llm_runtime.en_uso():
+                estado, log = "ok", HANDLERS[tipo](ref_id, **params)
+        else:
+            llm_runtime.liberar(f"empieza {tipo}")
+            estado, log = "ok", HANDLERS[tipo](ref_id, **params)
     except Exception:
         estado, log = "error", traceback.format_exc(limit=5)
     with get_session() as s:

@@ -9,6 +9,7 @@ from starlette.responses import Response
 
 from .db import init_db
 from .routers import ideas, jobs, proyectos, sistema, temas, voces
+from .services import llm_runtime
 from .workers import queue
 
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
@@ -27,9 +28,12 @@ class NoCacheStatic(StaticFiles):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    llm_runtime.arrancar()
     queue.arrancar_worker()
     queue.recuperar_pendientes()
     yield
+    # No dejar un llama-server huérfano ocupando la RAM tras cerrar Loomcast.
+    llm_runtime.apagar()
 
 
 app = FastAPI(title="Loomcast", lifespan=lifespan)

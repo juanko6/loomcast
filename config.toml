@@ -3,8 +3,23 @@
 [llm]
 # llama-server (API OpenAI-compatible). Loomcast NO impone ajustes del modelo:
 # el sampling (--temp/--top-p/--top-k), contexto y reasoning los define TU
-# script de arranque. Aquí solo se apunta al puerto donde levantaste el modelo.
-url = "http://127.0.0.1:9876"
+# script de arranque. Aquí solo se declara qué modelos tienes y cómo levantarlos.
+#
+# Ciclo de vida: si un modelo trae `comando`, Loomcast lo arranca justo antes de
+# una etapa de texto (ideas, guion, metadatos, prompts de escena) y lo para
+# antes de cualquier etapa de voz/GPU, para dejarle la memoria unificada a
+# ComfyUI. Un modelo sin `comando` se comporta como siempre: lo levantas tú y
+# Loomcast no lo toca.
+autostart = true
+# Segundos de inactividad tras los que se descarga el modelo aunque no haya
+# llegado un job de voz/GPU. Encadenar ideas → guion → metadatos no debería
+# pagar el arranque cuatro veces, así que conviene un margen holgado.
+inactividad_s = 300
+# Cuánto se espera a que el llama-server responda tras lanzarlo antes de darlo
+# por fallido (la primera carga de un modelo grande desde disco es lenta).
+espera_arranque_s = 240
+
+# Valores por defecto para todos los modelos; cada uno puede sobrescribirlos.
 # Nombre del modelo: informativo; llama-server usa el que tenga cargado.
 model = "local"
 timeout_s = 600
@@ -19,6 +34,101 @@ max_tokens = 4096
 # Qwen3/3.6: { enable_thinking = false }. Otra familia: ajusta la clave o
 # borra la línea y desactiva el reasoning en tu script.
 chat_template_kwargs = { enable_thinking = false }
+
+# Tus modelos. El selector de la cabecera los lista por `nombre` y el primero es
+# el que se usa mientras no elijas otro (la elección se guarda en la BD).
+#
+# `comando` es tu script de arranque tal cual: se ejecuta con sh desde la raíz
+# del proyecto, así que admite ~, variables y argumentos. Tiene que quedarse en
+# primer plano — nada de `&` ni `nohup` — o Loomcast no podrá pararlo. Su salida
+# va a logs/llm-<id>.log.
+#
+# Cada modelo puede sobrescribir url, model, timeout_s, max_tokens, temperature
+# y chat_template_kwargs.
+# IMPORTANTE: `url` tiene que apuntar al puerto que abre ESE script. Todos tus
+# scripts de ~/Models están igualados a 127.0.0.1:9876; si cambias el --port de
+# alguno, cambia aquí su url. Como solo corre uno a la vez, compartir puerto da
+# igual. Borra los modelos que no quieras ver en el desplegable.
+
+[[llm.modelos]]
+id = "qwen36-27b"
+nombre = "Qwen3.6 27B"
+comando = "~/Models/qwen_3.6_27b.sh"
+url = "http://127.0.0.1:9876"
+
+[[llm.modelos]]
+id = "qwen36-27b-mtp"
+nombre = "Qwen3.6 27B MTP"
+comando = "~/Models/qwen_3.6_27b_mtp.sh"
+url = "http://127.0.0.1:9876"
+
+[[llm.modelos]]
+id = "qwen36-35b"
+nombre = "Qwen3.6 35B E3M MTP"
+comando = "~/Models/qwen_3.6_35b_e3m_mtp.sh"
+url = "http://127.0.0.1:9876"
+
+[[llm.modelos]]
+id = "qwen35-9b"
+nombre = "Qwen3.5 9B"
+comando = "~/Models/qwen_3.5_9b.sh"
+url = "http://127.0.0.1:9876"
+
+[[llm.modelos]]
+id = "qwen35-9b-mtp"
+nombre = "Qwen3.5 9B MTP"
+comando = "~/Models/qwen_3.5_9b_mtp.sh"
+url = "http://127.0.0.1:9876"
+
+[[llm.modelos]]
+id = "qwen35-9b-8bit"
+nombre = "Qwen3.5 9B 8bit MTP"
+comando = "~/Models/qwen_3.5_9b_8bit_mtp.sh"
+url = "http://127.0.0.1:9876"
+
+# Gemma no usa la clave enable_thinking de Qwen: se limpia la heredada de [llm].
+# Si lo notas lento, es que tus scripts llevan --reasoning on; cámbialo ahí.
+[[llm.modelos]]
+id = "gemma4-12b"
+nombre = "Gemma 4 12B"
+comando = "~/Models/gemma4_12b.sh"
+url = "http://127.0.0.1:9876"
+chat_template_kwargs = {}
+
+[[llm.modelos]]
+id = "gemma4-26b"
+nombre = "Gemma 4 26B"
+comando = "~/Models/gemma4_26b.sh"
+url = "http://127.0.0.1:9876"
+chat_template_kwargs = {}
+
+[[llm.modelos]]
+id = "gemma4-31b"
+nombre = "Gemma 4 31B"
+comando = "~/Models/gemma4_31b.sh"
+url = "http://127.0.0.1:9876"
+chat_template_kwargs = {}
+
+[[llm.modelos]]
+id = "ornith-9b"
+nombre = "Ornith 1.0 9B"
+comando = "~/Models/Ornith-1.0-9B-GGUF.sh"
+url = "http://127.0.0.1:9876"
+chat_template_kwargs = {}
+
+[[llm.modelos]]
+id = "ornith-35b"
+nombre = "Ornith 1.0 35B"
+comando = "~/Models/Ornith-1.0-35B-GGUF.sh"
+url = "http://127.0.0.1:9876"
+chat_template_kwargs = {}
+
+# Si prefieres levantar alguno a mano, un modelo sin `comando` es externo:
+# Loomcast lo usa donde esté pero no lo arranca ni lo para.
+# [[llm.modelos]]
+# id = "manual"
+# nombre = "El que yo levante"
+# url = "http://127.0.0.1:9876"
 
 [comfy]
 url = "http://127.0.0.1:8188"

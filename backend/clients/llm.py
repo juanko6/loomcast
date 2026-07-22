@@ -11,20 +11,28 @@ from typing import TypeVar
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from ..config import (
-    LLM_CHAT_TEMPLATE_KWARGS,
-    LLM_MAX_TOKENS,
-    LLM_MODEL,
-    LLM_TEMPERATURE,
-    LLM_TIMEOUT_S,
-    LLM_URL,
-)
+from ..config import LLM_MODELOS, ModeloLLM
 
 T = TypeVar("T", bound=BaseModel)
 
 
 class LLMError(RuntimeError):
     pass
+
+
+# Modelo al que apuntan las llamadas. Lo empuja `services/llm_runtime`, que es
+# quien sabe cuál está realmente cargado; así el cliente no consulta la BD ni
+# depende de una capa superior.
+_activo: ModeloLLM = LLM_MODELOS[0]
+
+
+def configurar(modelo: ModeloLLM) -> None:
+    global _activo
+    _activo = modelo
+
+
+def activo() -> ModeloLLM:
+    return _activo
 
 
 def _extract_json(text: str) -> dict | list:
@@ -47,8 +55,8 @@ def _extract_json(text: str) -> dict | list:
         raise LLMError(f"JSON inválido del modelo: {text[:300]}")
 
 
-def _completar(client: httpx.Client, body: dict) -> str:
-    r = client.post(f"{LLM_URL}/v1/chat/completions", json=body)
+def _completar(client: httpx.Client, url: str, body: dict) -> str:
+    r = client.post(f"{url}/v1/chat/completions", json=body)
     if r.status_code >= 400:
         raise LLMError(f"llama-server respondió {r.status_code}: {r.text[:300]}")
     return r.json()["choices"][0]["message"]["content"]
@@ -63,19 +71,20 @@ def chat(system: str, user: str, salida: type[T]) -> T:
     """
     # El sampling lo define el llama-server (tu script de arranque); Loomcast
     # solo añade temperature o chat_template_kwargs si están en config.toml.
+    m = _activo
     base = {
-        "model": LLM_MODEL,
-        "max_tokens": LLM_MAX_TOKENS,
+        "model": m.model,
+        "max_tokens": m.max_tokens,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
     }
-    if LLM_TEMPERATURE is not None:
-        base["temperature"] = LLM_TEMPERATURE
-    if LLM_CHAT_TEMPLATE_KWARGS:
-        base["chat_template_kwargs"] = LLM_CHAT_TEMPLATE_KWARGS
-    with httpx.Client(timeout=LLM_TIMEOUT_S) as client:
+    if m.temperature is not None:
+        base["temperature"] = m.temperature
+    if m.chat_template_kwargs:
+        base["chat_template_kwargs"] = m.chat_template_kwargs
+    with httpx.Client(timeout=m.timeout_s) as client:
         con_schema = base | {
             "response_format": {
                 "type": "json_schema",
@@ -87,9 +96,9 @@ def chat(system: str, user: str, salida: type[T]) -> T:
             }
         }
         try:
-            contenido = _completar(client, con_schema)
+            contenido = _completar(client, m.url, con_schema)
         except LLMError:
-            contenido = _completar(client, base)
+            contenido = _completar(client, m.url, base)
 
     try:
         return salida.model_validate(_extract_json(contenido))
@@ -100,9 +109,10 @@ def chat(system: str, user: str, salida: type[T]) -> T:
         )
 
 
-def ping() -> bool:
+def ping(url: str | None = None) -> bool:
+    """¿Responde el llama-server? Sin `url`, la del modelo activo."""
     try:
         with httpx.Client(timeout=3) as client:
-            return client.get(f"{LLM_URL}/v1/models").status_code < 400
+            return client.get(f"{url or _activo.url}/v1/models").status_code < 400
     except httpx.HTTPError:
         return False
