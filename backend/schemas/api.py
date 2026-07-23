@@ -12,9 +12,12 @@ class EstadoIdeaIn(BaseModel):
 
 
 class GuionIn(BaseModel):
-    gancho: str
-    frases: list[str]
-    cta: str
+    # Dos formas según la plantilla: {gancho, frases[], cta} o {narracion}.
+    # Todos opcionales para que la edición admita cualquiera de las dos.
+    gancho: str = ""
+    frases: list[str] = []
+    cta: str = ""
+    narracion: str = ""
 
 
 class VozNuevaIn(BaseModel):

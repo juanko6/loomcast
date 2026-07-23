@@ -61,7 +61,7 @@ def generar_escenas(proyecto_id: int) -> str:
     palabras = json.loads(palabras_path.read_text())
 
     g = json.loads(guion_row.contenido)
-    guion_texto = " ".join([g["gancho"], *g["frases"], g["cta"]])
+    guion_texto = guiones_repo.texto_narrado(g)
     titulo = ""
     if meta_row:
         titulo = json.loads(meta_row.contenido)["youtube"]["titulo"]

@@ -16,6 +16,37 @@ const esc = (t) =>
   String(t ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+// Tope del fragmento a clonar (debe coincidir con MAX_REF_S del backend): un
+// clip corto clona igual de bien y pesa menos en cada narración.
+const MAX_CLIP_S = 15;
+
+function actualizarClipInfo() {
+  const s = window.__clipSel, info = $("#clip-info");
+  if (!s || !info) return;
+  info.textContent =
+    `Fragmento a clonar: ${s.inicio.toFixed(1)}s → ${s.fin.toFixed(1)}s ` +
+    `(${(s.fin - s.inicio).toFixed(1)}s).`;
+}
+
+// Prepara el reproductor del clip subido y la selección [inicio, fin] por defecto.
+function seleccionarClip(file) {
+  const recorte = $("#voz-recorte"), audio = $("#clip-preview");
+  if (!recorte || !audio) return;
+  if (!file) { recorte.style.display = "none"; window.__clipSel = null; return; }
+  audio.src = URL.createObjectURL(file);
+  recorte.style.display = "";
+  audio.onloadedmetadata = () => {
+    const dur = audio.duration || 0;
+    window.__clipSel = { inicio: 0, fin: Math.min(dur, MAX_CLIP_S), dur };
+    actualizarClipInfo();
+  };
+  // Al oír la selección, para al llegar al fin marcado.
+  audio.ontimeupdate = () => {
+    const s = window.__clipSel;
+    if (s && !audio.paused && audio.currentTime >= s.fin) audio.pause();
+  };
+}
+
 // ---------- estado global ----------
 let vista = null; // {tipo: "tema"|"proyecto", id}
 let jobsPrevios = 0;
@@ -121,19 +152,28 @@ function bloqueGuion(p, ocupado) {
       <h2>1 · Guion ${g ? `(v${p.guion_version})` : ""}</h2>
       ${!g ? `<p class="vacio">Generando el guion…</p>` : `
         <form id="form-guion">
-          <label>Gancho</label>
-          <input id="g-gancho" value="${esc(g.gancho)}">
-          <label>Frases</label>
-          <div id="g-frases">
-            ${g.frases.map((f) => `
-              <div class="frase-row">
-                <input value="${esc(f)}">
-                <button type="button" class="sec quitar-frase">✕</button>
-              </div>`).join("")}
-          </div>
-          <button type="button" class="sec" id="agregar-frase">＋ frase</button>
-          <label>CTA (cierre)</label>
-          <input id="g-cta" value="${esc(g.cta)}">
+          ${g.narracion ? `
+            <label>Gancho</label>
+            <input id="g-gancho" value="${esc(g.gancho)}">
+            <label>Narración</label>
+            <textarea id="g-narracion" rows="10">${esc(g.narracion)}</textarea>
+            <label>CTA (cierre)</label>
+            <input id="g-cta" value="${esc(g.cta)}">
+          ` : `
+            <label>Gancho</label>
+            <input id="g-gancho" value="${esc(g.gancho)}">
+            <label>Frases</label>
+            <div id="g-frases">
+              ${g.frases.map((f) => `
+                <div class="frase-row">
+                  <input value="${esc(f)}">
+                  <button type="button" class="sec quitar-frase">✕</button>
+                </div>`).join("")}
+            </div>
+            <button type="button" class="sec" id="agregar-frase">＋ frase</button>
+            <label>CTA (cierre)</label>
+            <input id="g-cta" value="${esc(g.cta)}">
+          `}
           <div class="acciones" style="margin-top:10px">
             <button type="submit">Guardar guion editado</button>
             <button type="button" class="sec" id="regenerar-guion" ${ocupado ? "disabled" : ""}>↻ Regenerar con LLM</button>
@@ -153,22 +193,53 @@ function bloqueVoz(p, ocupado) {
     <div class="bloque">
       <h2>2 · Voz</h2>
       <label>Elige una voz del banco</label>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-        <select id="sel-voz" style="margin:0;flex:1">
-          <option value="">— sin elegir —</option>
-          ${opciones}
-        </select>
-        <button type="button" class="sec" id="preview-voz" ${vozSel ? "" : "disabled"}>▶ Escuchar</button>
-      </div>
-      ${vozSel ? `<audio id="audio-preview-voz" src="/api/voces/${vozSel.slug}/audio" style="display:none"></audio>
+      <select id="sel-voz" style="margin:0 0 8px;width:100%">
+        <option value="">— sin elegir —</option>
+        ${opciones}
+      </select>
+      ${vozSel ? `
+        <audio controls src="/api/voces/${vozSel.slug}/audio"
+               style="width:100%;margin-bottom:8px"></audio>
         <p class="resumen" style="margin-bottom:8px">${esc(vozSel.instruct)}</p>` : ""}
       <details style="margin-bottom:12px">
         <summary style="cursor:pointer;color:var(--dim)">＋ Crear una voz nueva</summary>
         <div style="margin-top:8px">
           <input id="voz-nombre" placeholder="Nombre (ej: Narrador Épico)">
-          <textarea id="voz-instruct" rows="2"
-            placeholder="Describe cómo suena: voz masculina grave, tono misterioso, ritmo pausado…"></textarea>
-          <button type="button" class="sec" id="crear-voz">Crear voz (VoiceDesign)</button>
+          <div class="voz-modo" style="display:flex;gap:14px;margin:6px 0;font-size:.9em">
+            <label><input type="radio" name="voz-modo" value="design" checked> Describir</label>
+            <label><input type="radio" name="voz-modo" value="clon"> Clonar de un audio</label>
+          </div>
+          <div id="voz-campos-design">
+            <textarea id="voz-instruct" rows="2"
+              placeholder="Describe cómo suena: voz masculina grave, tono misterioso, ritmo pausado…"></textarea>
+            <button type="button" class="sec" id="crear-voz">Crear voz (VoiceDesign)</button>
+          </div>
+          <div id="voz-campos-clon" style="display:none">
+            <input id="voz-audio" type="file" accept="audio/*">
+            <div id="voz-recorte" style="display:none;margin:6px 0">
+              <audio id="clip-preview" controls style="width:100%"></audio>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px">
+                <button type="button" class="sec" id="marcar-inicio">⇤ Inicio aquí</button>
+                <button type="button" class="sec" id="marcar-fin">Fin aquí ⇥</button>
+                <button type="button" class="sec" id="oir-seleccion">▶ Oír selección</button>
+              </div>
+              <p class="meta" id="clip-info" style="margin:4px 0 0"></p>
+            </div>
+            <textarea id="voz-descripcion" rows="1"
+              placeholder="Nota interna opcional (no afecta al clon)"></textarea>
+            <button type="button" class="sec" id="clonar-voz">Clonar voz del fragmento</button>
+          </div>
+        </div>
+      </details>
+      <details style="margin-bottom:12px">
+        <summary style="cursor:pointer;color:var(--dim)">Gestionar voces (${voces.length})</summary>
+        <div style="margin-top:8px">
+          ${voces.length ? voces.map((v) => `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0">
+              <span>${esc(v.nombre)}${v.estado === "lista" ? "" : ` <span class="meta">(${esc(v.estado)})</span>`}</span>
+              <button type="button" class="sec borrar-voz" data-slug="${esc(v.slug)}"
+                      data-nombre="${esc(v.nombre)}" title="Borrar voz">🗑</button>
+            </div>`).join("") : `<p class="meta">El banco está vacío</p>`}
         </div>
       </details>
       <div class="acciones" style="margin-bottom:12px">
@@ -529,8 +600,6 @@ document.addEventListener("click", async (ev) => {
     } else if (b.id === "regenerar-guion") {
       await api(`/proyectos/${pid()}/guion/regenerar`, { method: "POST" });
       refrescarJobs(); renderVista();
-    } else if (b.id === "preview-voz") {
-      $("#audio-preview-voz")?.play();
     } else if (b.id === "crear-voz") {
       const nombre = $("#voz-nombre").value.trim();
       const instruct = $("#voz-instruct").value.trim();
@@ -538,6 +607,45 @@ document.addEventListener("click", async (ev) => {
       await api("/voces", { method: "POST", body: { nombre, instruct } });
       b.textContent = "Creando voz…"; b.disabled = true;
       refrescarJobs();
+    } else if (b.id === "clonar-voz") {
+      const nombre = $("#voz-nombre").value.trim();
+      const archivo = $("#voz-audio").files[0];
+      if (!nombre || !archivo) return;
+      const fd = new FormData();
+      fd.append("nombre", nombre);
+      fd.append("audio", archivo);
+      fd.append("descripcion", $("#voz-descripcion").value.trim());
+      const sel = window.__clipSel;
+      if (sel) { fd.append("inicio", sel.inicio); fd.append("fin", sel.fin); }
+      b.textContent = "Subiendo…"; b.disabled = true;
+      const r = await fetch("/api/voces/clonar", { method: "POST", body: fd });
+      if (!r.ok) {
+        alert((await r.text()).slice(0, 300));
+        b.textContent = "Clonar voz del audio"; b.disabled = false;
+        return;
+      }
+      b.textContent = "Clonando voz…";
+      refrescarJobs();
+    } else if (b.classList?.contains("borrar-voz")) {
+      if (!confirm(`¿Borrar la voz «${b.dataset.nombre}»?\n\n` +
+                   `Los proyectos que la usaban quedarán sin voz seleccionada.`)) return;
+      await api(`/voces/${b.dataset.slug}`, { method: "DELETE" });
+      voces = await api("/voces");
+      cargarListas();
+      renderVista();
+    } else if (b.id === "marcar-inicio") {
+      const a = $("#clip-preview"), s = window.__clipSel; if (!s) return;
+      s.inicio = Math.max(0, a.currentTime);
+      if (s.fin <= s.inicio) s.fin = Math.min(s.dur, s.inicio + MAX_CLIP_S);
+      if (s.fin - s.inicio > MAX_CLIP_S) s.fin = s.inicio + MAX_CLIP_S;
+      actualizarClipInfo();
+    } else if (b.id === "marcar-fin") {
+      const a = $("#clip-preview"), s = window.__clipSel; if (!s) return;
+      s.fin = Math.min(Math.max(a.currentTime, s.inicio + 0.5), s.inicio + MAX_CLIP_S);
+      actualizarClipInfo();
+    } else if (b.id === "oir-seleccion") {
+      const a = $("#clip-preview"), s = window.__clipSel; if (!s) return;
+      a.currentTime = s.inicio; a.play();
     } else if (b.id === "gen-voz") {
       await api(`/proyectos/${pid()}/voz`, { method: "POST" });
       refrescarJobs(); renderVista();
@@ -633,6 +741,12 @@ document.addEventListener("change", async (ev) => {
     renderVista();
   } else if (ev.target.name === "modo-video") {
     window.__modoVideo = ev.target.value; // recordar el modo elegido
+  } else if (ev.target.name === "voz-modo") {
+    const clon = ev.target.value === "clon";
+    $("#voz-campos-design").style.display = clon ? "none" : "";
+    $("#voz-campos-clon").style.display = clon ? "" : "none";
+  } else if (ev.target.id === "voz-audio") {
+    seleccionarClip(ev.target.files[0]);
   } else if (ev.target.id === "modo-todas") {
     // Atajo: poner el mismo modo en todas las escenas, sin perder el control
     // fino de cada una (que sigue editable después).
@@ -668,12 +782,20 @@ document.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   try {
     if (ev.target.id === "form-guion") {
-      const frases = [...document.querySelectorAll("#g-frases input")]
-        .map((i) => i.value.trim()).filter(Boolean);
-      await api(`/proyectos/${pid()}/guion`, {
-        method: "PUT",
-        body: { gancho: $("#g-gancho").value.trim(), frases, cta: $("#g-cta").value.trim() },
-      });
+      const narracionEl = $("#g-narracion");
+      let body;
+      if (narracionEl) {
+        body = {
+          gancho: $("#g-gancho").value.trim(),
+          narracion: narracionEl.value.trim(),
+          cta: $("#g-cta").value.trim(),
+        };
+      } else {
+        const frases = [...document.querySelectorAll("#g-frases input")]
+          .map((i) => i.value.trim()).filter(Boolean);
+        body = { gancho: $("#g-gancho").value.trim(), frases, cta: $("#g-cta").value.trim() };
+      }
+      await api(`/proyectos/${pid()}/guion`, { method: "PUT", body });
       renderVista();
     } else if (ev.target.id === "form-escenas") {
       await guardarPrompts();

@@ -27,3 +27,7 @@ class Plantilla(BaseModel):
     estilo_visual: str
     subtitulos: SubtitulosPlantilla
     ritmo: RitmoPlantilla
+    # "frases": guion como {gancho, frases[], cta} (por defecto).
+    # "narracion": guion como {narracion} — un párrafo hablado continuo que el
+    # TTS lee de corrido, para storytelling sin cadencia de lista leída.
+    formato_guion: str = Field(default="frases", pattern="^(frases|narracion)$")

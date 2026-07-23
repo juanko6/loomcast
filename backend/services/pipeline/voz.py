@@ -44,7 +44,7 @@ def generar_voz(proyecto_id: int) -> str:
         raise ValueError(f"Falta el clip de referencia de la voz '{voz_slug}'")
 
     g = json.loads(guion_row.contenido)
-    texto_completo = " ".join([g["gancho"], *g["frases"], g["cta"]])
+    texto_completo = guiones_repo.texto_narrado(g)
     ritmo = plantillas_repo.cargar(plantilla)["ritmo"]
 
     base_dir = PROYECTOS_DIR / slug

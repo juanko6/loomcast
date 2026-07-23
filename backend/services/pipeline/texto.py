@@ -10,7 +10,14 @@ from ...repositories import metadatos as metadatos_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
 from ...repositories import temas as temas_repo
-from ...schemas import DescripcionLLM, EtiquetasLLM, GuionLLM, IdeasLLM, TituloLLM
+from ...schemas import (
+    DescripcionLLM,
+    EtiquetasLLM,
+    GuionLLM,
+    GuionNarracionLLM,
+    IdeasLLM,
+    TituloLLM,
+)
 
 N_IDEAS = 8
 # Español narrado ágil ≈ 2.2–2.7 palabras/segundo
@@ -59,7 +66,9 @@ def generar_guion(proyecto_id: int) -> str:
         f"Idea del video:\n- Título: {titulo}\n"
         f"- Gancho propuesto: {gancho}\n- Resumen: {resumen}"
     )
-    guion = llm.chat(system, user, GuionLLM)
+    # La plantilla elige el formato: narración continua o lista de frases.
+    esquema = GuionNarracionLLM if pl.get("formato_guion") == "narracion" else GuionLLM
+    guion = llm.chat(system, user, esquema)
 
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)
@@ -82,7 +91,7 @@ def generar_metadatos(proyecto_id: int) -> str:
         plantilla = p.plantilla
         g = json.loads(ultimo.contenido)
 
-    texto = " ".join([g["gancho"], *g["frases"], g["cta"]])
+    texto = guiones_repo.texto_narrado(g)
     pl = plantillas_repo.cargar(plantilla)
     prompts = pl["prompts"]
 

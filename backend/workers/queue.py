@@ -27,6 +27,7 @@ HANDLERS = {
     "generar_guion": texto.generar_guion,
     "generar_metadatos": texto.generar_metadatos,
     "crear_voz": crear_voz.crear_voz,
+    "clonar_voz": crear_voz.clonar_voz,
     "generar_voz": voz.generar_voz,
     "generar_subtitulos": subtitulos.generar_subtitulos,
     "generar_escenas": escenas.generar_escenas,

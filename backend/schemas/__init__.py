@@ -18,6 +18,7 @@ from .llm import (
     EscenaLLM,
     EtiquetasLLM,
     GuionLLM,
+    GuionNarracionLLM,
     IdeaLLM,
     IdeasLLM,
     TituloLLM,
@@ -34,6 +35,6 @@ __all__ = [
     "RegenerarClipIn", "RegenerarImagenIn", "EstadoIdeaIn", "GuionIn", "TemaIn",
     "VideoIn", "VozNuevaIn", "VozSeleccionIn",
     "DescripcionLLM", "EscenaLLM", "EtiquetasLLM",
-    "GuionLLM", "IdeaLLM", "IdeasLLM", "TituloLLM",
+    "GuionLLM", "GuionNarracionLLM", "IdeaLLM", "IdeasLLM", "TituloLLM",
     "Plantilla", "RitmoPlantilla", "SubtitulosPlantilla", "VozPlantilla",
 ]

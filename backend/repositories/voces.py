@@ -18,6 +18,10 @@ def por_slug(s: Session, slug: str) -> Voz | None:
     return s.query(Voz).filter(Voz.slug == slug).first()
 
 
+def borrar(s: Session, voz: Voz) -> None:
+    s.delete(voz)
+
+
 def listar(s: Session) -> list[Voz]:
     return s.query(Voz).order_by(Voz.id).all()
 

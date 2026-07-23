@@ -29,6 +29,16 @@ def activos_de_proyecto(s: Session, pid: int, tipos: list[str]) -> int:
     )
 
 
+def activos_de_voz(s: Session, voz_id: int) -> int:
+    return (
+        s.query(Job)
+        .filter(Job.ref_id == voz_id,
+                Job.tipo.in_(["crear_voz", "clonar_voz"]),
+                Job.estado.in_(ACTIVOS))
+        .count()
+    )
+
+
 def tipo_activo_de_proyecto(s: Session, pid: int, tipos: list[str]) -> str | None:
     """Tipo del job en curso/pendiente del proyecto (para mostrar la etapa)."""
     job = (

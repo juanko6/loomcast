@@ -35,3 +35,13 @@ def borrar(s: Session, pid: int) -> None:
 
 def slug_existe(s: Session, slug: str) -> bool:
     return s.query(Proyecto).filter(Proyecto.slug == slug).first() is not None
+
+
+def desvincular_voz(s: Session, voz_slug: str) -> int:
+    """Deja sin voz los proyectos que usaban `voz_slug` (al borrar esa voz),
+    para no dejar referencias colgadas. Devuelve cuántos se desvincularon."""
+    return (
+        s.query(Proyecto)
+        .filter(Proyecto.voz == voz_slug)
+        .update({Proyecto.voz: None}, synchronize_session=False)
+    )

@@ -22,6 +22,19 @@ class GuionLLM(BaseModel):
     cta: str = Field(min_length=1)
 
 
+class GuionNarracionLLM(BaseModel):
+    """Guion de narración continua (plantillas con formato_guion="narracion").
+
+    El cuerpo es un único párrafo hablado que el TTS lee de corrido —sin la
+    cadencia de lista leída de las frases sueltas—, pero el gancho de apertura
+    y el cta de cierre se mantienen como campos propios: garantizados por
+    esquema y editables aparte. Al narrar se unen gancho + narracion + cta.
+    """
+    gancho: str = Field(min_length=1)
+    narracion: str = Field(min_length=1)
+    cta: str = Field(min_length=1)
+
+
 class TituloLLM(BaseModel):
     # El prompt pide 35-55 chars (máx 65); el margen evita rechazar por poco
     titulo: str = Field(min_length=10, max_length=80)

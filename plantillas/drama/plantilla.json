@@ -1,0 +1,21 @@
+{
+  "nombre": "drama",
+  "descripcion": "Historias de drama y chisme tipo storytime: relatos personales o anónimos dramatizados, con tensión creciente y giro final. Sin nombres reales.",
+  "formato_guion": "narracion",
+  "voz": {
+    "instruct": "Voz neutra en español, joven, cercana y muy expresiva, con energía de storytime cómplice de quien te cuenta un chisme jugoso al oído; ritmo ágil que se frena en los giros para crear tensión, dicción clara y natural.",
+    "language": "Spanish"
+  },
+  "estilo_visual": "cinematic candid photography, moody dramatic lighting, shallow depth of field, intimate emotional atmosphere, contemporary everyday settings, muted film-grain color, vertical composition",
+  "subtitulos": {
+    "max_palabras_por_bloque": 3,
+    "fuente": "Montserrat ExtraBold",
+    "color": "#FFE23D",
+    "borde": "#000000"
+  },
+  "ritmo": {
+    "duracion_objetivo_s": 50,
+    "duracion_escena_s": 4,
+    "atempo": 1.0
+  }
+}
