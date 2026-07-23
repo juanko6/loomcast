@@ -8,6 +8,7 @@ from ..schemas import (
     RegenerarClipIn,
     RegenerarImagenIn,
     VideoIn,
+    VozGenerarIn,
     VozSeleccionIn,
 )
 from ..services import proyectos as proyectos_service
@@ -58,8 +59,11 @@ def seleccionar_voz(pid: int, body: VozSeleccionIn):
 
 
 @router.post("/{pid}/voz")
-def generar_voz(pid: int):
-    return {"job_id": proyectos_service.encolar_etapa(pid, "generar_voz")}
+def generar_voz(pid: int, body: VozGenerarIn | None = None):
+    modo = body.modo if body else "clon"
+    instruct = body.instruct if body else None
+    return {"job_id": proyectos_service.encolar_etapa(
+        pid, "generar_voz", modo=modo, instruct=instruct)}
 
 
 @router.post("/{pid}/subtitulos")

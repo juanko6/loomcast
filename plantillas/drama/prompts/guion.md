@@ -29,17 +29,27 @@ REGLAS DE HISTORIA
 - Duración adecuada: el total (gancho + narración + cta) entre {min_palabras} y {max_palabras} palabras (≈{duracion} segundos narrados); la mayor parte es la narración.
 - Voz en off limpia: nada de títulos, listas, hashtags, emojis, acotaciones ni instrucciones de edición. Solo texto para narrar. Los números en dígitos (3 años, 200 euros, 2 de la mañana).
 
+LA VOZ QUE NARRA (voz_instruct)
+Además del guion, escribe una instrucción para el modelo de voz que dirá ESTA historia, para que la entrega encaje con su emoción concreta (una traición dolida no suena igual que un chisme divertido). Escríbela con esta estructura de 4 bloques, en una sola cadena y adaptada a la historia:
+[PERFIL DE VOZ] edad, género aproximado, origen y tono base de quien narra.
+[EMOCIÓN Y ACTITUD] el estado de ánimo y la intención al contar esta historia (p. ej. complicidad morbosa, indignación contenida, tristeza…).
+[DINÁMICA Y RITMO] velocidad, dónde acelerar y dónde frenar, y las pausas antes de los giros.
+[INDICACIONES DE CONTEXTO] a quién le habla y en qué situación física (p. ej. contándoselo en voz baja a una amiga en un café).
+Que sea coherente con el tono y el narrador del guion; no la mezcles con el texto narrado.
+
 PROCESO INTERNO (síguelo, pero no lo escribas en la salida)
 1. Identifica el conflicto central y quién es el narrador que lo cuenta.
 2. Escribe el gancho (una frase-anzuelo).
 3. Escribe la narración de corrido y léela mentalmente en voz alta: si suena a lista o a frases del mismo largo, reescríbela variando longitudes, uniendo con comas y conectores hasta que fluya, y asegúrate de rematar con el giro.
 4. Escribe el cta de cierre.
-5. Comprueba que el total quede dentro del rango de palabras pedido.
+5. Redacta voz_instruct con los 4 bloques, coherente con la emoción de la historia.
+6. Comprueba que el total (gancho+narración+cta) quede dentro del rango de palabras pedido.
 
 FORMATO DE SALIDA
 Responde SOLO con JSON válido, sin texto adicional, con esta forma:
 {
   "gancho": "primera frase del video (máximo 10 palabras)",
   "narracion": "el cuerpo de la historia, de corrido, como un solo párrafo hablado, terminando en el giro final",
-  "cta": "línea de cierre contundente; puede invitar a comentar o seguir el canal sin sonar a vendedor"
+  "cta": "línea de cierre contundente; puede invitar a comentar o seguir el canal sin sonar a vendedor",
+  "voz_instruct": "instrucción de voz en los 4 bloques [PERFIL DE VOZ] [EMOCIÓN Y ACTITUD] [DINÁMICA Y RITMO] [INDICACIONES DE CONTEXTO], adaptada a esta historia"
 }

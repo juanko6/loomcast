@@ -11,6 +11,7 @@ from ..repositories import guiones as guiones_repo
 from ..repositories import ideas as ideas_repo
 from ..repositories import jobs as jobs_repo
 from ..repositories import metadatos as metadatos_repo
+from ..repositories import plantillas as plantillas_repo
 from ..repositories import proyectos as proyectos_repo
 from ..repositories import voces as voces_repo
 from ..workers import queue
@@ -88,12 +89,21 @@ def detalle(pid: int) -> dict:
         escenas = [_escena_dict(e, base_dir, en_cola)
                    for e in escenas_repo.por_proyecto(s, pid)]
         todas_imagenes = bool(escenas) and all(e["imagen"] for e in escenas)
+        guion_dict = json.loads(guion.contenido) if guion else None
+        # Instruct por defecto del modo expresivo: el que sugirió el guion para
+        # esta historia y, si no lo hay, el de la plantilla.
+        voz_instruct = (guion_dict or {}).get("voz_instruct") or ""
+        if not voz_instruct:
+            try:
+                voz_instruct = plantillas_repo.cargar(p.plantilla)["voz"]["instruct"]
+            except Exception:
+                voz_instruct = ""
         return {
             "id": p.id, "slug": p.slug, "estado": p.estado,
-            "plantilla": p.plantilla, "voz": p.voz,
+            "plantilla": p.plantilla, "voz": p.voz, "voz_instruct": voz_instruct,
             "idea": {"titulo": idea.titulo, "gancho": idea.gancho,
                      "resumen": idea.resumen} if idea else None,
-            "guion": json.loads(guion.contenido) if guion else None,
+            "guion": guion_dict,
             "guion_version": guion.version if guion else 0,
             "metadatos": json.loads(meta.contenido) if meta else None,
             "voz_disponible": (base_dir / "voz.mp3").exists(),
@@ -112,6 +122,13 @@ def editar_guion(pid: int, contenido: dict) -> int:
         p = proyectos_repo.obtener(s, pid)
         if p is None:
             raise ProyectoNoExiste(pid)
+        # El editor de la UI manda gancho/narración/cta (o frases), sin
+        # voz_instruct; conserva el que sugirió el guion para no perderlo.
+        if not contenido.get("voz_instruct"):
+            previo = guiones_repo.ultimo(s, pid)
+            heredado = json.loads(previo.contenido).get("voz_instruct") if previo else None
+            if heredado:
+                contenido = {**contenido, "voz_instruct": heredado}
         g = guiones_repo.crear(s, pid, contenido)
         avanzar_estado(p, "GUION")
         s.commit()

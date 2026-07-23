@@ -10,6 +10,7 @@ from .api import (
     GuionIn,
     TemaIn,
     VideoIn,
+    VozGenerarIn,
     VozNuevaIn,
     VozSeleccionIn,
 )
@@ -33,7 +34,7 @@ from .plantilla import (
 __all__ = [
     "EscenaPromptIn", "EscenasIn", "ModoEscenaIn", "ModosEscenasIn",
     "RegenerarClipIn", "RegenerarImagenIn", "EstadoIdeaIn", "GuionIn", "TemaIn",
-    "VideoIn", "VozNuevaIn", "VozSeleccionIn",
+    "VideoIn", "VozGenerarIn", "VozNuevaIn", "VozSeleccionIn",
     "DescripcionLLM", "EscenaLLM", "EtiquetasLLM",
     "GuionLLM", "GuionNarracionLLM", "IdeaLLM", "IdeasLLM", "TituloLLM",
     "Plantilla", "RitmoPlantilla", "SubtitulosPlantilla", "VozPlantilla",

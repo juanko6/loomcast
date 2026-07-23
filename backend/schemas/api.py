@@ -25,6 +25,16 @@ class VozNuevaIn(BaseModel):
     instruct: str
 
 
+class VozGenerarIn(BaseModel):
+    # "clon": clona la voz del banco (Base). "design": narra con VoiceDesign
+    # usando el instruct de la plantilla (experimental, más expresivo).
+    modo: str = "clon"
+    # Instruct a medida para el modo "design" (editable desde la UI). Si viene,
+    # se usa tal cual y NO se lee de la plantilla (así la caché no estorba); si
+    # es None, se cae al voz.instruct de la plantilla.
+    instruct: str | None = None
+
+
 class VozSeleccionIn(BaseModel):
     voz: str  # slug de la voz del banco
 

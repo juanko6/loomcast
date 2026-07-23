@@ -242,11 +242,21 @@ function bloqueVoz(p, ocupado) {
             </div>`).join("") : `<p class="meta">El banco está vacío</p>`}
         </div>
       </details>
-      <div class="acciones" style="margin-bottom:12px">
+      <div class="acciones" style="margin-bottom:4px">
         <button id="gen-voz" ${ocupado || !p.voz ? "disabled" : ""}>
           ${p.voz_disponible ? "↻ Regenerar narración" : "🎙 Generar narración"}
         </button>
+        <button id="gen-voz-design" class="sec" ${ocupado ? "disabled" : ""}
+                title="Narra el guion con VoiceDesign usando el estilo de abajo. Experimental: más expresivo, no usa la voz del banco.">
+          🎭 Narración expresiva
+        </button>
       </div>
+      <details style="margin:0 0 12px">
+        <summary style="cursor:pointer;color:var(--dim)">Estilo de la narración expresiva</summary>
+        <textarea id="voz-instruct-exp" rows="3" style="margin-top:6px"
+          placeholder="Cómo debe contar: tono, ritmo, emoción, pausas…">${esc(window.__vozInstruct?.[p.id] ?? p.voz_instruct)}</textarea>
+        <p class="meta" style="margin:2px 0 0">El LLM lo sugiere según la historia del guion; puedes retocarlo. Se envía a VoiceDesign al pulsar 🎭 (sobrescribe la narración) y es un borrador de sesión, no toca la plantilla.</p>
+      </details>
       ${p.voz_disponible ? `
         <audio controls src="/api/proyectos/${p.id}/audio?v=${Date.now()}"
                style="width:100%;margin-bottom:12px"></audio>` : ""}
@@ -647,7 +657,13 @@ document.addEventListener("click", async (ev) => {
       const a = $("#clip-preview"), s = window.__clipSel; if (!s) return;
       a.currentTime = s.inicio; a.play();
     } else if (b.id === "gen-voz") {
-      await api(`/proyectos/${pid()}/voz`, { method: "POST" });
+      await api(`/proyectos/${pid()}/voz`, { method: "POST", body: { modo: "clon" } });
+      refrescarJobs(); renderVista();
+    } else if (b.id === "gen-voz-design") {
+      const instruct = $("#voz-instruct-exp")?.value.trim() || "";
+      if (instruct) (window.__vozInstruct ??= {})[pid()] = instruct;
+      await api(`/proyectos/${pid()}/voz`, { method: "POST", body: { modo: "design", instruct } });
+      b.textContent = "Generando…"; b.disabled = true;
       refrescarJobs(); renderVista();
     } else if (b.id === "gen-meta") {
       await api(`/proyectos/${pid()}/metadatos`, { method: "POST" });
