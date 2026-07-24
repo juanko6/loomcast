@@ -20,6 +20,9 @@ class GuionLLM(BaseModel):
     gancho: str = Field(min_length=1)
     frases: list[str] = Field(min_length=1)
     cta: str = Field(min_length=1)
+    # Instrucción de voz (4 bloques) adaptada a esta historia; la usa el modo de
+    # narración "design" (VoiceDesign) para que la entrega encaje con el relato.
+    voz_instruct: str = Field(min_length=1)
 
 
 class GuionNarracionLLM(BaseModel):
