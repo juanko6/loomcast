@@ -7,12 +7,13 @@ from .guion import Guion
 from .idea import Idea
 from .job import Job
 from .metadatos import Metadatos
+from .musica import Musica
 from .proyecto import ORDEN_ESTADOS, Proyecto, avanzar_estado
 from .tema import Tema
 from .voz import REF_TEXT, Voz
 
 __all__ = [
     "Ajuste", "Base", "Escena", "Guion", "Idea", "ImagenLibre", "Job",
-    "Metadatos", "ORDEN_ESTADOS", "Proyecto", "REF_TEXT", "Tema", "Voz",
+    "Metadatos", "Musica", "ORDEN_ESTADOS", "Proyecto", "REF_TEXT", "Tema", "Voz",
     "avanzar_estado",
 ]

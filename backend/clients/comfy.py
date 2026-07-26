@@ -12,6 +12,7 @@ from ..config import (
     EDIT_WORKFLOW,
     I2V_FRAMES,
     I2V_WORKFLOW,
+    MUSICA_WORKFLOW,
     ROOT,
 )
 
@@ -19,6 +20,7 @@ WORKFLOW_ZIMAGE = ROOT / "workflows" / "z_image_turbo_api.json"
 WORKFLOW_ESRGAN = ROOT / "workflows" / "esrgan_api.json"
 TIMEOUT_S = COMFY_TIMEOUT_S
 EXT_VIDEO = (".mp4", ".webm", ".mkv", ".mov", ".gif")
+EXT_AUDIO = (".flac", ".mp3", ".wav", ".opus", ".ogg", ".m4a")
 
 
 class ComfyError(RuntimeError):
@@ -96,6 +98,40 @@ def _descargar_primer_video(c: httpx.Client, entry: dict, destino: Path) -> None
     if r.status_code >= 400:
         raise ComfyError(f"No se pudo descargar {f['filename']}")
     destino.write_bytes(r.content)
+
+
+def _descargar_primer_audio(c: httpx.Client, entry: dict, destino: Path) -> Path:
+    """Descarga el primer archivo de audio de la salida (SaveAudio, SaveAudioMP3,
+    etc.). ComfyUI lo expone bajo la clave 'audio' del output. Conserva la
+    extensión de origen (FLAC/MP3/WAV…) escribiendo en `destino` con ese sufijo;
+    devuelve la ruta final escrita."""
+    archivos = [
+        f
+        for out in entry.get("outputs", {}).values()
+        for lista in out.values()
+        if isinstance(lista, list)
+        for f in lista
+        if isinstance(f, dict) and "filename" in f
+    ]
+    audios = [f for f in archivos if f["filename"].lower().endswith(EXT_AUDIO)]
+    elegido = audios or archivos
+    if not elegido:
+        raise ComfyError(
+            "El workflow de música terminó sin producir un archivo de audio. "
+            "Revisa que tenga un nodo de guardado (SaveAudio / SaveAudioMP3)."
+        )
+    f = elegido[0]
+    r = c.get(
+        f"{COMFY_URL}/view",
+        params={"filename": f["filename"], "subfolder": f.get("subfolder", ""),
+                "type": f.get("type", "output")},
+    )
+    if r.status_code >= 400:
+        raise ComfyError(f"No se pudo descargar {f['filename']}")
+    ext = Path(f["filename"]).suffix.lower() or ".flac"
+    final = destino.with_suffix(ext)
+    final.write_bytes(r.content)
+    return final
 
 
 def _subir_imagen(c: httpx.Client, origen: Path) -> str:
@@ -197,6 +233,42 @@ def generar_video_i2v(imagen: Path, prompt: str, seed: int, destino: Path) -> No
         )
         entry = _encolar_y_esperar(c, wf)
         _descargar_primer_video(c, entry, destino)
+
+
+def generar_musica(
+    tags: str,
+    lyrics: str,
+    seed: int,
+    duracion_s: int,
+    destino: Path,
+) -> Path:
+    """Genera una pista de música con el workflow ACE-Step configurable y la
+    guarda junto a `destino` conservando la extensión de origen (devuelve la
+    ruta final).
+
+    El workflow (config: [musica].workflow) debe traer los placeholders
+    {TAGS}, {LYRICS}, {SEED} y {DURACION}, y terminar en un nodo de guardado de
+    audio (SaveAudio / SaveAudioMP3). {SEED} y {DURACION} van como valor numérico
+    (sin comillas); {TAGS} y {LYRICS} escapados para vivir dentro del JSON.
+    """
+    wf_path = ROOT / MUSICA_WORKFLOW
+    if not wf_path.exists():
+        raise ComfyError(
+            f"No existe el workflow de música en {wf_path}. Exporta la plantilla "
+            "ACE-Step de ComfyUI en formato API con los placeholders {TAGS}, "
+            "{LYRICS}, {SEED} y {DURACION} (y un nodo SaveAudio), y ponlo en esa "
+            "ruta (o ajusta config.toml [musica].workflow)."
+        )
+    with httpx.Client(timeout=30) as c:
+        crudo = wf_path.read_text()
+        wf = json.loads(
+            crudo.replace("{TAGS}", json.dumps(tags)[1:-1])
+            .replace("{LYRICS}", json.dumps(lyrics)[1:-1])
+            .replace("{SEED}", str(seed))
+            .replace("{DURACION}", str(duracion_s))
+        )
+        entry = _encolar_y_esperar(c, wf)
+        return _descargar_primer_audio(c, entry, destino)
 
 
 def liberar_memoria() -> None:

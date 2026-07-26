@@ -100,11 +100,19 @@ async function refrescarJobs() {
 
 // ---------- listas laterales ----------
 const TIPO_GALERIA = { generar: "✨ generar", editar: "🖌 editar", quitarfondo: "✂️ fondo" };
+const TIPO_MUSICA = { instrumental: "🎹 instrumental", cancion: "🎤 canción" };
 
 async function cargarListas() {
-  const [temas, proyectos, galeria] = await Promise.all([
-    api("/temas"), api("/proyectos"), api("/galeria"),
+  const [temas, proyectos, galeria, musica] = await Promise.all([
+    api("/temas"), api("/proyectos"), api("/galeria"), api("/musica"),
   ]);
+  $("#lista-musica").innerHTML = musica.map((m) => `
+    <li data-musica="${m.id}" class="${vista?.tipo === "musica" && vista.id === m.id ? "activo" : ""}">
+      <span>${esc(m.idea.slice(0, 34) || "(pista)")}</span>
+      <span class="meta">${TIPO_MUSICA[m.tipo] || m.tipo} · ${esc(m.estado)}</span>
+      <button class="borrar-musica" data-borrar-musica="${m.id}"
+              data-texto="${esc(m.idea.slice(0, 34))}" title="Borrar pista">🗑</button>
+    </li>`).join("") || `<li class="meta">Sin pistas aún</li>`;
   $("#lista-galeria").innerHTML = galeria.map((g) => `
     <li data-galeria="${g.id}" class="${vista?.tipo === "galeria" && vista.id === g.id ? "activo" : ""}">
       <span>${esc(g.idea.slice(0, 34) || "(imagen)")}</span>
@@ -662,12 +670,102 @@ async function renderGaleria(id) {
     ${cuerpo}`;
 }
 
+// ---------- vista: música ----------
+function formNuevaMusica() {
+  const tipo = window.__musTipo || "instrumental";
+  return `
+    <div class="bloque">
+      <h2>Nueva pista</h2>
+      <div class="seg" id="mus-tipo">
+        <button type="button" class="seg-op ${tipo === "instrumental" ? "activo" : ""}"
+                data-mtipo="instrumental">🎹 Instrumental</button>
+        <button type="button" class="seg-op ${tipo === "cancion" ? "activo" : ""}"
+                data-mtipo="cancion">🎤 Canción</button>
+      </div>
+      <form id="form-musica">
+        <label id="mus-idea-label">${tipo === "cancion"
+          ? "¿De qué va la canción? Tema, ambiente o historia"
+          : "¿Qué música quieres? Describe el ambiente o el uso"}</label>
+        <textarea id="mus-idea" rows="3"
+          placeholder="${tipo === "cancion"
+            ? "Ej: una balada esperanzadora sobre volver a empezar, voz femenina"
+            : "Ej: lofi triste con piano y lluvia para un storytime"}"></textarea>
+        <label>Duración (segundos)</label>
+        <input id="mus-duracion" type="number" value="30" min="5" max="600" step="5">
+        <button type="submit" id="mus-crear">Crear pista</button>
+        <p class="meta" style="margin-top:6px">Luego podrás afinar las etiquetas y la
+          letra a mano o pedir al LLM que las sugiera antes de generar.</p>
+      </form>
+    </div>`;
+}
+
+async function renderMusica(id) {
+  if (id == null) {
+    panel.innerHTML = formNuevaMusica();
+    return;
+  }
+  const m = await api(`/musica/${id}`);
+  window.__musica = m;
+  const chip = TIPO_MUSICA[m.tipo] || m.tipo;
+  const esCancion = m.tipo === "cancion";
+  let cuerpo = "";
+  if (m.ocupado) cuerpo = `<p class="spinner">Trabajando… (un job en curso)</p>`;
+  cuerpo += `
+    <div class="bloque">
+      <label>Etiquetas de estilo (inglés, coma-separadas)</label>
+      <textarea id="mus-tags" rows="2"
+        placeholder="Ej: lofi hip hop, warm piano, rain, mellow, slow ~70 BPM, instrumental">${esc(m.tags || "")}</textarea>
+      ${esCancion ? `
+        <label>Letra (usa marcadores [verse] / [chorus])</label>
+        <textarea id="mus-lyrics" rows="7"
+          placeholder="[verse]\n...\n[chorus]\n...">${esc(m.lyrics || "")}</textarea>` : ""}
+      <label>Duración (segundos)</label>
+      <input id="mus-duracion" type="number" value="${m.duracion_s}" min="5" max="600" step="5">
+      <div class="acciones" style="margin-top:10px">
+        <button type="button" id="mus-mejorar" class="sec" ${m.ocupado ? "disabled" : ""}
+                title="El LLM sugiere las etiquetas${esCancion ? " y la letra" : ""} a partir de tu idea">
+          ✨ Sugerir con LLM</button>
+        <button type="button" id="mus-generar" ${m.ocupado ? "disabled" : ""}>
+          ${m.tiene_audio ? "↻ Regenerar (otra distinta)" : "🎶 Generar música"}</button>
+      </div>
+    </div>`;
+  if (m.tiene_audio) {
+    cuerpo += `
+      <div class="bloque">
+        <label>Resultado${m.seed != null ? ` <span class="meta">· seed ${m.seed}</span>` : ""}</label>
+        <audio controls src="/api/musica/${m.id}/audio?v=${Date.now()}" style="width:100%"></audio>
+        <div class="acciones" style="margin-top:8px">
+          <a class="boton mini sec" href="/api/musica/${m.id}/audio"
+             download="loomcast_musica_${m.id}">⬇ Descargar</a>
+        </div>
+      </div>`;
+  }
+  panel.innerHTML = `
+    <div class="bloque">
+      <span class="estado-chip">${chip} · ${esc(m.estado)}</span>
+      <h2 style="margin-top:8px">${esc(m.idea || "(pista)")}</h2>
+    </div>
+    ${cuerpo}`;
+}
+
+// Lee los campos editables del detalle de música. `lyrics` es null en modo
+// instrumental (el textarea no existe) para que el backend no lo toque.
+function musicaCampos() {
+  const lyricsEl = $("#mus-lyrics");
+  return {
+    tags: $("#mus-tags")?.value.trim() ?? "",
+    lyrics: lyricsEl ? lyricsEl.value : null,
+    duracion_s: +($("#mus-duracion")?.value) || 30,
+  };
+}
+
 // ---------- render según vista ----------
 async function renderVista() {
   if (!vista) return;
   try {
     if (vista.tipo === "tema") await renderTema(vista.id);
     else if (vista.tipo === "galeria") await renderGaleria(vista.id);
+    else if (vista.tipo === "musica") await renderMusica(vista.id);
     else await renderProyecto(vista.id);
   } catch (e) {
     panel.innerHTML = `<div class="error-box">${esc(e.message)}</div>`;
@@ -762,12 +860,30 @@ document.addEventListener("click", async (ev) => {
     return;
   }
 
+  if (b.dataset?.borrarMusica) {
+    if (!confirm(`¿Borrar la pista «${b.dataset.texto}»?\n\n` +
+                 `Se pierde el audio generado. No se puede deshacer.`)) return;
+    try {
+      await api(`/musica/${b.dataset.borrarMusica}`, { method: "DELETE" });
+      if (vista?.tipo === "musica" && vista.id === +b.dataset.borrarMusica) {
+        vista = null;
+        panel.innerHTML = `<p class="vacio">Pista borrada.</p>`;
+      }
+      cargarListas();
+    } catch (e) {
+      alert(String(e.message || e));
+    }
+    return;
+  }
+
   const li = b.closest?.("[data-tema]");
   if (li) return irA("tema", +li.dataset.tema);
   const lp = b.closest?.("[data-proyecto]");
   if (lp) return irA("proyecto", +lp.dataset.proyecto);
   const lg = b.closest?.("[data-galeria]");
   if (lg) return irA("galeria", +lg.dataset.galeria);
+  const lm = b.closest?.("[data-musica]");
+  if (lm) return irA("musica", +lm.dataset.musica);
 
   // Selección de una preview (el click puede caer en el <img> interior)
   const celda = b.closest?.("[data-preview]");
@@ -780,6 +896,29 @@ document.addEventListener("click", async (ev) => {
     if (b.id === "nueva-imagen") {
       window.__previewSel = null; window.__verGrid = null; window.__galModo = "generar";
       irA("galeria", null);
+    } else if (b.id === "nueva-musica") {
+      window.__musTipo = "instrumental";
+      irA("musica", null);
+    } else if (b.classList?.contains("seg-op") && b.dataset.mtipo) {
+      window.__musTipo = b.dataset.mtipo;
+      renderMusica(null); // reescribe el formulario según el tipo elegido
+    } else if (b.id === "mus-mejorar") {
+      const { duracion_s } = musicaCampos();
+      // Guarda la duración editada antes de que el LLM reescriba tags/letra.
+      await api(`/musica/${vista.id}`, { method: "PUT", body: { duracion_s } });
+      await api(`/musica/${vista.id}/mejorar`, { method: "POST" });
+      b.textContent = "Sugiriendo…"; b.disabled = true;
+      refrescarJobs(); renderVista();
+    } else if (b.id === "mus-generar") {
+      const campos = musicaCampos();
+      if (!campos.tags) {
+        alert("Añade unas etiquetas de estilo o pulsa «Sugerir con LLM» antes de generar.");
+        return;
+      }
+      // seed null = pista nueva (el backend elige una aleatoria distinta).
+      await api(`/musica/${vista.id}/generar`, { method: "POST", body: { ...campos, seed: null } });
+      b.textContent = "Generando…"; b.disabled = true;
+      refrescarJobs(); renderVista();
     } else if (b.classList?.contains("seg-op") && b.dataset.modo) {
       const modo = window.__galModo = b.dataset.modo;
       document.querySelectorAll("#gal-modo .seg-op")
@@ -1054,6 +1193,20 @@ document.addEventListener("submit", async (ev) => {
     } else if (ev.target.id === "form-escenas") {
       await guardarPrompts();
       renderVista();
+    } else if (ev.target.id === "form-musica") {
+      const idea = $("#mus-idea").value.trim();
+      if (!idea) { alert("Describe la idea de la pista"); return; }
+      const btn = $("#mus-crear");
+      btn.disabled = true; btn.textContent = "Creando…";
+      const r = await api("/musica", {
+        method: "POST",
+        body: {
+          tipo: window.__musTipo || "instrumental",
+          idea,
+          duracion_s: +($("#mus-duracion").value) || 30,
+        },
+      });
+      irA("musica", r.id);
     } else if (ev.target.id === "form-galeria") {
       const modo = window.__galModo || "generar";
       const btn = $("#gal-crear");

@@ -65,3 +65,12 @@ class EscenaLLM(BaseModel):
 class ImagenLibrePromptLLM(BaseModel):
     # Prompt final en inglés, para la galería de imágenes (generar o editar).
     prompt: str = Field(min_length=20)
+
+
+class MusicaPromptLLM(BaseModel):
+    # Etiquetas de estilo para ACE-Step (inglés, coma-separadas): género,
+    # instrumentos, ambiente, tempo…
+    tags: str = Field(min_length=3)
+    # Letra con marcadores [verse]/[chorus]/[bridge]; cadena vacía para pistas
+    # instrumentales.
+    lyrics: str = ""

@@ -92,9 +92,17 @@ RIFE_MODELO: str = _rife.get("modelo", "rife-v4.6")
 _edicion = _cfg.get("edicion", {})
 EDIT_WORKFLOW: str = _edicion.get("workflow", "workflows/qwen_edit_api.json")
 
+# Generación de música (ACE-Step). Como en [i2v]/[edicion], apunta a un workflow
+# de ComfyUI en formato API que TÚ exportas con los placeholders {TAGS},
+# {LYRICS}, {SEED} y {DURACION}, y un nodo SaveAudio.
+_musica = _cfg.get("musica", {})
+MUSICA_WORKFLOW: str = _musica.get("workflow", "workflows/musica_api.json")
+MUSICA_DURACION_S: int = _musica.get("duracion_s", 30)
+
 PROYECTOS_DIR: Path = ROOT / _cfg["paths"]["proyectos"]
 PLANTILLAS_DIR: Path = ROOT / _cfg["paths"]["plantillas"]
 VOCES_DIR: Path = ROOT / _cfg["paths"]["voces"]
 GALERIA_DIR: Path = ROOT / _cfg["paths"].get("galeria", "galeria")
+MUSICA_DIR: Path = ROOT / _cfg["paths"].get("musica", "musica")
 PROMPTS_DIR: Path = ROOT / "prompts"
 DB_PATH: Path = ROOT / _cfg["paths"]["db"]

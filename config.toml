@@ -183,9 +183,22 @@ modelo = "rife-v4.6"
 # los placeholders {IMAGE}, {PROMPT} y {SEED}, y un nodo SaveImage.
 workflow = "workflows/qwen_edit_api.json"
 
+[musica]
+# Generación de música local con ACE-Step (ACE Studio + StepFun): corre en
+# Apple Silicon vía Metal/MPS y tiene soporte nativo en ComfyUI. Descarga
+# `ace_step_v1_3.5b.safetensors` a ComfyUI/models/checkpoints y exporta la
+# plantilla "ACE-Step Text-to-Music" en formato API con los placeholders
+# {TAGS} (TextEncodeAceStepAudio→tags), {LYRICS} (→lyrics),
+# {DURACION} (EmptyAceStepLatentAudio→seconds) y {SEED} (KSampler→seed), más un
+# nodo SaveAudio (o SaveAudioMP3).
+workflow = "workflows/musica_api.json"
+# Duración por defecto de una pista nueva, en segundos.
+duracion_s = 30
+
 [paths]
 proyectos = "proyectos"
 plantillas = "plantillas"
 voces = "voces"
 galeria = "galeria"
+musica = "musica"
 db = "loomcast.db"

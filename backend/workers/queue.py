@@ -17,6 +17,7 @@ from ..services.pipeline import (
     i2v,
     imagen_libre,
     imagenes,
+    musica,
     quitar_fondo,
     subtitulos,
     texto,
@@ -39,6 +40,8 @@ HANDLERS = {
     "generar_previews_imagen": imagen_libre.generar_previews,
     "generar_final_imagen": imagen_libre.generar_final,
     "quitar_fondo": quitar_fondo.quitar_fondo,
+    "mejorar_prompt_musica": musica.mejorar_prompt,
+    "generar_musica": musica.generar,
     "regenerar_clip": escena_individual.regenerar_clip,
     "generar_clips_mixto": escena_individual.generar_clips_mixto,
     "generar_upscale": upscale.generar_upscale,
@@ -57,6 +60,7 @@ JOBS_LLM = {
     "generar_metadatos",
     "generar_escenas",
     "mejorar_prompt_imagen",
+    "mejorar_prompt_musica",
 }
 
 # Etapas que se disparan solas al terminar la anterior:

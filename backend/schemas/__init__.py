@@ -8,6 +8,9 @@ from .api import (
     GaleriaPromptIn,
     ModoEscenaIn,
     ModosEscenasIn,
+    MusicaCamposIn,
+    MusicaGenerarIn,
+    MusicaLanzarIn,
     RegenerarClipIn,
     RegenerarImagenIn,
     EstadoIdeaIn,
@@ -27,6 +30,7 @@ from .llm import (
     IdeaLLM,
     IdeasLLM,
     ImagenLibrePromptLLM,
+    MusicaPromptLLM,
     TituloLLM,
 )
 from .plantilla import (
@@ -39,10 +43,11 @@ from .plantilla import (
 __all__ = [
     "EscenaPromptIn", "EscenasIn", "GaleriaFinalIn", "GaleriaGenerarIn",
     "GaleriaPreviewsIn", "GaleriaPromptIn", "ModoEscenaIn", "ModosEscenasIn",
+    "MusicaCamposIn", "MusicaGenerarIn", "MusicaLanzarIn",
     "RegenerarClipIn", "RegenerarImagenIn", "EstadoIdeaIn", "GuionIn", "TemaIn",
     "VideoIn", "VozGenerarIn", "VozNuevaIn", "VozSeleccionIn",
     "DescripcionLLM", "EscenaLLM", "EtiquetasLLM",
     "GuionLLM", "GuionNarracionLLM", "IdeaLLM", "IdeasLLM",
-    "ImagenLibrePromptLLM", "TituloLLM",
+    "ImagenLibrePromptLLM", "MusicaPromptLLM", "TituloLLM",
     "Plantilla", "RitmoPlantilla", "SubtitulosPlantilla", "VozPlantilla",
 ]

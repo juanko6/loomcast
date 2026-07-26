@@ -93,3 +93,30 @@ class GaleriaPreviewsIn(BaseModel):
 
 class GaleriaFinalIn(BaseModel):
     indice: int
+
+
+class MusicaGenerarIn(BaseModel):
+    # instrumental (música de fondo / jingle, sin voz) | cancion (con letra)
+    tipo: str = "instrumental"
+    idea: str = ""
+    # Opcionales: si el usuario ya escribió las etiquetas/letra a mano, se
+    # guardan al crear; si no, se rellenan luego con "mejorar" (LLM).
+    tags: str = ""
+    lyrics: str = ""
+    duracion_s: int = 30
+
+
+class MusicaCamposIn(BaseModel):
+    # Edición de los campos antes de generar (None = no tocar).
+    tags: str | None = None
+    lyrics: str | None = None
+    duracion_s: int | None = None
+
+
+class MusicaLanzarIn(BaseModel):
+    # Campos con los que generar (se persisten antes de encolar). Si vienen
+    # vacíos se usan los ya guardados. seed None = aleatorio.
+    tags: str | None = None
+    lyrics: str | None = None
+    duracion_s: int | None = None
+    seed: int | None = None
