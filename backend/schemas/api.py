@@ -72,3 +72,24 @@ class ModosEscenasIn(BaseModel):
 
 class VideoIn(BaseModel):
     modo: str = "kenburns"  # estatico | kenburns
+
+
+class GaleriaGenerarIn(BaseModel):
+    idea: str
+    width: int = 768
+    height: int = 1344
+
+
+class GaleriaPromptIn(BaseModel):
+    prompt: str
+
+
+class GaleriaPreviewsIn(BaseModel):
+    # Opcional: reajustar el tamaño antes de lanzar las previews. Si son None se
+    # usa el guardado al crear la entrada.
+    width: int | None = None
+    height: int | None = None
+
+
+class GaleriaFinalIn(BaseModel):
+    indice: int

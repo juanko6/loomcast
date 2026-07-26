@@ -6,7 +6,14 @@ from pathlib import Path
 
 import httpx
 
-from ..config import COMFY_TIMEOUT_S, COMFY_URL, I2V_FRAMES, I2V_WORKFLOW, ROOT
+from ..config import (
+    COMFY_TIMEOUT_S,
+    COMFY_URL,
+    EDIT_WORKFLOW,
+    I2V_FRAMES,
+    I2V_WORKFLOW,
+    ROOT,
+)
 
 WORKFLOW_ZIMAGE = ROOT / "workflows" / "z_image_turbo_api.json"
 WORKFLOW_ESRGAN = ROOT / "workflows" / "esrgan_api.json"
@@ -103,12 +110,53 @@ def _subir_imagen(c: httpx.Client, origen: Path) -> str:
     return r.json()["name"]
 
 
-def generar_imagen(prompt: str, seed: int, destino: Path) -> None:
-    """Genera una imagen con Z-Image-Turbo y la guarda en `destino`."""
+def generar_imagen(
+    prompt: str,
+    seed: int,
+    destino: Path,
+    width: int | None = None,
+    height: int | None = None,
+) -> None:
+    """Genera una imagen con Z-Image-Turbo y la guarda en `destino`.
+
+    Con `width`/`height` se sobreescribe el tamaño del latente del workflow; si
+    son None se respetan los valores del JSON (así la etapa de escenas del
+    pipeline sigue funcionando sin cambios)."""
     wf = json.loads(WORKFLOW_ZIMAGE.read_text())
     wf["positive"]["inputs"]["text"] = prompt
     wf["sampler"]["inputs"]["seed"] = seed
+    if width is not None:
+        wf["latent"]["inputs"]["width"] = width
+    if height is not None:
+        wf["latent"]["inputs"]["height"] = height
     with httpx.Client(timeout=30) as c:
+        entry = _encolar_y_esperar(c, wf)
+        _descargar_primera_imagen(c, entry, destino)
+
+
+def editar_imagen(imagen: Path, prompt: str, seed: int, destino: Path) -> None:
+    """Edita una imagen con el workflow instruct-edit configurable y guarda el
+    resultado en `destino`.
+
+    El workflow (config: [edicion].workflow) debe traer los placeholders
+    {IMAGE}, {PROMPT} y {SEED}, igual que el de i2v. {SEED} se sustituye sin
+    comillas (valor numérico) y {PROMPT} escapado para vivir dentro del JSON."""
+    wf_path = ROOT / EDIT_WORKFLOW
+    if not wf_path.exists():
+        raise ComfyError(
+            f"No existe el workflow de edición en {wf_path}. Exporta tu workflow "
+            "instruct-edit de ComfyUI en formato API con los placeholders "
+            "{IMAGE}, {PROMPT} y {SEED} (y un nodo SaveImage), y ponlo en esa "
+            "ruta (o ajusta config.toml [edicion].workflow)."
+        )
+    with httpx.Client(timeout=30) as c:
+        nombre = _subir_imagen(c, imagen)
+        crudo = wf_path.read_text()
+        wf = json.loads(
+            crudo.replace("{IMAGE}", nombre)
+            .replace("{PROMPT}", json.dumps(prompt)[1:-1])
+            .replace("{SEED}", str(seed))
+        )
         entry = _encolar_y_esperar(c, wf)
         _descargar_primera_imagen(c, entry, destino)
 

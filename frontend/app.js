@@ -99,10 +99,19 @@ async function refrescarJobs() {
 }
 
 // ---------- listas laterales ----------
+const TIPO_GALERIA = { generar: "✨ generar", editar: "🖌 editar", quitarfondo: "✂️ fondo" };
+
 async function cargarListas() {
-  const [temas, proyectos] = await Promise.all([
-    api("/temas"), api("/proyectos"),
+  const [temas, proyectos, galeria] = await Promise.all([
+    api("/temas"), api("/proyectos"), api("/galeria"),
   ]);
+  $("#lista-galeria").innerHTML = galeria.map((g) => `
+    <li data-galeria="${g.id}" class="${vista?.tipo === "galeria" && vista.id === g.id ? "activo" : ""}">
+      <span>${esc(g.idea.slice(0, 34) || "(imagen)")}</span>
+      <span class="meta">${TIPO_GALERIA[g.tipo] || g.tipo} · ${esc(g.estado)}</span>
+      <button class="borrar-galeria" data-borrar-galeria="${g.id}"
+              data-texto="${esc(g.idea.slice(0, 34))}" title="Borrar imagen">🗑</button>
+    </li>`).join("") || `<li class="meta">Sin imágenes aún</li>`;
   $("#lista-temas").innerHTML = temas.map((t) => `
     <li data-tema="${t.id}" class="${vista?.tipo === "tema" && vista.id === t.id ? "activo" : ""}">
       <span>${esc(t.texto.slice(0, 40))}</span>
@@ -513,11 +522,152 @@ async function renderProyecto(id) {
     ${bloqueVideo(p, ocupado)}`;
 }
 
+// ---------- vista: galería de imágenes ----------
+// Presets de tamaño (solo aplican al modo "generar"; al editar, el tamaño de
+// salida lo marca la imagen de origen y el workflow).
+const TAMANOS = [
+  ["9:16 vertical", 768, 1344],
+  ["1:1 cuadrado", 1024, 1024],
+  ["16:9 horizontal", 1344, 768],
+  ["2:3 retrato", 896, 1344],
+  ["3:2 paisaje", 1344, 896],
+];
+
+function selectorTamano() {
+  const opciones = TAMANOS.map(([n, w, h], i) =>
+    `<option value="${w}x${h}" ${i === 0 ? "selected" : ""}>${n} · ${w}×${h}</option>`
+  ).join("");
+  return `
+    <label>Tamaño</label>
+    <select id="gal-tamano">
+      ${opciones}
+      <option value="custom">Personalizado…</option>
+    </select>
+    <div id="gal-custom" class="oculto" style="display:flex; gap:8px">
+      <input id="gal-w" type="number" value="1024" min="256" max="1536" step="64" placeholder="ancho">
+      <input id="gal-h" type="number" value="1024" min="256" max="1536" step="64" placeholder="alto">
+    </div>`;
+}
+
+function formNuevaImagen() {
+  return `
+    <div class="bloque">
+      <h2>Nueva imagen</h2>
+      <div class="seg" id="gal-modo">
+        <button type="button" class="seg-op activo" data-modo="generar">✨ Generar</button>
+        <button type="button" class="seg-op" data-modo="editar">🖌 Editar</button>
+        <button type="button" class="seg-op" data-modo="quitarfondo">✂️ Quitar fondo</button>
+      </div>
+      <form id="form-galeria">
+        <div id="gal-archivo-campos" class="oculto">
+          <label>Imagen</label>
+          <input id="gal-archivo" type="file" accept="image/*">
+          <img id="gal-preview-fuente" class="oculto" style="max-width:220px; border-radius:8px; margin-bottom:8px">
+        </div>
+        <div id="gal-idea-campos">
+          <label id="gal-idea-label">¿Qué imagen quieres? Describe la idea</label>
+          <textarea id="gal-idea" rows="3"
+            placeholder="Ej: un faro solitario en un acantilado bajo una tormenta eléctrica"></textarea>
+        </div>
+        <div id="gal-tamano-campos">${selectorTamano()}</div>
+        <button type="submit" id="gal-crear">Mejorar prompt con el LLM</button>
+      </form>
+    </div>`;
+}
+
+function bloquePrompt(g) {
+  return `
+    <div class="bloque">
+      <label>Prompt (en inglés, editable)</label>
+      <textarea id="gal-prompt" rows="4">${esc(g.prompt || "")}</textarea>
+      <div class="acciones">
+        <button type="button" id="gal-previews">Generar 4 previews</button>
+        ${g.tipo === "generar"
+          ? `<span class="meta">Tamaño ${g.width}×${g.height}</span>`
+          : `<span class="meta">Editando la imagen de origen</span>`}
+      </div>
+    </div>`;
+}
+
+function bloquePreviews(g) {
+  const sel = window.__previewSel;
+  const marcada = sel && sel.id === g.id ? sel.indice : null;
+  const celdas = g.seeds.map((_, i) => `
+    <div class="preview-celda ${marcada === i ? "sel" : ""}" data-preview="${i}">
+      <img src="/api/galeria/${g.id}/preview/${i}?v=${Date.now()}" alt="preview ${i + 1}">
+    </div>`).join("");
+  return `
+    <div class="bloque">
+      <label>Elige la mejor (se ampliará a máxima resolución)</label>
+      <div class="preview-grid">${celdas}</div>
+      <div class="acciones" style="margin-top:10px">
+        <button type="button" id="gal-final" ${marcada === null ? "disabled" : ""}>
+          Generar máxima resolución</button>
+        <button type="button" id="gal-previews" class="sec">Regenerar 4 previews</button>
+      </div>
+    </div>`;
+}
+
+function bloqueFinal(g, checker = false) {
+  const esFondo = g.tipo === "quitarfondo";
+  return `
+    <div class="bloque">
+      <label>${esFondo ? "Resultado (fondo transparente)" : "Imagen final"}</label>
+      <div class="gal-final-wrap ${checker ? "checker" : ""}">
+        <img class="gal-final-img escena-miniatura" data-ver-final="1"
+             src="/api/galeria/${g.id}/final?v=${Date.now()}" alt="resultado">
+      </div>
+      <div class="acciones" style="margin-top:10px">
+        <a class="boton mini sec" href="/api/galeria/${g.id}/final" download="loomcast_${g.id}.png">Descargar PNG</a>
+        ${esFondo ? "" : `<button type="button" id="gal-reelegir" class="sec mini">Elegir otra preview</button>`}
+      </div>
+    </div>`;
+}
+
+async function renderGaleria(id) {
+  if (id == null) {
+    panel.innerHTML = formNuevaImagen();
+    return;
+  }
+  const g = await api(`/galeria/${id}`);
+  window.__galeria = g;
+  const chip = TIPO_GALERIA[g.tipo] || g.tipo;
+  let cuerpo = "";
+  if (g.ocupado) {
+    cuerpo = `<p class="spinner">${g.tipo === "quitarfondo"
+      ? "Quitando el fondo…" : "Trabajando… (un job en curso)"}</p>`;
+  }
+  if (g.tipo === "editar" || g.tipo === "quitarfondo") {
+    cuerpo += `<div class="bloque"><label>Imagen de origen</label>
+      <img class="escena-miniatura" data-ver-fuente="1"
+           style="max-width:200px; border-radius:8px"
+           src="/api/galeria/${g.id}/fuente?v=1" alt="origen"></div>`;
+  }
+  if (g.tipo === "quitarfondo") {
+    if (g.estado === "final") cuerpo += bloqueFinal(g, true);
+  } else {
+    if (g.prompt) cuerpo += bloquePrompt(g);
+    else if (!g.ocupado) cuerpo += `<p class="spinner">Esperando el prompt del LLM…</p>`;
+    if (g.seeds.length && (g.estado === "previews" || (g.estado === "final" && window.__verGrid === g.id))) {
+      cuerpo += bloquePreviews(g);
+    }
+    if (g.estado === "final" && window.__verGrid !== g.id) cuerpo += bloqueFinal(g);
+  }
+
+  panel.innerHTML = `
+    <div class="bloque">
+      <span class="estado-chip">${chip} · ${esc(g.estado)}</span>
+      <h2 style="margin-top:8px">${esc(g.idea)}</h2>
+    </div>
+    ${cuerpo}`;
+}
+
 // ---------- render según vista ----------
 async function renderVista() {
   if (!vista) return;
   try {
     if (vista.tipo === "tema") await renderTema(vista.id);
+    else if (vista.tipo === "galeria") await renderGaleria(vista.id);
     else await renderProyecto(vista.id);
   } catch (e) {
     panel.innerHTML = `<div class="error-box">${esc(e.message)}</div>`;
@@ -567,6 +717,17 @@ document.addEventListener("click", async (ev) => {
               controls autoplay loop muted playsinline></video>`,
       `Escena ${o + 1} · clip ${NOMBRE_MODO[e.clip_modo] || ""}`.trim());
   }
+  if (b.dataset?.verFinal && vista?.tipo === "galeria") {
+    const fondo = window.__galeria?.tipo === "quitarfondo";
+    return abrirVisor(
+      `<div class="${fondo ? "checker-visor" : ""}"><img
+         src="/api/galeria/${vista.id}/final?v=${Date.now()}"></div>`,
+      fondo ? "Fondo transparente" : "Imagen final");
+  }
+  if (b.dataset?.verFuente && vista?.tipo === "galeria") {
+    return abrirVisor(
+      `<img src="/api/galeria/${vista.id}/fuente?v=1">`, "Imagen de origen");
+  }
 
   // Borrados: van antes de la navegación porque el botón vive dentro del <li>
   if (b.dataset?.borrarTema) {
@@ -585,13 +746,76 @@ document.addEventListener("click", async (ev) => {
     return;
   }
 
+  if (b.dataset?.borrarGaleria) {
+    if (!confirm(`¿Borrar la imagen «${b.dataset.texto}»?\n\n` +
+                 `Se pierden las previews y la versión final. No se puede deshacer.`)) return;
+    try {
+      await api(`/galeria/${b.dataset.borrarGaleria}`, { method: "DELETE" });
+      if (vista?.tipo === "galeria" && vista.id === +b.dataset.borrarGaleria) {
+        vista = null;
+        panel.innerHTML = `<p class="vacio">Imagen borrada.</p>`;
+      }
+      cargarListas();
+    } catch (e) {
+      alert(String(e.message || e));
+    }
+    return;
+  }
+
   const li = b.closest?.("[data-tema]");
   if (li) return irA("tema", +li.dataset.tema);
   const lp = b.closest?.("[data-proyecto]");
   if (lp) return irA("proyecto", +lp.dataset.proyecto);
+  const lg = b.closest?.("[data-galeria]");
+  if (lg) return irA("galeria", +lg.dataset.galeria);
+
+  // Selección de una preview (el click puede caer en el <img> interior)
+  const celda = b.closest?.("[data-preview]");
+  if (celda && vista?.tipo === "galeria") {
+    window.__previewSel = { id: vista.id, indice: +celda.dataset.preview };
+    return renderVista();
+  }
 
   try {
-    if (b.dataset?.descartar) {
+    if (b.id === "nueva-imagen") {
+      window.__previewSel = null; window.__verGrid = null; window.__galModo = "generar";
+      irA("galeria", null);
+    } else if (b.classList?.contains("seg-op") && b.dataset.modo) {
+      const modo = window.__galModo = b.dataset.modo;
+      document.querySelectorAll("#gal-modo .seg-op")
+        .forEach((x) => x.classList.toggle("activo", x === b));
+      const usaArchivo = modo === "editar" || modo === "quitarfondo";
+      $("#gal-archivo-campos").classList.toggle("oculto", !usaArchivo);
+      $("#gal-idea-campos").classList.toggle("oculto", modo === "quitarfondo");
+      $("#gal-tamano-campos").classList.toggle("oculto", modo !== "generar");
+      $("#gal-crear").textContent = modo === "quitarfondo"
+        ? "Quitar fondo" : "Mejorar prompt con el LLM";
+      if (modo !== "quitarfondo") {
+        $("#gal-idea-label").textContent = modo === "editar"
+          ? "¿Qué cambios o efectos quieres aplicar?"
+          : "¿Qué imagen quieres? Describe la idea";
+        $("#gal-idea").placeholder = modo === "editar"
+          ? "Ej: cambia el cielo a un atardecer dramático y añade niebla"
+          : "Ej: un faro solitario en un acantilado bajo una tormenta eléctrica";
+      }
+    } else if (b.id === "gal-previews") {
+      const prompt = $("#gal-prompt")?.value.trim();
+      if (prompt) await api(`/galeria/${vista.id}/prompt`, { method: "PUT", body: { prompt } });
+      window.__previewSel = null; window.__verGrid = null;
+      await api(`/galeria/${vista.id}/previews`, { method: "POST", body: {} });
+      b.textContent = "Generando…"; b.disabled = true;
+      refrescarJobs(); renderVista();
+    } else if (b.id === "gal-final") {
+      const sel = window.__previewSel;
+      if (!sel || sel.id !== vista.id) return;
+      window.__verGrid = null;
+      await api(`/galeria/${vista.id}/final`, { method: "POST", body: { indice: sel.indice } });
+      b.textContent = "Ampliando…"; b.disabled = true;
+      refrescarJobs(); renderVista();
+    } else if (b.id === "gal-reelegir") {
+      window.__verGrid = vista.id;
+      renderVista();
+    } else if (b.dataset?.descartar) {
       await api(`/ideas/${b.dataset.descartar}/estado`, { method: "POST", body: { estado: "descartada" } });
       renderVista(); cargarListas();
     } else if (b.dataset?.restaurar) {
@@ -773,8 +997,22 @@ document.addEventListener("change", async (ev) => {
     await guardarModos();
   } else if (ev.target.classList?.contains("escena-modo")) {
     await guardarModos();
+  } else if (ev.target.id === "gal-tamano") {
+    $("#gal-custom").classList.toggle("oculto", ev.target.value !== "custom");
+  } else if (ev.target.id === "gal-archivo") {
+    const f = ev.target.files[0], img = $("#gal-preview-fuente");
+    if (f && img) { img.src = URL.createObjectURL(f); img.classList.remove("oculto"); }
   }
 });
+
+function tamanoElegido() {
+  const sel = $("#gal-tamano");
+  if (!sel) return [768, 1344];
+  if (sel.value === "custom") {
+    return [+$("#gal-w").value || 1024, +$("#gal-h").value || 1024];
+  }
+  return sel.value.split("x").map(Number);
+}
 
 async function guardarModos() {
   const escenas = [...document.querySelectorAll(".escena-modo")].map((s) => ({
@@ -816,6 +1054,46 @@ document.addEventListener("submit", async (ev) => {
     } else if (ev.target.id === "form-escenas") {
       await guardarPrompts();
       renderVista();
+    } else if (ev.target.id === "form-galeria") {
+      const modo = window.__galModo || "generar";
+      const btn = $("#gal-crear");
+      const archivo = $("#gal-archivo").files[0];
+      const idea = $("#gal-idea").value.trim();
+      const textoBtn = btn.textContent;
+      let r;
+      if (modo === "quitarfondo") {
+        if (!archivo) { alert("Sube una imagen"); return; }
+        btn.disabled = true; btn.textContent = "Subiendo…";
+        const fd = new FormData();
+        fd.append("imagen", archivo);
+        const resp = await fetch("/api/galeria/quitarfondo", { method: "POST", body: fd });
+        if (!resp.ok) {
+          alert((await resp.text()).slice(0, 300));
+          btn.disabled = false; btn.textContent = textoBtn; return;
+        }
+        r = await resp.json();
+      } else if (modo === "editar") {
+        if (!idea) return;
+        if (!archivo) { alert("Sube una imagen para editar"); return; }
+        btn.disabled = true; btn.textContent = "Subiendo…";
+        const fd = new FormData();
+        fd.append("idea", idea);
+        fd.append("imagen", archivo);
+        const resp = await fetch("/api/galeria/editar", { method: "POST", body: fd });
+        if (!resp.ok) {
+          alert((await resp.text()).slice(0, 300));
+          btn.disabled = false; btn.textContent = textoBtn; return;
+        }
+        r = await resp.json();
+      } else {
+        if (!idea) return;
+        btn.disabled = true; btn.textContent = "Creando…";
+        const [w, h] = tamanoElegido();
+        r = await api("/galeria", { method: "POST", body: { idea, width: w, height: h } });
+      }
+      window.__previewSel = null; window.__verGrid = null;
+      irA("galeria", r.id);
+      refrescarJobs();
     }
   } catch (e) {
     panel.insertAdjacentHTML("afterbegin", `<div class="error-box">${esc(e.message)}</div>`);

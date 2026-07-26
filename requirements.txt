@@ -5,3 +5,4 @@ httpx>=0.27
 qwen-tts
 mlx-whisper
 soundfile
+rembg

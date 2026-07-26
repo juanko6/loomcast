@@ -86,7 +86,15 @@ _rife = _cfg.get("rife", {})
 RIFE_BIN: str = _rife.get("bin", "tools/rife-ncnn-vulkan-20221029-macos/rife-ncnn-vulkan")
 RIFE_MODELO: str = _rife.get("modelo", "rife-v4.6")
 
+# Edición de imágenes (galería): workflow de ComfyUI con un modelo instruct-edit
+# (Qwen-Image-Edit, Flux Kontext…) que el usuario exporta en formato API con los
+# placeholders {IMAGE}, {PROMPT} y {SEED}, igual que el de i2v.
+_edicion = _cfg.get("edicion", {})
+EDIT_WORKFLOW: str = _edicion.get("workflow", "workflows/qwen_edit_api.json")
+
 PROYECTOS_DIR: Path = ROOT / _cfg["paths"]["proyectos"]
 PLANTILLAS_DIR: Path = ROOT / _cfg["paths"]["plantillas"]
 VOCES_DIR: Path = ROOT / _cfg["paths"]["voces"]
+GALERIA_DIR: Path = ROOT / _cfg["paths"].get("galeria", "galeria")
+PROMPTS_DIR: Path = ROOT / "prompts"
 DB_PATH: Path = ROOT / _cfg["paths"]["db"]

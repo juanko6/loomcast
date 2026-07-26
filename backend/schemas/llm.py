@@ -60,3 +60,8 @@ class EscenaLLM(BaseModel):
     prompt: str = Field(min_length=20)
     # Qué se mueve en la escena; solo lo usa el modo i2v
     prompt_movimiento: str = Field(min_length=20)
+
+
+class ImagenLibrePromptLLM(BaseModel):
+    # Prompt final en inglés, para la galería de imágenes (generar o editar).
+    prompt: str = Field(min_length=20)

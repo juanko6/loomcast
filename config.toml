@@ -175,8 +175,17 @@ fps_final = 60
 bin = "tools/rife-ncnn-vulkan-20221029-macos/rife-ncnn-vulkan"
 modelo = "rife-v4.6"
 
+[edicion]
+# Edición de imágenes de la galería. Como en [i2v], apunta a un workflow de
+# ComfyUI en formato API que TÚ exportas con un modelo instruct-edit
+# (recomendado: Qwen-Image-Edit 2509 GGUF, que reutiliza tu text encoder
+# qwen_2.5_vl_7b y evita el fp8 que Metal no soporta). El workflow debe incluir
+# los placeholders {IMAGE}, {PROMPT} y {SEED}, y un nodo SaveImage.
+workflow = "workflows/qwen_edit_api.json"
+
 [paths]
 proyectos = "proyectos"
 plantillas = "plantillas"
 voces = "voces"
+galeria = "galeria"
 db = "loomcast.db"

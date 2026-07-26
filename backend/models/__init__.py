@@ -2,6 +2,7 @@
 from .ajuste import Ajuste
 from .base import Base
 from .escena import Escena
+from .galeria import ImagenLibre
 from .guion import Guion
 from .idea import Idea
 from .job import Job
@@ -11,6 +12,7 @@ from .tema import Tema
 from .voz import REF_TEXT, Voz
 
 __all__ = [
-    "Ajuste", "Base", "Escena", "Guion", "Idea", "Job", "Metadatos",
-    "ORDEN_ESTADOS", "Proyecto", "REF_TEXT", "Tema", "Voz", "avanzar_estado",
+    "Ajuste", "Base", "Escena", "Guion", "Idea", "ImagenLibre", "Job",
+    "Metadatos", "ORDEN_ESTADOS", "Proyecto", "REF_TEXT", "Tema", "Voz",
+    "avanzar_estado",
 ]

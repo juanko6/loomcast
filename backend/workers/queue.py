@@ -15,7 +15,9 @@ from ..services.pipeline import (
     escena_individual,
     escenas,
     i2v,
+    imagen_libre,
     imagenes,
+    quitar_fondo,
     subtitulos,
     texto,
     upscale,
@@ -33,6 +35,10 @@ HANDLERS = {
     "generar_escenas": escenas.generar_escenas,
     "generar_imagenes": imagenes.generar_imagenes,
     "regenerar_imagen": imagenes.regenerar_imagen,
+    "mejorar_prompt_imagen": imagen_libre.mejorar_prompt,
+    "generar_previews_imagen": imagen_libre.generar_previews,
+    "generar_final_imagen": imagen_libre.generar_final,
+    "quitar_fondo": quitar_fondo.quitar_fondo,
     "regenerar_clip": escena_individual.regenerar_clip,
     "generar_clips_mixto": escena_individual.generar_clips_mixto,
     "generar_upscale": upscale.generar_upscale,
@@ -50,6 +56,7 @@ JOBS_LLM = {
     "generar_guion",
     "generar_metadatos",
     "generar_escenas",
+    "mejorar_prompt_imagen",
 }
 
 # Etapas que se disparan solas al terminar la anterior:
