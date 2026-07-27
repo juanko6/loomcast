@@ -10,6 +10,7 @@ Ver [PLAN.md](PLAN.md) para la arquitectura completa y [fase0/RESULTADOS.md](fas
 
 - macOS con Apple Silicon (desarrollado en M3 Max / 48 GB)
 - Python 3.12
+- Node 20+ y pnpm (solo para compilar el frontend)
 - [llama.cpp](https://github.com/ggml-org/llama.cpp) (`llama-server`) con un modelo instruct en español
 - [ComfyUI](https://github.com/comfyanonymous/ComfyUI) con Z-Image-Turbo (bf16), VAE `ae.safetensors` y text encoder `qwen_3_4b`
 - ffmpeg
@@ -20,6 +21,9 @@ Ver [PLAN.md](PLAN.md) para la arquitectura completa y [fase0/RESULTADOS.md](fas
 python3.12 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 
+# Frontend: se compila una vez (y cada vez que lo toques)
+cd web && pnpm install && pnpm build && cd ..
+
 # 1. llama-server: solo si tu modelo no declara `comando` en config.toml
 #    (con `comando`, lo arranca y lo para Loomcast; ver abajo)
 # 2. ComfyUI corriendo (por defecto 8188)
@@ -28,13 +32,29 @@ python3.12 -m venv .venv
 # UI en http://127.0.0.1:8700
 ```
 
+## Frontend
+
+Estudio multimedia en **Astro + Svelte + Tailwind** (`web/`), con cuatro modos:
+**Vídeos** (el pipeline completo, paso a paso), **Imágenes**, **Música** y
+**Biblioteca** (todo lo creado). El color, la tipografía y el espaciado salen de
+los tokens de `web/src/styles/global.css`.
+
+`uvicorn` sirve el build estático de `web/dist/`, así que en el día a día basta
+con un solo proceso. Para tocar la interfaz con recarga en caliente:
+
+```bash
+cd web && pnpm dev
+# Astro en http://localhost:4321, con proxy de /api hacia el backend en 8700
+```
+
 ## Arquitectura del backend
 
 Capas (de HTTP hacia abajo): `routers/` (controllers: validación y JSON, cero lógica) → `services/` (reglas de negocio; `services/pipeline/` son las etapas de generación) → `repositories/` (consultas a SQLite y carga de plantillas) → `models.py` (ORM + máquina de estados). Transversales: `clients/` (adaptadores a llama-server y Qwen3-TTS), `workers/queue.py` (cola de jobs en un hilo, uno a la vez, con encadenado y recuperación), `schemas.py` (contratos Pydantic de la API).
 
 ## Flujo de creación (UI)
 
-Tema → ideas → seleccionar/aprobar → **1** guion (editar/regenerar) → **2** voz (elegir del banco o crear nueva → generar narración) → **3** metadatos → **4** escenas (generar prompts → editarlos → aceptar y generar imágenes) → **5** armar video final.
+Tema → ideas → seleccionar/aprobar → y ya en el proyecto, los cinco pasos del
+stepper: **1** guion (editar/regenerar) → **2** voz (elegir del banco o crear nueva → generar narración) → **3** metadatos → **4** escenas (generar prompts → editarlos → aceptar y generar imágenes) → **5** armar video final.
 
 Puntos de revisión humana: selección de ideas, guion, elección de voz, y **prompts de escena antes de gastar GPU en las imágenes**.
 

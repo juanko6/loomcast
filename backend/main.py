@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
@@ -12,16 +12,29 @@ from .routers import galeria, ideas, jobs, musica, proyectos, sistema, temas, vo
 from .services import llm_runtime
 from .workers import queue
 
-FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
+# Build estático del frontend (Astro). Se genera con `pnpm build` en `web/`.
+FRONTEND = Path(__file__).resolve().parent.parent / "web" / "dist"
+INDEX = FRONTEND / "index.html"
+
+FALTA_BUILD = (
+    "<h1>Falta compilar el frontend</h1>"
+    "<p>Ejecuta <code>pnpm install &amp;&amp; pnpm build</code> dentro de "
+    "<code>web/</code> y recarga.</p>"
+    "<p>Para desarrollar el frontend con recarga en caliente: "
+    "<code>pnpm dev</code> (Astro en 4321, con proxy de <code>/api</code> "
+    "hacia este servidor).</p>"
+)
 
 
-class NoCacheStatic(StaticFiles):
-    """Sirve el frontend forzando revalidación: al iterar rápido, el navegador
-    no debe quedarse con app.js/style.css viejos en caché."""
+class AppStatic(StaticFiles):
+    """Sirve el build. Los assets de Astro ya llevan hash en el nombre, así que
+    pueden cachearse; el HTML debe revalidar para no servir un índice viejo que
+    apunte a assets que ya no existen."""
 
     def file_response(self, *args, **kwargs) -> Response:
         resp = super().file_response(*args, **kwargs)
-        resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+        if resp.headers.get("content-type", "").startswith("text/html"):
+            resp.headers["Cache-Control"] = "no-cache, must-revalidate"
         return resp
 
 
@@ -50,9 +63,13 @@ app.include_router(musica.router)
 
 @app.get("/")
 def index():
-    return FileResponse(
-        FRONTEND / "index.html", headers={"Cache-Control": "no-cache, must-revalidate"}
-    )
+    if not INDEX.exists():
+        return HTMLResponse(FALTA_BUILD, status_code=503)
+    return FileResponse(INDEX, headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
-app.mount("/static", NoCacheStatic(directory=FRONTEND), name="static")
+# El montaje va al final: los routers de /api ya están registrados y se
+# resuelven antes. Solo se monta si hay build, para que la ayuda de arriba se
+# vea en vez de reventar al arrancar.
+if FRONTEND.is_dir():
+    app.mount("/", AppStatic(directory=FRONTEND, html=True), name="app")
