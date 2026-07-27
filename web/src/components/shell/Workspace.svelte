@@ -5,6 +5,7 @@
   import { modo, jobs } from "@/lib/stores";
   import MusicStudio from "../musica/MusicStudio.svelte";
   import ImageStudio from "../imagenes/ImageStudio.svelte";
+  import VideoStudio from "../videos/VideoStudio.svelte";
   import type { StudioMode } from "@/lib/types";
 
   const titulos: Record<StudioMode, { t: string; sub: string }> = {
@@ -39,6 +40,8 @@
     <MusicStudio />
   {:else if $modo === "imagenes"}
     <ImageStudio />
+  {:else if $modo === "videos"}
+    <VideoStudio />
   {:else if portados.includes($modo)}
     <!-- reservado para futuros modos ya portados -->
   {:else}
