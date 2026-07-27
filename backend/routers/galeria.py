@@ -53,6 +53,14 @@ def detalle(imagen_id: int):
         raise HTTPException(404, "Imagen no existe")
 
 
+@router.post("/{imagen_id}/mejorar")
+def mejorar(imagen_id: int):
+    try:
+        return {"job_id": galeria_service.lanzar_mejorar(imagen_id)}
+    except galeria_service.ImagenNoExiste:
+        raise HTTPException(404, "Imagen no existe")
+
+
 @router.put("/{imagen_id}/prompt")
 def editar_prompt(imagen_id: int, body: GaleriaPromptIn):
     try:

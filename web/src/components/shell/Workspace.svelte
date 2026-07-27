@@ -4,6 +4,7 @@
   // placeholder.
   import { modo, jobs } from "@/lib/stores";
   import MusicStudio from "../musica/MusicStudio.svelte";
+  import ImageStudio from "../imagenes/ImageStudio.svelte";
   import type { StudioMode } from "@/lib/types";
 
   const titulos: Record<StudioMode, { t: string; sub: string }> = {
@@ -14,7 +15,7 @@
   };
 
   let info = $derived(titulos[$modo]);
-  const portados: StudioMode[] = ["musica"];
+  const portados: StudioMode[] = ["musica", "imagenes"];
 </script>
 
 <section class="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -36,6 +37,8 @@
 
   {#if $modo === "musica"}
     <MusicStudio />
+  {:else if $modo === "imagenes"}
+    <ImageStudio />
   {:else if portados.includes($modo)}
     <!-- reservado para futuros modos ya portados -->
   {:else}

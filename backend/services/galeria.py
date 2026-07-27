@@ -41,8 +41,9 @@ def crear_generar(idea: str, width: int, height: int) -> dict:
         img = galeria_repo.crear(s, "generar", idea.strip(), w, h)
         s.commit()
         imagen_id = img.id
-    job_id = queue.encolar("mejorar_prompt_imagen", imagen_id)
-    return {"id": imagen_id, "job_id": job_id}
+    # Mejorar el prompt con el LLM es un paso opcional: lo lanza el usuario
+    # desde la UI (`lanzar_mejorar`), no se encola al crear.
+    return {"id": imagen_id}
 
 
 def crear_editar(idea: str, width: int, height: int, data: bytes) -> dict:
@@ -58,8 +59,15 @@ def crear_editar(idea: str, width: int, height: int, data: bytes) -> dict:
     Image.open(io.BytesIO(data)).convert("RGB").save(
         imagen_libre.ruta_fuente(imagen_id), "PNG"
     )
-    job_id = queue.encolar("mejorar_prompt_imagen", imagen_id)
-    return {"id": imagen_id, "job_id": job_id}
+    return {"id": imagen_id}
+
+
+def lanzar_mejorar(imagen_id: int) -> int:
+    """Mejora el prompt con el LLM. Paso opcional, a petición del usuario."""
+    with get_session() as s:
+        if galeria_repo.obtener(s, imagen_id) is None:
+            raise ImagenNoExiste(imagen_id)
+    return queue.encolar("mejorar_prompt_imagen", imagen_id)
 
 
 def crear_quitarfondo(nombre: str, data: bytes) -> dict:
