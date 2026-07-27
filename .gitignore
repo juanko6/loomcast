@@ -6,20 +6,28 @@ venv/
 fase0/venv/
 
 # Herramientas y binarios descargados
-tools/
+# Anclados a la raíz (con /) para que NO oculten directorios homónimos del
+# frontend, p.ej. web/src/components/musica|galeria — Tailwind respeta .gitignore
+# y un patrón sin ancla ("musica/") esconde esas carpetas de su escaneo.
+/tools/
 
-# Salidas generadas
-logs/
+# Salidas generadas (todas en la raíz del proyecto, por eso van ancladas)
+/logs/
 fase0/rife_test/
 fase0/*.wav
-proyectos/
-galeria/
-musica/
-pruebas_i2v/
+/proyectos/
+/galeria/
+/musica/
+/pruebas_i2v/
 *.db
 # Videos de referencia (pesan ~100 MB; son material de consulta, no fuente)
 referencias/*.mp4
 
 # macOS
 .DS_Store
-voces/
+/voces/
+
+# Frontend Astro (Loomcast Studio)
+web/node_modules/
+web/dist/
+web/.astro/

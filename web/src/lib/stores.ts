@@ -1,0 +1,77 @@
+// Estado global de la app (dentro de la isla raíz): salud del sistema, cola de
+// jobs y modelo de texto activo. Usa stores de Svelte para que cualquier
+// componente se suscriba sin pasar props en cadena.
+import { writable, get } from "svelte/store";
+import { api } from "./api";
+import type { Salud, ModeloLLM, Job, StudioMode } from "./types";
+
+export const modo = writable<StudioMode>("videos");
+
+export const salud = writable<Salud | null>(null);
+export const modelos = writable<ModeloLLM[]>([]);
+export const modeloActivo = writable<string>("");
+export const jobs = writable<Job[]>([]);
+
+// Señal que se incrementa cada vez que la cola se vacía un poco (un job
+// terminó): las vistas se suscriben para refrescarse solas, como hacía el
+// polling del app.js original.
+export const jobsDrenados = writable<number>(0);
+
+let jobsPrevios = 0;
+
+export async function refrescarSalud(): Promise<void> {
+  try {
+    salud.set(await api<Salud>("/salud"));
+  } catch {
+    /* backend caído: dejamos el último estado conocido */
+  }
+}
+
+export async function cargarModelos(): Promise<void> {
+  const { activo, modelos: lista } = await api<{ activo: string; modelos: ModeloLLM[] }>(
+    "/llm/modelos",
+  );
+  modelos.set(lista);
+  modeloActivo.set(activo);
+}
+
+export async function cambiarModelo(id: string): Promise<void> {
+  await api("/llm/modelo", { method: "POST", body: { id } });
+  modeloActivo.set(id);
+  refrescarSalud();
+}
+
+export async function refrescarJobs(): Promise<void> {
+  try {
+    const lista = await api<Job[]>("/jobs");
+    jobs.set(lista);
+    if (jobsPrevios > 0 && lista.length < jobsPrevios) {
+      jobsDrenados.update((n) => n + 1);
+    }
+    jobsPrevios = lista.length;
+  } catch {
+    /* ignorar caídas puntuales del polling */
+  }
+}
+
+let timers: ReturnType<typeof setInterval>[] = [];
+
+// Arranca el polling de salud (15s) y cola (2.5s). Idempotente.
+export function iniciarPolling(): void {
+  detenerPolling();
+  refrescarSalud();
+  refrescarJobs();
+  timers = [
+    setInterval(refrescarSalud, 15000),
+    setInterval(refrescarJobs, 2500),
+  ];
+}
+
+export function detenerPolling(): void {
+  timers.forEach(clearInterval);
+  timers = [];
+}
+
+export function hayCola(): boolean {
+  return get(jobs).length > 0;
+}
