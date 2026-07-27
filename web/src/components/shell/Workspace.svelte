@@ -6,6 +6,7 @@
   import MusicStudio from "../musica/MusicStudio.svelte";
   import ImageStudio from "../imagenes/ImageStudio.svelte";
   import VideoStudio from "../videos/VideoStudio.svelte";
+  import LibraryStudio from "../biblioteca/LibraryStudio.svelte";
   import type { StudioMode } from "@/lib/types";
 
   const titulos: Record<StudioMode, { t: string; sub: string }> = {
@@ -16,7 +17,6 @@
   };
 
   let info = $derived(titulos[$modo]);
-  const portados: StudioMode[] = ["musica", "imagenes"];
 </script>
 
 <section class="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -36,24 +36,13 @@
     {/if}
   </header>
 
-  {#if $modo === "musica"}
-    <MusicStudio />
+  {#if $modo === "videos"}
+    <VideoStudio />
   {:else if $modo === "imagenes"}
     <ImageStudio />
-  {:else if $modo === "videos"}
-    <VideoStudio />
-  {:else if portados.includes($modo)}
-    <!-- reservado para futuros modos ya portados -->
+  {:else if $modo === "musica"}
+    <MusicStudio />
   {:else}
-    <div class="min-h-0 flex-1 overflow-y-auto px-7 py-6">
-      <div class="grid h-full min-h-[60vh] place-items-center rounded-xl border border-dashed border-line text-center">
-        <div class="max-w-sm px-6">
-          <p class="text-sm text-dim">
-            El modo <b class="text-text">{info.t}</b> se está portando a la nueva
-            arquitectura. La estructura (rail, workspace, tokens) ya está viva.
-          </p>
-        </div>
-      </div>
-    </div>
+    <LibraryStudio />
   {/if}
 </section>

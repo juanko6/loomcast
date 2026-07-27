@@ -4,7 +4,7 @@
   import ImageConfig from "./ImageConfig.svelte";
   import ImageDetail from "./ImageDetail.svelte";
   import Button from "../primitives/Button.svelte";
-  import { jobsDrenados, refrescarJobs } from "@/lib/stores";
+  import { jobsDrenados, refrescarJobs, seleccionPendiente } from "@/lib/stores";
   import { currentTrack } from "@/lib/player";
   import {
     listarGaleria,
@@ -149,6 +149,15 @@
       refreshList();
       if (selectedId != null) loadDetail(selectedId);
       bust = n;
+    }
+  });
+
+  // Salto desde la Biblioteca: abre la imagen pedida y consume la señal.
+  $effect(() => {
+    const sel = $seleccionPendiente;
+    if (sel?.modo === "imagenes") {
+      seleccionPendiente.set(null);
+      select(sel.id);
     }
   });
 

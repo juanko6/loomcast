@@ -7,7 +7,7 @@
   import Viewer from "../primitives/Viewer.svelte";
   import IdeasView from "./IdeasView.svelte";
   import ProjectView from "./ProjectView.svelte";
-  import { jobsDrenados, refrescarJobs } from "@/lib/stores";
+  import { jobsDrenados, refrescarJobs, seleccionPendiente } from "@/lib/stores";
   import { currentTrack } from "@/lib/player";
   import * as API from "@/lib/proyectos";
   import type { Idea, ProyectoDetalle, Voz } from "@/lib/proyectos";
@@ -220,6 +220,15 @@
       refrescarListas();
       cargarVista();
       API.listarVoces().then((v) => (voces = v)).catch(() => {});
+    }
+  });
+
+  // Salto desde la Biblioteca: abre el proyecto pedido y consume la señal.
+  $effect(() => {
+    const sel = $seleccionPendiente;
+    if (sel?.modo === "videos") {
+      seleccionPendiente.set(null);
+      irA("proyecto", sel.id);
     }
   });
 

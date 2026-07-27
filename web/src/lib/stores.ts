@@ -7,6 +7,15 @@ import type { Salud, ModeloLLM, Job, StudioMode } from "./types";
 
 export const modo = writable<StudioMode>("videos");
 
+// Salto entre modos con un elemento ya elegido: la Biblioteca lo fija y el
+// estudio de destino lo consume al montarse/reaccionar (y lo limpia).
+export const seleccionPendiente = writable<{ modo: StudioMode; id: number } | null>(null);
+
+export function abrirEn(destino: StudioMode, id: number): void {
+  seleccionPendiente.set({ modo: destino, id });
+  modo.set(destino);
+}
+
 export const salud = writable<Salud | null>(null);
 export const modelos = writable<ModeloLLM[]>([]);
 export const modeloActivo = writable<string>("");

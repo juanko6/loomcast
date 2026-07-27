@@ -4,7 +4,7 @@
   import MusicConfig from "./MusicConfig.svelte";
   import TrackDetail from "./TrackDetail.svelte";
   import Button from "../primitives/Button.svelte";
-  import { jobsDrenados, refrescarJobs } from "@/lib/stores";
+  import { jobsDrenados, refrescarJobs, seleccionPendiente } from "@/lib/stores";
   import { currentTrack } from "@/lib/player";
   import {
     listarMusica,
@@ -113,6 +113,15 @@
       ultimoDrenaje = n;
       refreshList();
       if (selectedId != null) loadDetail(selectedId);
+    }
+  });
+
+  // Salto desde la Biblioteca: abre la pista pedida y consume la señal.
+  $effect(() => {
+    const sel = $seleccionPendiente;
+    if (sel?.modo === "musica") {
+      seleccionPendiente.set(null);
+      selectTrack(sel.id);
     }
   });
 
