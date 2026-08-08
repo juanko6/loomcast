@@ -1,7 +1,7 @@
 {
   "3": {
     "inputs": {
-      "seed": {SEED},
+      "seed": "{SEED}",
       "steps": 50,
       "cfg": 5.0,
       "sampler_name": "euler",
@@ -46,7 +46,7 @@
   },
   "17": {
     "inputs": {
-      "seconds": {DURACION},
+      "seconds": "{DURACION}",
       "batch_size": 1
     },
     "class_type": "EmptyAceStepLatentAudio",

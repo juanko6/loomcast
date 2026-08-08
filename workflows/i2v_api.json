@@ -6,9 +6,9 @@
     }
   },
   "clip": {
-    "class_type": "DualCLIPLoader",
+    "class_type": "DualClipLoaderGGUF",
     "inputs": {
-      "clip_name1": "qwen_2.5_vl_7b.safetensors",
+      "clip_name1": "qwen2.5-vl-7b-test-q4_0.gguf",
       "clip_name2": "byt5_small_glyphxl_fp16.safetensors",
       "type": "hunyuan_video_15",
       "device": "default"
@@ -50,7 +50,7 @@
       "vae": ["vae", 0],
       "width": 480,
       "height": 848,
-      "length": {FRAMES},
+      "length": "{FRAMES}",
       "batch_size": 1,
       "start_image": ["load", 0],
       "clip_vision_output": ["cvenc", 0]
@@ -75,7 +75,7 @@
   },
   "noise": {
     "class_type": "RandomNoise",
-    "inputs": { "noise_seed": {SEED} }
+    "inputs": { "noise_seed": "{SEED}" }
   },
   "guider": {
     "class_type": "CFGGuider",

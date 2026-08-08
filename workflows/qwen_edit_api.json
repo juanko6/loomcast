@@ -54,7 +54,7 @@
       "positive": ["positive", 0],
       "negative": ["negative", 0],
       "latent_image": ["latent", 0],
-      "seed": {SEED},
+      "seed": "{SEED}",
       "steps": 4,
       "cfg": 1.0,
       "sampler_name": "euler",

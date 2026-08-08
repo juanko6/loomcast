@@ -18,6 +18,8 @@ from ..config import (
 
 WORKFLOW_ZIMAGE = ROOT / "workflows" / "z_image_turbo_api.json"
 WORKFLOW_ESRGAN = ROOT / "workflows" / "esrgan_api.json"
+# Tamaño del latente cuando quien llama no especifica uno (pipeline de vídeo).
+WIDTH_DEFECTO, HEIGHT_DEFECTO = 768, 1344
 TIMEOUT_S = COMFY_TIMEOUT_S
 EXT_VIDEO = (".mp4", ".webm", ".mkv", ".mov", ".gif")
 EXT_AUDIO = (".flac", ".mp3", ".wav", ".opus", ".ogg", ".m4a")
@@ -25,6 +27,27 @@ EXT_AUDIO = (".flac", ".mp3", ".wav", ".opus", ".ogg", ".m4a")
 
 class ComfyError(RuntimeError):
     pass
+
+
+def _render(crudo: str, **valores) -> dict:
+    """Sustituye los placeholders de un workflow y devuelve el JSON resultante.
+
+    Los placeholders de texto ({PROMPT}, {IMAGE}, {TAGS}…) viven dentro de
+    comillas y se escapan para no romper el JSON. Los numéricos ({SEED},
+    {WIDTH}, {FRAMES}…) van **entrecomillados en el archivo** y se sustituyen
+    incluyendo las comillas: así el workflow sigue siendo JSON válido y se puede
+    abrir tal cual en ComfyUI, pero ComfyUI recibe el número.
+    """
+    for clave, valor in valores.items():
+        marca = "{" + clave + "}"
+        if isinstance(valor, str):
+            crudo = crudo.replace(marca, json.dumps(valor)[1:-1])
+        else:
+            crudo = crudo.replace(f'"{marca}"', str(valor))
+    faltan = [m for m in valores if "{" + m + "}" in crudo]
+    if faltan:
+        raise ComfyError(f"Placeholders sin sustituir en el workflow: {faltan}")
+    return json.loads(crudo)
 
 
 def _encolar_y_esperar(c: httpx.Client, workflow: dict) -> dict:
@@ -155,17 +178,16 @@ def generar_imagen(
 ) -> None:
     """Genera una imagen con Z-Image-Turbo y la guarda en `destino`.
 
-    Con `width`/`height` se sobreescribe el tamaño del latente del workflow; si
-    son None se respetan los valores del JSON (así la etapa de escenas del
-    pipeline sigue funcionando sin cambios)."""
-    wf = json.loads(WORKFLOW_ZIMAGE.read_text())
-    wf["positive"]["inputs"]["text"] = prompt
-    wf["sampler"]["inputs"]["seed"] = seed
-    if width is not None:
-        wf["latent"]["inputs"]["width"] = width
-    if height is not None:
-        wf["latent"]["inputs"]["height"] = height
+    Con `width`/`height` a None se usa el tamaño por defecto (así la etapa de
+    escenas del pipeline sigue funcionando sin cambios)."""
     with httpx.Client(timeout=30) as c:
+        wf = _render(
+            WORKFLOW_ZIMAGE.read_text(),
+            PROMPT=prompt,
+            SEED=seed,
+            WIDTH=width if width is not None else WIDTH_DEFECTO,
+            HEIGHT=height if height is not None else HEIGHT_DEFECTO,
+        )
         entry = _encolar_y_esperar(c, wf)
         _descargar_primera_imagen(c, entry, destino)
 
@@ -175,8 +197,7 @@ def editar_imagen(imagen: Path, prompt: str, seed: int, destino: Path) -> None:
     resultado en `destino`.
 
     El workflow (config: [edicion].workflow) debe traer los placeholders
-    {IMAGE}, {PROMPT} y {SEED}, igual que el de i2v. {SEED} se sustituye sin
-    comillas (valor numérico) y {PROMPT} escapado para vivir dentro del JSON."""
+    {IMAGE}, {PROMPT} y {SEED}, igual que el de i2v."""
     wf_path = ROOT / EDIT_WORKFLOW
     if not wf_path.exists():
         raise ComfyError(
@@ -187,12 +208,7 @@ def editar_imagen(imagen: Path, prompt: str, seed: int, destino: Path) -> None:
         )
     with httpx.Client(timeout=30) as c:
         nombre = _subir_imagen(c, imagen)
-        crudo = wf_path.read_text()
-        wf = json.loads(
-            crudo.replace("{IMAGE}", nombre)
-            .replace("{PROMPT}", json.dumps(prompt)[1:-1])
-            .replace("{SEED}", str(seed))
-        )
+        wf = _render(wf_path.read_text(), IMAGE=nombre, PROMPT=prompt, SEED=seed)
         entry = _encolar_y_esperar(c, wf)
         _descargar_primera_imagen(c, entry, destino)
 
@@ -211,8 +227,8 @@ def generar_video_i2v(imagen: Path, prompt: str, seed: int, destino: Path) -> No
     """Anima una imagen con el workflow i2v configurable (LTX, WAN, etc.).
 
     El workflow (config: [i2v].workflow) debe traer los placeholders {IMAGE},
-    {PROMPT}, {SEED} y {FRAMES} en cualquier valor de sus nodos. {SEED} y
-    {FRAMES} se sustituyen sin comillas, así que van como valor numérico.
+    {PROMPT}, {SEED} y {FRAMES} en cualquier valor de sus nodos. Los numéricos
+    ({SEED}, {FRAMES}) van entrecomillados en el JSON; ver `_render`.
     """
     wf_path = ROOT / I2V_WORKFLOW
     if not wf_path.exists():
@@ -224,12 +240,12 @@ def generar_video_i2v(imagen: Path, prompt: str, seed: int, destino: Path) -> No
         )
     with httpx.Client(timeout=30) as c:
         nombre = _subir_imagen(c, imagen)
-        crudo = wf_path.read_text()
-        wf = json.loads(
-            crudo.replace("{IMAGE}", nombre)
-            .replace("{PROMPT}", json.dumps(prompt)[1:-1])
-            .replace("{SEED}", str(seed))
-            .replace("{FRAMES}", str(I2V_FRAMES))
+        wf = _render(
+            wf_path.read_text(),
+            IMAGE=nombre,
+            PROMPT=prompt,
+            SEED=seed,
+            FRAMES=I2V_FRAMES,
         )
         entry = _encolar_y_esperar(c, wf)
         _descargar_primer_video(c, entry, destino)
@@ -248,8 +264,8 @@ def generar_musica(
 
     El workflow (config: [musica].workflow) debe traer los placeholders
     {TAGS}, {LYRICS}, {SEED} y {DURACION}, y terminar en un nodo de guardado de
-    audio (SaveAudio / SaveAudioMP3). {SEED} y {DURACION} van como valor numérico
-    (sin comillas); {TAGS} y {LYRICS} escapados para vivir dentro del JSON.
+    audio (SaveAudio / SaveAudioMP3). Los numéricos ({SEED}, {DURACION}) van
+    entrecomillados en el JSON; ver `_render`.
     """
     wf_path = ROOT / MUSICA_WORKFLOW
     if not wf_path.exists():
@@ -260,12 +276,12 @@ def generar_musica(
             "ruta (o ajusta config.toml [musica].workflow)."
         )
     with httpx.Client(timeout=30) as c:
-        crudo = wf_path.read_text()
-        wf = json.loads(
-            crudo.replace("{TAGS}", json.dumps(tags)[1:-1])
-            .replace("{LYRICS}", json.dumps(lyrics)[1:-1])
-            .replace("{SEED}", str(seed))
-            .replace("{DURACION}", str(duracion_s))
+        wf = _render(
+            wf_path.read_text(),
+            TAGS=tags,
+            LYRICS=lyrics,
+            SEED=seed,
+            DURACION=duracion_s,
         )
         entry = _encolar_y_esperar(c, wf)
         return _descargar_primer_audio(c, entry, destino)
