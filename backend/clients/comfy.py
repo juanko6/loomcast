@@ -9,17 +9,18 @@ import httpx
 from ..config import (
     COMFY_TIMEOUT_S,
     COMFY_URL,
-    EDIT_WORKFLOW,
     I2V_FRAMES,
     I2V_WORKFLOW,
+    IMAGEN_HEIGHT,
+    IMAGEN_MOTOR_EDITAR,
+    IMAGEN_MOTOR_GENERAR,
+    IMAGEN_MOTORES,
+    IMAGEN_WIDTH,
     MUSICA_WORKFLOW,
     ROOT,
 )
 
-WORKFLOW_ZIMAGE = ROOT / "workflows" / "z_image_turbo_api.json"
 WORKFLOW_ESRGAN = ROOT / "workflows" / "esrgan_api.json"
-# Tamaño del latente cuando quien llama no especifica uno (pipeline de vídeo).
-WIDTH_DEFECTO, HEIGHT_DEFECTO = 768, 1344
 TIMEOUT_S = COMFY_TIMEOUT_S
 EXT_VIDEO = (".mp4", ".webm", ".mkv", ".mov", ".gif")
 EXT_AUDIO = (".flac", ".mp3", ".wav", ".opus", ".ogg", ".m4a")
@@ -48,6 +49,30 @@ def _render(crudo: str, **valores) -> dict:
     if faltan:
         raise ComfyError(f"Placeholders sin sustituir en el workflow: {faltan}")
     return json.loads(crudo)
+
+
+def _workflow_motor(motor_id: str | None, modo: str) -> Path:
+    """Ruta del workflow que un motor usa para `modo` (generar | editar)."""
+    motor_id = motor_id or (
+        IMAGEN_MOTOR_GENERAR if modo == "generar" else IMAGEN_MOTOR_EDITAR
+    )
+    motor = IMAGEN_MOTORES.get(motor_id)
+    if motor is None:
+        raise ComfyError(
+            f"Motor de imagen desconocido: '{motor_id}'. "
+            f"Declarados en config.toml: {sorted(IMAGEN_MOTORES)}"
+        )
+    relativa = motor.workflow(modo)
+    if relativa is None:
+        raise ComfyError(f"El motor '{motor.nombre}' no sabe {modo} imágenes")
+    ruta = ROOT / relativa
+    if not ruta.exists():
+        raise ComfyError(
+            f"No existe el workflow de {modo} del motor '{motor.nombre}' en {ruta}. "
+            "Expórtalo de ComfyUI en formato API con sus placeholders y un nodo "
+            "SaveImage, o ajusta config.toml [imagen.motores]."
+        )
+    return ruta
 
 
 def _encolar_y_esperar(c: httpx.Client, workflow: dict) -> dict:
@@ -175,37 +200,41 @@ def generar_imagen(
     destino: Path,
     width: int | None = None,
     height: int | None = None,
+    motor: str | None = None,
 ) -> None:
-    """Genera una imagen con Z-Image-Turbo y la guarda en `destino`.
+    """Genera una imagen desde texto con el motor indicado y la guarda en
+    `destino`.
 
-    Con `width`/`height` a None se usa el tamaño por defecto (así la etapa de
-    escenas del pipeline sigue funcionando sin cambios)."""
+    `motor` es un id de [imagen.motores] de config.toml; None usa el de
+    [imagen].motor_generar. Con `width`/`height` a None se usa el tamaño por
+    defecto de config (lo que hace el pipeline de vídeo)."""
+    wf_path = _workflow_motor(motor, "generar")
     with httpx.Client(timeout=30) as c:
         wf = _render(
-            WORKFLOW_ZIMAGE.read_text(),
+            wf_path.read_text(),
             PROMPT=prompt,
             SEED=seed,
-            WIDTH=width if width is not None else WIDTH_DEFECTO,
-            HEIGHT=height if height is not None else HEIGHT_DEFECTO,
+            WIDTH=width if width is not None else IMAGEN_WIDTH,
+            HEIGHT=height if height is not None else IMAGEN_HEIGHT,
         )
         entry = _encolar_y_esperar(c, wf)
         _descargar_primera_imagen(c, entry, destino)
 
 
-def editar_imagen(imagen: Path, prompt: str, seed: int, destino: Path) -> None:
-    """Edita una imagen con el workflow instruct-edit configurable y guarda el
+def editar_imagen(
+    imagen: Path,
+    prompt: str,
+    seed: int,
+    destino: Path,
+    motor: str | None = None,
+) -> None:
+    """Edita una imagen con el motor instruct-edit indicado y guarda el
     resultado en `destino`.
 
-    El workflow (config: [edicion].workflow) debe traer los placeholders
-    {IMAGE}, {PROMPT} y {SEED}, igual que el de i2v."""
-    wf_path = ROOT / EDIT_WORKFLOW
-    if not wf_path.exists():
-        raise ComfyError(
-            f"No existe el workflow de edición en {wf_path}. Exporta tu workflow "
-            "instruct-edit de ComfyUI en formato API con los placeholders "
-            "{IMAGE}, {PROMPT} y {SEED} (y un nodo SaveImage), y ponlo en esa "
-            "ruta (o ajusta config.toml [edicion].workflow)."
-        )
+    `motor` es un id de [imagen.motores] de config.toml; None usa el de
+    [imagen].motor_editar. El workflow debe traer los placeholders {IMAGE},
+    {PROMPT} y {SEED}."""
+    wf_path = _workflow_motor(motor, "editar")
     with httpx.Client(timeout=30) as c:
         nombre = _subir_imagen(c, imagen)
         wf = _render(wf_path.read_text(), IMAGE=nombre, PROMPT=prompt, SEED=seed)

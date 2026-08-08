@@ -6,7 +6,8 @@ Tres etapas, cada una disparada por el usuario desde la UI:
   3. generar_final    — ESRGAN x4 sobre la preview elegida (máxima resolución).
 
 El modo (`tipo`) decide la etapa 1 (qué prompt de sistema) y la etapa 2 (generar
-desde texto con Z-Image, o editar la imagen subida con el modelo instruct-edit).
+desde texto o editar la imagen subida); el `motor` guardado en la entrada decide
+con qué modelo de [imagen.motores] se hace esa etapa 2.
 """
 import random
 
@@ -67,6 +68,7 @@ def generar_previews(imagen_id: int) -> str:
         if not img.prompt:
             raise ValueError("La imagen no tiene prompt todavía")
         tipo, prompt, width, height = img.tipo, img.prompt, img.width, img.height
+        motor = img.motor or None
 
     carpeta(imagen_id).mkdir(parents=True, exist_ok=True)
     seeds = [random.randint(0, 2**31 - 1) for _ in range(N_PREVIEWS)]
@@ -74,9 +76,11 @@ def generar_previews(imagen_id: int) -> str:
         for i, seed in enumerate(seeds):
             destino = ruta_preview(imagen_id, i)
             if tipo == "editar":
-                comfy.editar_imagen(ruta_fuente(imagen_id), prompt, seed, destino)
+                comfy.editar_imagen(
+                    ruta_fuente(imagen_id), prompt, seed, destino, motor
+                )
             else:
-                comfy.generar_imagen(prompt, seed, destino, width, height)
+                comfy.generar_imagen(prompt, seed, destino, width, height, motor)
     finally:
         comfy.liberar_memoria()
 

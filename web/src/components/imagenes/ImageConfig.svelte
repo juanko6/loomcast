@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import Field from "../primitives/Field.svelte";
   import Segmented from "../primitives/Segmented.svelte";
   import Button from "../primitives/Button.svelte";
   import Icon from "../primitives/Icon.svelte";
-  import { TAMANOS } from "@/lib/galeria";
+  import { TAMANOS, listarMotores, type MotorImagen } from "@/lib/galeria";
   import type { TipoGaleria } from "@/lib/types";
 
   let {
@@ -13,12 +14,37 @@
     oncreateFondo,
   }: {
     busy?: boolean;
-    oncreateGenerar: (p: { idea: string; width: number; height: number }) => void;
-    oncreateEditar: (p: { idea: string; file: File }) => void;
+    oncreateGenerar: (p: {
+      idea: string;
+      width: number;
+      height: number;
+      motor: string;
+    }) => void;
+    oncreateEditar: (p: { idea: string; file: File; motor: string }) => void;
     oncreateFondo: (p: { file: File }) => void;
   } = $props();
 
   let tipo = $state<TipoGaleria>("generar");
+  let motores = $state<MotorImagen[]>([]);
+  // Motor elegido por modo: cambiar de Generar a Editar no debe perder la
+  // elección del otro, y cada modo tiene su propio motor por defecto.
+  let motorPorModo = $state<Record<string, string>>({ generar: "", editar: "" });
+
+  // Motores que saben hacer el modo activo (quitarfondo no pasa por ComfyUI).
+  const motoresDelModo = $derived(
+    tipo === "quitarfondo" ? [] : motores.filter((m) => m.modos.includes(tipo)),
+  );
+  const motorElegido = $derived(motorPorModo[tipo] ?? "");
+
+  onMount(async () => {
+    motores = await listarMotores();
+    for (const modo of ["generar", "editar"] as const) {
+      motorPorModo[modo] =
+        motores.find((m) => m.defecto_en.includes(modo))?.id ??
+        motores.find((m) => m.modos.includes(modo))?.id ??
+        "";
+    }
+  });
   let idea = $state("");
   let tamano = $state(`${TAMANOS[0].w}x${TAMANOS[0].h}`);
   let customW = $state(1024);
@@ -52,9 +78,9 @@
   function crear() {
     if (tipo === "generar") {
       const [w, h] = tamanoElegido();
-      oncreateGenerar({ idea: idea.trim(), width: w, height: h });
+      oncreateGenerar({ idea: idea.trim(), width: w, height: h, motor: motorElegido });
     } else if (tipo === "editar" && file) {
-      oncreateEditar({ idea: idea.trim(), file });
+      oncreateEditar({ idea: idea.trim(), file, motor: motorElegido });
     } else if (tipo === "quitarfondo" && file) {
       oncreateFondo({ file });
     }
@@ -85,6 +111,16 @@
       value={tipo}
       onchange={(v) => (tipo = v as TipoGaleria)}
     />
+
+    {#if motoresDelModo.length > 1}
+      <Field label="Modelo">
+        <select class="control" value={motorElegido} onchange={(e) => (motorPorModo[tipo] = e.currentTarget.value)}>
+          {#each motoresDelModo as m (m.id)}
+            <option value={m.id}>{m.nombre}</option>
+          {/each}
+        </select>
+      </Field>
+    {/if}
 
     {#if usaArchivo}
       <Field label="Imagen de origen">

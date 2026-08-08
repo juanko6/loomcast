@@ -5,6 +5,8 @@ import type { GaleriaResumen, TipoGaleria } from "./types";
 export interface GaleriaDetalle {
   id: number;
   tipo: TipoGaleria;
+  motor: string;
+  motor_nombre: string;
   idea: string;
   prompt: string | null;
   width: number;
@@ -13,6 +15,15 @@ export interface GaleriaDetalle {
   seeds: number[];
   seed_elegido: number | null;
   ocupado: boolean;
+}
+
+// Un modelo de [imagen.motores] de config.toml. `modos` son los que sabe hacer
+// y `defecto_en` aquellos en los que va preseleccionado.
+export interface MotorImagen {
+  id: string;
+  nombre: string;
+  modos: ("generar" | "editar")[];
+  defecto_en: ("generar" | "editar")[];
 }
 
 // Presets de tamaño (solo aplican al modo "generar"; al editar, el tamaño de
@@ -28,13 +39,20 @@ export const TAMANOS: { label: string; w: number; h: number }[] = [
 export const listarGaleria = () => api<GaleriaResumen[]>("/galeria");
 export const detalleGaleria = (id: number) => api<GaleriaDetalle>(`/galeria/${id}`);
 
-export const crearGenerar = (body: { idea: string; width: number; height: number }) =>
-  api<{ id: number }>("/galeria", { method: "POST", body });
+export const listarMotores = () => api<MotorImagen[]>("/galeria/motores");
 
-export function crearEditar(idea: string, file: File) {
+export const crearGenerar = (body: {
+  idea: string;
+  width: number;
+  height: number;
+  motor: string;
+}) => api<{ id: number }>("/galeria", { method: "POST", body });
+
+export function crearEditar(idea: string, file: File, motor: string) {
   const fd = new FormData();
   fd.append("idea", idea);
   fd.append("imagen", file);
+  fd.append("motor", motor);
   return apiForm<{ id: number }>("/galeria/editar", fd);
 }
 

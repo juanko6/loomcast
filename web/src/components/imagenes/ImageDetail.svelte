@@ -47,6 +47,11 @@
 <aside class="flex h-full w-[420px] min-w-0 shrink-0 flex-col border-l border-line bg-surface">
   <header class="flex items-center gap-2 border-b border-line px-5 py-4">
     <h2 class="text-sm font-semibold">Trabajo</h2>
+    {#if detail && !esFondo && detail.motor_nombre}
+      <span class="ml-auto rounded-full border border-line px-2 py-0.5 text-xs text-dim">
+        {detail.motor_nombre}
+      </span>
+    {/if}
   </header>
 
   <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">

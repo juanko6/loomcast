@@ -86,11 +86,58 @@ _rife = _cfg.get("rife", {})
 RIFE_BIN: str = _rife.get("bin", "tools/rife-ncnn-vulkan-20221029-macos/rife-ncnn-vulkan")
 RIFE_MODELO: str = _rife.get("modelo", "rife-v4.6")
 
-# Edición de imágenes (galería): workflow de ComfyUI con un modelo instruct-edit
-# (Qwen-Image-Edit, Flux Kontext…) que el usuario exporta en formato API con los
-# placeholders {IMAGE}, {PROMPT} y {SEED}, igual que el de i2v.
-_edicion = _cfg.get("edicion", {})
-EDIT_WORKFLOW: str = _edicion.get("workflow", "workflows/qwen_edit_api.json")
+@dataclass(frozen=True)
+class MotorImagen:
+    """Un motor de imagen declarado en [imagen.motores.*] de config.toml.
+
+    Cada motor sabe hacer los modos para los que declara workflow: `generar`
+    (texto→imagen) y/o `editar` (instruct-edit sobre una imagen subida). Los que
+    no declara simplemente no aparecen como opción en ese modo.
+    """
+
+    id: str
+    nombre: str
+    generar: str | None
+    editar: str | None
+
+    def workflow(self, modo: str) -> str | None:
+        return self.generar if modo == "generar" else self.editar
+
+    @property
+    def modos(self) -> list[str]:
+        return [m for m in ("generar", "editar") if self.workflow(m)]
+
+
+_imagen = _cfg.get("imagen", {})
+IMAGEN_MOTORES: dict[str, MotorImagen] = {
+    id_: MotorImagen(
+        id=id_,
+        nombre=bruto.get("nombre", id_),
+        generar=bruto.get("generar"),
+        editar=bruto.get("editar"),
+    )
+    for id_, bruto in _imagen.get("motores", {}).items()
+}
+if not IMAGEN_MOTORES:
+    raise ValueError("config.toml no declara ningún [imagen.motores.*]")
+for _motor in IMAGEN_MOTORES.values():
+    if not _motor.modos:
+        raise ValueError(
+            f"El motor de imagen '{_motor.id}' no declara ni 'generar' ni 'editar'"
+        )
+
+IMAGEN_MOTOR_GENERAR: str = _imagen.get("motor_generar", "zimage")
+IMAGEN_MOTOR_EDITAR: str = _imagen.get("motor_editar", "qwen")
+for _modo, _defecto in (("generar", IMAGEN_MOTOR_GENERAR), ("editar", IMAGEN_MOTOR_EDITAR)):
+    _m = IMAGEN_MOTORES.get(_defecto)
+    if _m is None or _modo not in _m.modos:
+        raise ValueError(
+            f"[imagen].motor_{_modo} = '{_defecto}' no existe o no sabe {_modo}. "
+            f"Motores que sí: {[m.id for m in IMAGEN_MOTORES.values() if _modo in m.modos]}"
+        )
+
+IMAGEN_WIDTH: int = _imagen.get("width", 768)
+IMAGEN_HEIGHT: int = _imagen.get("height", 1344)
 
 # Generación de música (ACE-Step). Como en [i2v]/[edicion], apunta a un workflow
 # de ComfyUI en formato API que TÚ exportas con los placeholders {TAGS},

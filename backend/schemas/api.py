@@ -78,6 +78,8 @@ class GaleriaGenerarIn(BaseModel):
     idea: str
     width: int = 768
     height: int = 1344
+    # Id de [imagen.motores] de config.toml; None = el motor por defecto.
+    motor: str | None = None
 
 
 class GaleriaPromptIn(BaseModel):

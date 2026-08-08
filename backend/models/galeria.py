@@ -22,6 +22,10 @@ class ImagenLibre(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     # generar | editar
     tipo: Mapped[str] = mapped_column(default="generar")
+    # Id del motor de [imagen.motores] de config.toml con el que se generan las
+    # previews (Z-Image, FLUX.2 Klein, Qwen-Image-Edit…). Vacío = el motor por
+    # defecto del modo. No aplica a quitarfondo, que no pasa por ComfyUI.
+    motor: Mapped[str] = mapped_column(default="")
     # Lo que escribió el usuario (español): idea a generar o cambios a aplicar.
     idea: Mapped[str] = mapped_column(Text)
     # Prompt en inglés que produce el LLM y que el usuario puede editar; None

@@ -40,6 +40,13 @@ def _migrar() -> None:
                 c.execute(text(f"ALTER TABLE escenas ADD COLUMN {col} {tipo}"))
         c.commit()
 
+        cols = [r[1] for r in c.execute(text("PRAGMA table_info(imagenes_libres)"))]
+        if "motor" not in cols:
+            c.execute(
+                text("ALTER TABLE imagenes_libres ADD COLUMN motor VARCHAR DEFAULT ''")
+            )
+            c.commit()
+
         cols = [r[1] for r in c.execute(text("PRAGMA table_info(jobs)"))]
         if "params" not in cols:
             c.execute(text("ALTER TABLE jobs ADD COLUMN params TEXT DEFAULT '{}'"))

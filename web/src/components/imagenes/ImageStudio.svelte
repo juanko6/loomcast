@@ -78,10 +78,10 @@
 
   // Al crear NO se mejora el prompt automáticamente: el paso del LLM es opcional
   // (el usuario lo pulsa en el panel de trabajo si lo quiere).
-  const handleGenerar = (p: { idea: string; width: number; height: number }) =>
+  const handleGenerar = (p: { idea: string; width: number; height: number; motor: string }) =>
     crearY(crearGenerar(p));
-  const handleEditar = (p: { idea: string; file: File }) =>
-    crearY(crearEditar(p.idea, p.file));
+  const handleEditar = (p: { idea: string; file: File; motor: string }) =>
+    crearY(crearEditar(p.idea, p.file, p.motor));
   const handleFondo = (p: { file: File }) => crearY(crearQuitarFondo(p.file));
 
   async function onmejorar() {

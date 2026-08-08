@@ -5,8 +5,10 @@ from sqlalchemy.orm import Session
 from ..models import ImagenLibre
 
 
-def crear(s: Session, tipo: str, idea: str, width: int, height: int) -> ImagenLibre:
-    img = ImagenLibre(tipo=tipo, idea=idea, width=width, height=height)
+def crear(
+    s: Session, tipo: str, idea: str, width: int, height: int, motor: str = ""
+) -> ImagenLibre:
+    img = ImagenLibre(tipo=tipo, idea=idea, width=width, height=height, motor=motor)
     s.add(img)
     return img
 

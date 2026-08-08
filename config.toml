@@ -175,13 +175,39 @@ fps_final = 60
 bin = "tools/rife-ncnn-vulkan-20221029-macos/rife-ncnn-vulkan"
 modelo = "rife-v4.6"
 
-[edicion]
-# Edición de imágenes de la galería. Como en [i2v], apunta a un workflow de
-# ComfyUI en formato API que TÚ exportas con un modelo instruct-edit
-# (recomendado: Qwen-Image-Edit 2509 GGUF, que reutiliza tu text encoder
-# qwen_2.5_vl_7b y evita el fp8 que Metal no soporta). El workflow debe incluir
-# los placeholders {IMAGE}, {PROMPT} y {SEED}, y un nodo SaveImage.
-workflow = "workflows/qwen_edit_api.json"
+[imagen]
+# Motores de imagen disponibles. Cada uno declara los modos que sabe hacer
+# apuntando a un workflow de ComfyUI en formato API: `generar` (texto→imagen,
+# placeholders {PROMPT}, {SEED}, {WIDTH}, {HEIGHT}) y/o `editar` (instruct-edit
+# sobre una imagen subida, placeholders {IMAGE}, {PROMPT}, {SEED}). Los
+# placeholders numéricos van entrecomillados en el JSON para que el archivo siga
+# siendo válido y puedas abrirlo tal cual en ComfyUI; Loomcast quita las comillas
+# al sustituir.
+#
+# Motor que se preselecciona en la galería, y el que usa el pipeline de vídeo
+# para las imágenes de escena.
+motor_generar = "zimage"
+motor_editar = "qwen"
+# Tamaño que se usa cuando quien llama no especifica uno (pipeline de vídeo).
+width = 768
+height = 1344
+
+[imagen.motores.zimage]
+nombre = "Z-Image Turbo"
+generar = "workflows/z_image_turbo_api.json"
+
+[imagen.motores.qwen]
+# Qwen-Image-Edit 2509 GGUF: reutiliza el text encoder qwen2.5-vl en GGUF y
+# evita el fp8 que Metal no soporta. ~2 min por imagen.
+nombre = "Qwen-Image-Edit 2509"
+editar = "workflows/qwen_edit_api.json"
+
+[imagen.motores.flux2klein]
+# FLUX.2 Klein 9B (GGUF Q8_0 + encoder qwen_3_8b_fp4mixed): genera y edita con
+# los mismos pesos. ~50 s generando y ~76 s editando en el M3 Max.
+nombre = "FLUX.2 Klein 9B"
+generar = "workflows/flux2_klein_t2i_api.json"
+editar = "workflows/flux2_klein_edit_api.json"
 
 [musica]
 # Generación de música local con ACE-Step (ACE Studio + StepFun): corre en

@@ -10,6 +10,7 @@ import shutil
 
 from PIL import Image
 
+from ..config import IMAGEN_MOTOR_EDITAR, IMAGEN_MOTOR_GENERAR, IMAGEN_MOTORES
 from ..db import get_session
 from ..repositories import galeria as galeria_repo
 from ..repositories import jobs as jobs_repo
@@ -30,15 +31,53 @@ class ImagenNoExiste(LookupError):
     pass
 
 
+class MotorInvalido(ValueError):
+    pass
+
+
 def _normalizar_lado(v: int) -> int:
     v = max(LADO_MIN, min(LADO_MAX, int(v)))
     return round(v / 64) * 64
 
 
-def crear_generar(idea: str, width: int, height: int) -> dict:
+def _validar_motor(motor: str | None, modo: str) -> str:
+    """Devuelve el motor a guardar: el pedido si sabe hacer `modo`, o el por
+    defecto si no se pidió ninguno."""
+    if not motor:
+        return IMAGEN_MOTOR_GENERAR if modo == "generar" else IMAGEN_MOTOR_EDITAR
+    m = IMAGEN_MOTORES.get(motor)
+    if m is None or modo not in m.modos:
+        raise MotorInvalido(
+            f"'{motor}' no es un motor que sepa {modo} imágenes. Disponibles: "
+            f"{[x.id for x in IMAGEN_MOTORES.values() if modo in x.modos]}"
+        )
+    return motor
+
+
+def motores(modo: str | None = None) -> list[dict]:
+    """Motores declarados, para que la UI pueble el selector.
+
+    `defecto_en` lista los modos en los que ese motor va preseleccionado, que no
+    tienen por qué ser todos los que sabe hacer.
+    """
+    defectos = {"generar": IMAGEN_MOTOR_GENERAR, "editar": IMAGEN_MOTOR_EDITAR}
+    return [
+        {
+            "id": m.id,
+            "nombre": m.nombre,
+            "modos": m.modos,
+            "defecto_en": [k for k, v in defectos.items() if v == m.id],
+        }
+        for m in IMAGEN_MOTORES.values()
+        if modo is None or modo in m.modos
+    ]
+
+
+def crear_generar(idea: str, width: int, height: int, motor: str | None = None) -> dict:
     w, h = _normalizar_lado(width), _normalizar_lado(height)
+    elegido = _validar_motor(motor, "generar")
     with get_session() as s:
-        img = galeria_repo.crear(s, "generar", idea.strip(), w, h)
+        img = galeria_repo.crear(s, "generar", idea.strip(), w, h, elegido)
         s.commit()
         imagen_id = img.id
     # Mejorar el prompt con el LLM es un paso opcional: lo lanza el usuario
@@ -46,10 +85,13 @@ def crear_generar(idea: str, width: int, height: int) -> dict:
     return {"id": imagen_id}
 
 
-def crear_editar(idea: str, width: int, height: int, data: bytes) -> dict:
+def crear_editar(
+    idea: str, width: int, height: int, data: bytes, motor: str | None = None
+) -> dict:
     w, h = _normalizar_lado(width), _normalizar_lado(height)
+    elegido = _validar_motor(motor, "editar")
     with get_session() as s:
-        img = galeria_repo.crear(s, "editar", idea.strip(), w, h)
+        img = galeria_repo.crear(s, "editar", idea.strip(), w, h, elegido)
         s.commit()
         imagen_id = img.id
 
@@ -93,9 +135,12 @@ def _ocupado(s, imagen_id: int) -> bool:
 
 
 def _a_dict(s, img) -> dict:
+    motor = IMAGEN_MOTORES.get(img.motor)
     return {
         "id": img.id,
         "tipo": img.tipo,
+        "motor": img.motor,
+        "motor_nombre": motor.nombre if motor else img.motor,
         "idea": img.idea,
         "prompt": img.prompt,
         "width": img.width,

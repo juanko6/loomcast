@@ -13,11 +13,23 @@ def listar():
     return galeria_service.listar()
 
 
+@router.get("/motores")
+def motores(modo: str | None = None):
+    """Motores de imagen disponibles, opcionalmente filtrados por modo
+    (generar | editar). Alimenta el selector de modelo de la UI."""
+    return galeria_service.motores(modo)
+
+
 @router.post("")
 def crear_generar(body: GaleriaGenerarIn):
     if not body.idea.strip():
         raise HTTPException(400, "La idea no puede estar vacía")
-    return galeria_service.crear_generar(body.idea, body.width, body.height)
+    try:
+        return galeria_service.crear_generar(
+            body.idea, body.width, body.height, body.motor
+        )
+    except galeria_service.MotorInvalido as e:
+        raise HTTPException(400, str(e))
 
 
 @router.post("/editar")
@@ -26,12 +38,15 @@ async def crear_editar(
     imagen: UploadFile = File(...),
     width: int = Form(768),
     height: int = Form(1344),
+    motor: str | None = Form(None),
 ):
     if not idea.strip():
         raise HTTPException(400, "Describe los cambios que quieres aplicar")
     data = await imagen.read()
     try:
-        return galeria_service.crear_editar(idea, width, height, data)
+        return galeria_service.crear_editar(idea, width, height, data, motor)
+    except galeria_service.MotorInvalido as e:
+        raise HTTPException(400, str(e))
     except OSError as e:
         raise HTTPException(400, f"No se pudo leer la imagen: {e}")
 
