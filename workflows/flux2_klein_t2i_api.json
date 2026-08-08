@@ -63,7 +63,7 @@
     "inputs": { "samples": ["sampler", 0], "vae": ["vae", 0] }
   },
   "save": {
-    "class_type": "SaveImage",
-    "inputs": { "images": ["decode", 0], "filename_prefix": "loomcast_klein" }
+    "class_type": "PreviewImage",
+    "inputs": { "images": ["decode", 0] }
   }
 }

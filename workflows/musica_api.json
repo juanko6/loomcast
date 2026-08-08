@@ -72,16 +72,14 @@
   },
   "19": {
     "inputs": {
-      "filename_prefix": "audio/ComfyUI",
-      "audioUI": "",
       "audio": [
         "18",
         0
       ]
     },
-    "class_type": "SaveAudio",
+    "class_type": "PreviewAudio",
     "_meta": {
-      "title": "SaveAudio"
+      "title": "PreviewAudio"
     }
   },
   "40": {
