@@ -1,8 +1,21 @@
 # Loomcast
 
-Generador automatizado de videos cortos (30–60 s, 9:16) para YouTube Shorts y TikTok, **100% con IA local** en Apple Silicon.
+Estudio multimedia **100% con IA local** en Apple Silicon. Nada sale de tu
+máquina y no hay ninguna API de pago.
 
-Tema → ideas → guion → metadatos → voz (Qwen3-TTS) → subtítulos (Whisper) → imágenes (Z-Image-Turbo vía ComfyUI) → upscale (Real-ESRGAN) → clips → interpolación (RIFE) → video final.
+Empezó siendo un generador de vídeos cortos y hoy son tres áreas de creación,
+más una biblioteca con todo lo hecho:
+
+| | qué hace |
+|---|---|
+| **Vídeos** | El pipeline completo: tema → ideas → guion → metadatos → voz (Qwen3-TTS) → subtítulos (Whisper) → imágenes → clips → montaje. Formato corto 9:16 (30–60 s) para Shorts y TikTok, con tres modos de montaje (estático, Ken Burns e image-to-video). |
+| **Imágenes** | Generar desde texto, editar por instrucciones y quitar el fondo, con varios motores elegibles. |
+| **Música** | Pistas instrumentales y canciones con voz cantada y letra, con ACE-Step 1.5 XL Turbo. |
+| **Biblioteca** | Todo lo creado en una sola vista. |
+
+Las tres áreas comparten el mismo esqueleto (cola de jobs, cliente de ComfyUI,
+LLM local) pero son independientes: puedes usar Música o Imágenes sin tocar el
+pipeline de vídeo.
 
 Ver [PLAN.md](PLAN.md) para la arquitectura completa y [fase0/RESULTADOS.md](fase0/RESULTADOS.md) para las mediciones de rendimiento.
 
@@ -12,7 +25,9 @@ Ver [PLAN.md](PLAN.md) para la arquitectura completa y [fase0/RESULTADOS.md](fas
 - Python 3.12
 - Node 20+ y pnpm (solo para compilar el frontend)
 - [llama.cpp](https://github.com/ggml-org/llama.cpp) (`llama-server`) con un modelo instruct en español
-- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) con Z-Image-Turbo (bf16), VAE `ae.safetensors` y text encoder `qwen_3_4b`
+- [ComfyUI](https://github.com/comfyanonymous/ComfyUI), con los modelos de lo que vayas a usar:
+  - **imágenes**: Z-Image-Turbo (bf16) + VAE `ae.safetensors` + text encoder `qwen_3_4b`; opcionalmente Qwen-Image-Edit 2509 y FLUX.2 Klein (ver "Imágenes")
+  - **música**: ACE-Step 1.5 XL Turbo (ver "Música")
 - ffmpeg
 
 ## Arranque
@@ -126,7 +141,33 @@ Voces reutilizables generadas con Qwen3-TTS VoiceDesign, guardadas en `voces/<sl
   - **Estático** (rápido, ~30s): imágenes fijas + subtítulos quemados + voz. Para iterar.
   - **Ken Burns** (con movimiento): Real-ESRGAN x4 → zoom/paneo nativo a 60fps → subtítulos superpuestos (`overlay` ffmpeg) + voz. Cadena upscale→clips→armado.
   - **Image-to-video** (movimiento IA): anima cada escena con un workflow i2v de ComfyUI + RIFE a 60fps (ver abajo).
-- ⬜ Fase 5 (resto) — plantillas `historia`/`drama-chisme`, música, empaquetado
+- ✅ **Imágenes** — galería propia con generar, editar y quitar fondo, y motores elegibles (Z-Image, Qwen-Image-Edit, FLUX.2 Klein)
+- ✅ **Música** — instrumentales y canciones con ACE-Step 1.5 XL Turbo, con conditioning musical, guion de secciones y masterizado EBU R128
+- ✅ **Estudio en Astro + Svelte** — los cuatro modos en una sola interfaz, con reproductor global y biblioteca
+- ⬜ Pendiente — plantillas `historia`/`drama-chisme`, mezclar la música bajo la narración con ducking, empaquetado
+
+## Imágenes
+
+Tres modos, independientes del pipeline de vídeo:
+
+- **Generar** desde texto. El LLM puede pasar tu idea en español a un prompt en
+  inglés; se generan varias previsualizaciones y eliges cuál llega a final.
+- **Editar** por instrucciones sobre una imagen que subas ("quítale las gafas").
+- **Quitar fondo**, con rembg (u2net vía onnxruntime). No pasa por ComfyUI: es
+  una segmentación ligera que corre en CPU y no necesita el pipeline de difusión.
+
+Los motores se declaran en `config.toml [imagen.motores.*]`, cada uno apuntando a
+un workflow de ComfyUI en formato API según los modos que sepa hacer:
+
+| motor | genera | edita | notas |
+|---|---|---|---|
+| **Z-Image Turbo** | ✅ | — | el rápido, y el que usa el pipeline de vídeo para las escenas |
+| **Qwen-Image-Edit 2509** | — | ✅ | GGUF + text encoder qwen2.5-vl, para esquivar el fp8 que Metal no soporta. ~2 min por imagen |
+| **FLUX.2 Klein 9B** | ✅ | ✅ | GGUF Q8 + encoder fp4mixed. ~50 s generando, ~76 s editando |
+
+`motor_generar` y `motor_editar` fijan cuál se preselecciona; en la galería se
+puede cambiar por imagen. Añadir un motor nuevo es declarar su bloque y poner su
+workflow, sin tocar código.
 
 ## Música (ACE-Step 1.5 XL Turbo)
 
