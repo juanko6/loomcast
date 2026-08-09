@@ -142,6 +142,27 @@ libera los modelos al terminar).
 El LM planificador se apaga con `config.toml [musica].audio_codes = false`: baja
 a ~2 s por pista, pero sin plan de estructura y con peor calidad.
 
+### `lm_temperature` tiene que ser 0 en Mac
+
+Con `[musica].lm_temperature > 0`, el muestreo del LM pasa por
+`torch.multinomial`, que **sobre Metal devuelve índices fuera de rango**: emite
+un token de texto donde debería ir un código de audio, y la generación muere con
+un `index -33790 is out of bounds for dimension with size 64000` señalando a un
+nodo que no tiene la culpa (los errores de MPS son asíncronos).
+
+Es un límite de duración, y muy reproducible: **33 s funciona, 34 s falla
+siempre**, con cualquier prompt y cualquier seed. Que sea culpa de Metal está
+comprobado — poniendo el text encoder en CPU (`device: "cpu"` en el
+`DualCLIPLoader`) la misma pista de 45 s se genera sin problema, solo que en
+220 s en vez de 54 s.
+
+Con `lm_temperature = 0` el muestreo usa `argmax` y esquiva la llamada: **189 s
+de pista en 95 s**, sin límite práctico de duración. El precio es que el *plan*
+de estructura se vuelve determinista para el mismo prompt; la seed sigue
+alimentando al KSampler, así que "regenerar" sigue dando tomas distintas del
+mismo arreglo. `generar_musica` traduce el error de Metal a un mensaje que dice
+esto mismo, por si alguien sube la temperatura y se lo encuentra.
+
 ## Modo i2v (image-to-video)
 
 Agnóstico al motor: apuntas `config.toml [i2v].workflow` a un workflow de ComfyUI **en formato API** que tú exportas y ajustas (LTX-Video, WAN, etc.). Requisitos del workflow:

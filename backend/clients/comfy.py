@@ -79,6 +79,19 @@ def _workflow_motor(motor_id: str | None, modo: str) -> Path:
     return ruta
 
 
+def _error_legible(status: dict) -> str:
+    """Extrae el error real del volcado de estado de ComfyUI.
+
+    El volcado trae el historial entero de mensajes; sin esto, lo que sube a la
+    UI es un JSON gigante donde el motivo del fallo queda enterrado.
+    """
+    for tipo, datos in status.get("messages", []):
+        if tipo == "execution_error":
+            nodo = datos.get("node_type", "?")
+            return f"[{nodo}] {datos.get('exception_message', '')}".strip()
+    return json.dumps(status)[:300]
+
+
 def _encolar_y_esperar(c: httpx.Client, workflow: dict) -> dict:
     """Encola el workflow y espera a que termine; devuelve su entry del history."""
     r = c.post(f"{COMFY_URL}/prompt", json={"prompt": workflow})
@@ -93,7 +106,7 @@ def _encolar_y_esperar(c: httpx.Client, workflow: dict) -> dict:
             entry = hist[pid]
             status = entry.get("status", {})
             if status.get("status_str") == "error":
-                raise ComfyError(json.dumps(entry.get("status"))[:500])
+                raise ComfyError(_error_legible(status))
             if status.get("completed"):
                 return entry
         if time.time() - inicio > TIMEOUT_S:
@@ -295,6 +308,7 @@ def generar_musica(
     idioma: str,
     destino: Path,
     audio_codes: bool = True,
+    lm_temperature: float = 0.0,
 ) -> Path:
     """Genera una pista de música con el workflow ACE-Step 1.5 configurable y la
     guarda junto a `destino` conservando la extensión de origen (devuelve la
@@ -310,6 +324,11 @@ def generar_musica(
     añade sobre v1: fijan tempo, tonalidad y compás para que el arreglo no
     derive dentro de la misma pista. `audio_codes` activa el LM planificador,
     que sube la calidad a cambio de tiempo.
+
+    `lm_temperature` a 0 no es un capricho: ver MUSICA_LM_TEMPERATURE en
+    config.py. Con temperatura > 0 el muestreo del LM pasa por
+    `torch.multinomial`, que en Metal devuelve índices inválidos en pistas de
+    más de ~33 s y tumba la generación.
     """
     wf_path = ROOT / MUSICA_WORKFLOW
     if not wf_path.exists():
@@ -332,8 +351,23 @@ def generar_musica(
             TIMESIG=timesig,
             IDIOMA=idioma,
             AUDIO_CODES=audio_codes,
+            LM_TEMP=float(lm_temperature),
         )
-        entry = _encolar_y_esperar(c, wf)
+        try:
+            entry = _encolar_y_esperar(c, wf)
+        except ComfyError as e:
+            # El bug de multinomial en Metal aflora como un índice negativo
+            # contra la tabla de códigos de audio, en un nodo que no es el
+            # culpable. Sin traducir, es indescifrable.
+            if "out of bounds" in str(e) and lm_temperature > 0:
+                raise ComfyError(
+                    f"ACE-Step falló generando el plan de la pista ({duracion_s} s). "
+                    f"Es el bug de torch.multinomial en Metal: con "
+                    f"[musica].lm_temperature > 0 (ahora {lm_temperature}) solo "
+                    "aguanta pistas de hasta ~33 s. Ponlo a 0 para que use "
+                    "argmax y funcione a cualquier duración."
+                ) from e
+            raise
         return _descargar_primer_audio(c, entry, destino)
 
 

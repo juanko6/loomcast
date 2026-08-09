@@ -146,6 +146,10 @@ _musica = _cfg.get("musica", {})
 MUSICA_WORKFLOW: str = _musica.get("workflow", "workflows/musica_api.json")
 MUSICA_DURACION_S: int = _musica.get("duracion_s", 30)
 MUSICA_AUDIO_CODES: bool = _musica.get("audio_codes", True)
+# Temperatura del LM planificador. 0 usa argmax; cualquier valor > 0 pasa por
+# torch.multinomial, que en Metal devuelve índices fuera de rango en pistas de
+# más de ~33 s. Por defecto 0 para que cualquier duración funcione.
+MUSICA_LM_TEMPERATURE: float = float(_musica.get("lm_temperature", 0.0))
 
 PROYECTOS_DIR: Path = ROOT / _cfg["paths"]["proyectos"]
 PLANTILLAS_DIR: Path = ROOT / _cfg["paths"]["plantillas"]

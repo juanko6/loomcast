@@ -12,7 +12,12 @@ a la etapa 2: "instrumental" (música de fondo / jingle, sin voz) o "cancion".
 import random
 
 from ...clients import comfy, llm
-from ...config import MUSICA_AUDIO_CODES, MUSICA_DIR, PROMPTS_DIR
+from ...config import (
+    MUSICA_AUDIO_CODES,
+    MUSICA_DIR,
+    MUSICA_LM_TEMPERATURE,
+    PROMPTS_DIR,
+)
 from ...db import get_session
 from ...repositories import musica as musica_repo
 from ...schemas import MusicaPromptLLM
@@ -100,6 +105,7 @@ def generar(musica_id: int) -> str:
             idioma,
             carpeta(musica_id) / "musica",
             audio_codes=MUSICA_AUDIO_CODES,
+            lm_temperature=MUSICA_LM_TEMPERATURE,
         )
     finally:
         comfy.liberar_memoria()

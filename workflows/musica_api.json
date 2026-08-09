@@ -94,7 +94,7 @@
       "keyscale": "{KEYSCALE}",
       "generate_audio_codes": "{AUDIO_CODES}",
       "cfg_scale": 2.0,
-      "temperature": 0.85,
+      "temperature": "{LM_TEMP}",
       "top_p": 0.9,
       "top_k": 0,
       "min_p": 0.0,
