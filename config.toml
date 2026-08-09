@@ -258,6 +258,14 @@ lm_temperature = 0.85
 # Si alguna vez quieres quitarlo, pon "cpu" aquí: es más lento pero no depende
 # de nada externo.
 lm_device = "default"
+# Masterizado con ffmpeg al terminar cada pista (EBU R128, en dos pasadas).
+# ACE-Step entrega el audio crudo: ~-17 LUFS y picos a 0,0-0,1 dBTP, o sea
+# distorsionando. -14 LUFS es el nivel al que normalizan YouTube y Spotify;
+# -1 dBTP deja margen para que el pico real no toque el techo.
+# El original sin tocar se guarda al lado como crudo.flac.
+# Pon lufs = 0 para desactivarlo y quedarte solo con el crudo.
+lufs = -14.0
+true_peak = -1.0
 
 [paths]
 proyectos = "proyectos"

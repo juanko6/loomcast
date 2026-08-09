@@ -153,6 +153,9 @@ MUSICA_LM_TEMPERATURE: float = float(_musica.get("lm_temperature", 0.85))
 # Metal; "cpu" no depende de nada pero es ~7× más lento. Ver [musica] en
 # config.toml.
 MUSICA_LM_DEVICE: str = _musica.get("lm_device", "default")
+# Masterizado EBU R128 de la pista ya generada. lufs = 0 lo desactiva.
+MUSICA_LUFS: float = float(_musica.get("lufs", -14.0))
+MUSICA_TRUE_PEAK: float = float(_musica.get("true_peak", -1.0))
 
 PROYECTOS_DIR: Path = ROOT / _cfg["paths"]["proyectos"]
 PLANTILLAS_DIR: Path = ROOT / _cfg["paths"]["plantillas"]

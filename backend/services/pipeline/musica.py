@@ -17,8 +17,11 @@ from ...config import (
     MUSICA_DIR,
     MUSICA_LM_DEVICE,
     MUSICA_LM_TEMPERATURE,
+    MUSICA_LUFS,
+    MUSICA_TRUE_PEAK,
     PROMPTS_DIR,
 )
+from . import _masterizar
 from ...db import get_session
 from ...repositories import musica as musica_repo
 from ...schemas import MusicaPromptLLM
@@ -35,9 +38,12 @@ def carpeta(musica_id: int):
 
 
 def ruta_audio(musica_id: int):
-    """Ruta del audio generado sin conocer la extensión (ACE-Step guarda FLAC,
-    pero el workflow puede usar MP3/WAV). Devuelve el primer `musica.*` que
-    exista, o None si aún no se ha generado."""
+    """Ruta del audio que se sirve, sin conocer la extensión (ACE-Step guarda
+    FLAC, pero el workflow puede usar MP3/WAV). Devuelve el primer `musica.*`
+    que exista, o None si aún no se ha generado.
+
+    El original sin masterizar vive al lado como `crudo.*`, con otro nombre
+    justamente para que este glob no lo pise."""
     car = carpeta(musica_id)
     if car.exists():
         for f in sorted(car.glob("musica.*")):
@@ -100,9 +106,11 @@ def generar(musica_id: int) -> str:
         bpm, keyscale, timesig, idioma = m.bpm, m.keyscale, m.timesig, m.idioma
         seed = m.seed if m.seed is not None else random.randint(0, 2**31 - 1)
 
-    carpeta(musica_id).mkdir(parents=True, exist_ok=True)
+    car = carpeta(musica_id)
+    car.mkdir(parents=True, exist_ok=True)
+    _limpiar(car)
     try:
-        comfy.generar_musica(
+        crudo = comfy.generar_musica(
             tags,
             lyrics or "",
             seed,
@@ -111,7 +119,7 @@ def generar(musica_id: int) -> str:
             keyscale,
             timesig,
             idioma,
-            carpeta(musica_id) / "musica",
+            car / "musica",
             audio_codes=MUSICA_AUDIO_CODES,
             lm_temperature=MUSICA_LM_TEMPERATURE,
             lm_device=MUSICA_LM_DEVICE,
@@ -119,8 +127,38 @@ def generar(musica_id: int) -> str:
     finally:
         comfy.liberar_memoria()
 
+    nota = _masterizar_pista(crudo)
+
     with get_session() as s:
         m = musica_repo.obtener(s, musica_id)
         musica_repo.marcar_generada(s, m, seed)
         s.commit()
-    return "Pista de música generada"
+    return f"Pista de música generada{nota}"
+
+
+def _limpiar(car) -> None:
+    """Borra la pista anterior antes de regenerar. Sin esto, una regeneración a
+    otro formato dejaría la vieja y `ruta_audio` podría devolverla."""
+    for f in list(car.glob("musica.*")) + list(car.glob("crudo.*")):
+        f.unlink()
+
+
+def _masterizar_pista(crudo) -> str:
+    """Normaliza la pista recién generada y deja el original como crudo.*
+
+    Si falla, se queda la pista sin masterizar en su sitio: es mejor entregar
+    audio crudo que ninguno, y el aviso sube al historial del job.
+    """
+    if MUSICA_LUFS == 0:
+        return ""
+    sin_tocar = crudo.with_name(f"crudo{crudo.suffix}")
+    crudo.rename(sin_tocar)
+    try:
+        antes = _masterizar.masterizar(sin_tocar, crudo)
+    except _masterizar.MasterizarError as e:
+        sin_tocar.rename(crudo)
+        return f" (sin masterizar: {e})"
+    return (
+        f" (masterizada: de {antes['lufs']:.1f} LUFS y pico {antes['pico_dbtp']:.1f} dBTP "
+        f"a {MUSICA_LUFS:.0f} LUFS y {MUSICA_TRUE_PEAK:.0f} dBTP)"
+    )

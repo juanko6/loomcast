@@ -142,26 +142,57 @@ libera los modelos al terminar).
 El LM planificador se apaga con `config.toml [musica].audio_codes = false`: baja
 a ~2 s por pista, pero sin plan de estructura y con peor calidad.
 
-### `lm_temperature` tiene que ser 0 en Mac
+### Masterizado
 
-Con `[musica].lm_temperature > 0`, el muestreo del LM pasa por
-`torch.multinomial`, que **sobre Metal devuelve índices fuera de rango**: emite
-un token de texto donde debería ir un código de audio, y la generación muere con
-un `index -33790 is out of bounds for dimension with size 64000` señalando a un
-nodo que no tiene la culpa (los errores de MPS son asíncronos).
+ACE-Step entrega el audio crudo: cada pista sale a un volumen distinto y con los
+picos pegados al techo (medido: ~-12 LUFS con picos de +0,2 a +0,3 dBTP, o sea
+distorsionando). Al terminar, Loomcast pasa la pista por **loudnorm de ffmpeg en
+dos pasadas** (EBU R128): la primera mide y la segunda corrige con esas medidas.
+En una sola pasada loudnorm va a ciegas y aplasta la dinámica.
 
-Es un límite de duración, y muy reproducible: **33 s funciona, 34 s falla
-siempre**, con cualquier prompt y cualquier seed. Que sea culpa de Metal está
-comprobado — poniendo el text encoder en CPU (`device: "cpu"` en el
-`DualCLIPLoader`) la misma pista de 45 s se genera sin problema, solo que en
-220 s en vez de 54 s.
+Resultado sobre una pista real: **-12,6 → -14,0 LUFS** y **pico +0,2 → -1,2
+dBTP**, con el LRA intacto en 1,1 LU — nivel corregido sin comprimir. El
+original queda al lado como `crudo.flac`, y lo que se sirve y se reproduce es
+`musica.flac`. Se ajusta con `[musica].lufs` y `[musica].true_peak`; `lufs = 0`
+lo desactiva.
 
-Con `lm_temperature = 0` el muestreo usa `argmax` y esquiva la llamada: **189 s
-de pista en 95 s**, sin límite práctico de duración. El precio es que el *plan*
-de estructura se vuelve determinista para el mismo prompt; la seed sigue
-alimentando al KSampler, así que "regenerar" sigue dando tomas distintas del
-mismo arreglo. `generar_musica` traduce el error de Metal a un mensaje que dice
-esto mismo, por si alguien sube la temperatura y se lo encuentra.
+Esto **no** arregla una mezcla embarullada: no separa instrumentos ni reequilibra
+nada. Eso viene del modelo y se ataca desde el prompt y el guion de secciones.
+
+### El parche de `torch.multinomial` es obligatorio
+
+```bash
+python scripts/instalar_parche_mps.py
+```
+
+Sin él, el muestreo del LM planificador devuelve tokens corruptos y la
+generación muere con un `index -33790 is out of bounds for dimension with size
+64000` que señala a un nodo sin culpa (los errores de MPS son asíncronos). Es un
+bug de PyTorch, no de ACE-Step: `torch.multinomial` sobre Metal devuelve a veces
+índices cuya probabilidad es **exactamente 0.0**. Lo dispara la presencia de
+entradas a cero — aquí, los ~153k tokens del vocabulario que no son códigos de
+audio y van enmascarados — y la tasa sube con cuántas haya. Reproducible en
+PyTorch puro con `scripts/repro_multinomial_mps.py`; en CPU no pasa nunca.
+
+Se manifiesta de dos formas y las dos importan: por encima de ~33 s el índice se
+sale del rango y **tumba** la generación (33 s va, 34 s falla siempre), y por
+debajo cae dentro del rango y **degrada el plan en silencio**.
+
+El parche quita los ceros antes de muestrear y traduce el índice de vuelta:
+misma distribución, sin lo que dispara el fallo. Va en `custom_nodes/`, que es
+lo que `comfy update` no toca, con el código versionado aquí y un symlink allí.
+Comprueba que cargó buscando esta línea en el arranque de ComfyUI:
+
+```
+[loomcast] Parche de torch.multinomial en MPS activo
+```
+
+Si ComfyUI renombrase `sample_manual_loop_no_classes`, el custom node fallaría
+al importar y ComfyUI lo registraría como nodo no cargado: sale en el log, pero
+es fácil pasarlo por alto. Merece una mirada después de cada `comfy update`.
+
+Alternativa sin parche: `[musica].lm_device = "cpu"`, que no depende de nada
+pero es ~7× más lento (90 s de pista en ~410 s frente a 60 s).
 
 ## Modo i2v (image-to-video)
 
