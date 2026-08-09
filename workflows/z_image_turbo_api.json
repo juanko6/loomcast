@@ -5,7 +5,7 @@
   },
   "clip": {
     "class_type": "CLIPLoader",
-    "inputs": { "clip_name": "qwen_3_4b_fp4_mixed.safetensors", "type": "lumina2", "device": "default" }
+    "inputs": { "clip_name": "qwen_3_4b_fp4_mixed.safetensors", "type": "lumina2", "device": "cpu" }
   },
   "vae": {
     "class_type": "VAELoader",
