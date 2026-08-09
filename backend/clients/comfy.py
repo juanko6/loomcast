@@ -1,6 +1,7 @@
 """Adaptador de ComfyUI: encola workflows, espera el resultado y descarga
 imágenes. Los workflows base viven en workflows/*.json."""
 import json
+import re
 import time
 from pathlib import Path
 
@@ -40,6 +41,19 @@ def _render(crudo: str, **valores) -> dict:
     siendo JSON válido y se puede abrir tal cual en ComfyUI, pero ComfyUI recibe
     el número o el booleano.
     """
+    # Los del workflow, no los que nos pasan: si el archivo trae un placeholder
+    # que nadie rellena, se colaba tal cual hasta ComfyUI y el error salía allí
+    # ("could not convert string to float: '{LM_TEMP}'"), lejos de la causa.
+    # Se buscan sobre la plantilla cruda para no confundir con las llaves de los
+    # dynamic prompts que pueda traer el texto sustituido.
+    en_workflow = set(re.findall(r"\{([A-Z][A-Z0-9_]*)\}", crudo))
+    sin_valor = sorted(en_workflow - set(valores))
+    if sin_valor:
+        raise ComfyError(
+            f"El workflow usa placeholders que nadie rellena: {sin_valor}. "
+            "O sobran en el JSON, o falta pasarlos desde el cliente."
+        )
+
     for clave, valor in valores.items():
         marca = "{" + clave + "}"
         if isinstance(valor, str):
