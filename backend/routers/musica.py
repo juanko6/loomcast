@@ -103,6 +103,14 @@ def borrar(musica_id: int):
         raise HTTPException(404, "Música no existe")
 
 
+@router.get("/{musica_id}/portada")
+def portada(musica_id: int):
+    ruta = musica_pipeline.ruta_portada(musica_id)
+    if ruta is None:
+        raise HTTPException(404, "Esta pista aún no tiene portada")
+    return FileResponse(ruta, media_type="image/png")
+
+
 @router.get("/{musica_id}/audio")
 def audio(musica_id: int):
     ruta = musica_pipeline.ruta_audio(musica_id)

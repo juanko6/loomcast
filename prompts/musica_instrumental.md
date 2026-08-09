@@ -43,6 +43,20 @@ Example for a 90 s track:
 [Section C - full arrangement returns, warmest and densest moment]
 [Outro - layers dissolve one by one, fades to silence]
 
+THE COVER ART (field "portada")
+A prompt in English for the track's cover image, which is generated separately
+with an image model. One sentence or two, describing a SQUARE image:
+
+- Translate the *mood* of the music into a scene, not the instruments as objects.
+  A melancholic lofi track is a rainy window at night, not a photo of a piano.
+- Name the palette and the light: "muted teal and amber", "warm lamp glow",
+  "washed-out pastels", "high-contrast neon".
+- Name a texture or medium: grainy film, risograph print, oil painting, 35mm
+  photograph, cel animation.
+- **No text, no letters, no logos**: image models render them badly, and this is
+  a cover, not a poster. End the prompt with "no text".
+- Keep it safe for work and avoid recognisable real people.
+
 MUSICAL METADATA
 - "bpm": integer 10–300, matching the energy you described. Slow lofi ~70, mid-tempo pop ~110, driving electronic ~128.
 - "keyscale": exactly "<root> <major|minor>". Root must be one of C, C#, Db, D, D#, Eb, E, F, F#, Gb, G, G#, Ab, A, A#, Bb, B. Pick a mode that fits the mood — minor for melancholic or tense, major for hopeful or bright.
@@ -57,4 +71,4 @@ OUTPUT RULES
   NOT write any sung words in "lyrics".
 
 Respond ONLY with valid JSON, no additional text:
-{"tags": "one paragraph in English describing genre, instrumentation, each element's role in the mix, production and how the arrangement evolves", "lyrics": "[Intro - ...]\n[Section A - ...]\n[Break - ...]\n[Outro - ...]", "bpm": 90, "keyscale": "C major", "timesig": "4", "idioma": "en"}
+{"tags": "one paragraph in English describing genre, instrumentation, each element's role in the mix, production and how the arrangement evolves", "lyrics": "[Intro - ...]\n[Section A - ...]\n[Break - ...]\n[Outro - ...]", "bpm": 90, "keyscale": "C major", "timesig": "4", "idioma": "en", "portada": "a rainy window at night lit by a warm desk lamp, muted teal and amber palette, grainy 35mm film texture, no text"}

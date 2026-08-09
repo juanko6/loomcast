@@ -85,3 +85,6 @@ class MusicaPromptLLM(BaseModel):
     timesig: str = "4"
     # Código corto del idioma de la letra: "es", "en"…
     idioma: str = "es"
+    # Prompt en inglés para la portada de la pista (imagen cuadrada). Se genera
+    # con el motor de imagen en un job encadenado.
+    portada: str = ""

@@ -1,5 +1,5 @@
 // Cliente del modo Música. Refleja backend/routers/musica.py.
-import { api } from "./api";
+import { api, media } from "./api";
 import type { MusicaResumen, TipoMusica } from "./types";
 
 // Conditioning musical de ACE-Step 1.5: tempo, tonalidad y compás. Los tres son
@@ -21,6 +21,7 @@ export interface MusicaDetalle extends Musical {
   seed: number | null;
   estado: string;
   tiene_audio: boolean;
+  tiene_portada: boolean;
   ocupado: boolean;
 }
 
@@ -47,6 +48,10 @@ export const IDIOMAS = [
   { value: "de", label: "Alemán" },
   { value: "ja", label: "Japonés" },
 ] as const;
+
+// URL de la portada de una pista. Cache-busting por id no hace falta: la
+// portada solo se regenera al volver a pedir sugerencia, y ahí se recarga la lista.
+export const portadaUrl = (id: number) => media(`/musica/${id}/portada`);
 
 export const listarMusica = () => api<MusicaResumen[]>("/musica");
 

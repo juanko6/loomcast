@@ -11,8 +11,10 @@ export interface PlayerTrack {
   idea: string;
   seed: number | null;
   duracion_s: number;
-  // Origen del audio (ruta /api/...). Futuro: `cover` para la portada IA.
+  // Origen del audio (ruta /api/...).
   src: string;
+  // Portada de la pista, o null si aún no tiene.
+  cover: string | null;
 }
 
 // Pista cargada en el player (null = nada sonando, la isla se oculta).

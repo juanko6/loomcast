@@ -47,6 +47,9 @@ export interface MusicaResumen {
   idea: string;
   tipo: TipoMusica;
   estado: string;
+  // La portada la genera el LLM+motor de imagen al pedir la sugerencia; hasta
+  // entonces la miniatura cae al icono por defecto.
+  tiene_portada: boolean;
 }
 
 // Modos de nivel superior del estudio (el rail izquierdo).

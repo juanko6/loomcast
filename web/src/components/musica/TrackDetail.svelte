@@ -3,7 +3,7 @@
   import Icon from "../primitives/Icon.svelte";
   import { media } from "@/lib/api";
   import { currentTrack, isPlaying, playTrack } from "@/lib/player";
-  import type { MusicaDetalle } from "@/lib/musica";
+  import { portadaUrl, type MusicaDetalle } from "@/lib/musica";
 
   let {
     detail,
@@ -12,6 +12,7 @@
 
   const tipoLabel = $derived(detail?.tipo === "cancion" ? "Canción" : "Instrumental");
   const sonando = $derived($currentTrack?.id === detail?.id && $isPlaying);
+  const cover = $derived(detail?.tiene_portada ? portadaUrl(detail.id) : null);
 
   function reproducir() {
     if (!detail) return;
@@ -22,6 +23,7 @@
       seed: detail.seed,
       duracion_s: detail.duracion_s,
       src: media(`/musica/${detail.id}/audio`),
+      cover,
     });
   }
 </script>
@@ -43,6 +45,13 @@
       </div>
     {:else if detail.tiene_audio}
       <div class="space-y-4">
+        {#if cover}
+          <img
+            src={cover}
+            alt="Portada de la pista"
+            class="aspect-square w-full rounded-xl object-cover"
+          />
+        {/if}
         <div class="flex flex-wrap items-center gap-1.5">
           <Chip tone="accent">{tipoLabel}</Chip>
           {#if detail.seed != null}<Chip>seed {detail.seed}</Chip>{/if}

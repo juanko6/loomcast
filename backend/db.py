@@ -61,6 +61,7 @@ def _migrar() -> None:
             "keyscale": "VARCHAR DEFAULT 'C major'",
             "timesig": "VARCHAR DEFAULT '4'",
             "idioma": "VARCHAR DEFAULT 'es'",
+            "portada": "TEXT",
         }
         for col, tipo in nuevas.items():
             if col not in cols:

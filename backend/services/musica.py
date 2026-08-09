@@ -22,7 +22,7 @@ from .musica_combos import (
     normalizar_timesig,
 )
 
-TIPOS_JOB = ["mejorar_prompt_musica", "generar_musica"]
+TIPOS_JOB = ["mejorar_prompt_musica", "generar_musica", "generar_portada_musica"]
 # Tope de duración en segundos (ACE-Step 1.5 llega a ~10 min; se acota para no
 # encolar generaciones eternas por error).
 DUR_MIN, DUR_MAX = 5, 600
@@ -163,6 +163,7 @@ def _a_dict(s, m) -> dict:
         "seed": m.seed,
         "estado": m.estado,
         "tiene_audio": musica_pipeline.ruta_audio(m.id) is not None,
+        "tiene_portada": musica_pipeline.ruta_portada(m.id) is not None,
         "ocupado": _ocupado(s, m.id),
     }
 
@@ -170,7 +171,13 @@ def _a_dict(s, m) -> dict:
 def listar() -> list[dict]:
     with get_session() as s:
         return [
-            {"id": m.id, "tipo": m.tipo, "idea": m.idea, "estado": m.estado}
+            {
+                "id": m.id,
+                "tipo": m.tipo,
+                "idea": m.idea,
+                "estado": m.estado,
+                "tiene_portada": musica_pipeline.ruta_portada(m.id) is not None,
+            }
             for m in musica_repo.listar(s)
         ]
 

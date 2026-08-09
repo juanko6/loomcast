@@ -4,6 +4,7 @@
   import IconButton from "../primitives/IconButton.svelte";
   import Icon from "../primitives/Icon.svelte";
   import { media } from "@/lib/api";
+  import { portadaUrl } from "@/lib/musica";
   import { currentTrack, isPlaying, playTrack } from "@/lib/player";
   import type { MusicaResumen } from "@/lib/types";
 
@@ -24,8 +25,9 @@
   const reproducible = $derived(track.estado === "generada");
   const sonando = $derived($currentTrack?.id === track.id && $isPlaying);
 
+  const cover = $derived(track.tiene_portada ? portadaUrl(track.id) : null);
+
   function reproducir() {
-    // La portada IA (src del thumbnail) llegará en una feature futura.
     playTrack({
       id: track.id,
       tipo: track.tipo,
@@ -33,6 +35,7 @@
       seed: null,
       duracion_s: 0,
       src: media(`/musica/${track.id}/audio`),
+      cover,
     });
   }
 
@@ -47,9 +50,9 @@
       : "border-line-soft bg-surface-2 hover:border-line hover:bg-surface-3"}`}
 >
   {#if reproducible}
-    <Thumbnail icon="music" size={48} playing={sonando} onplay={reproducir} />
+    <Thumbnail src={cover} alt="" icon="music" size={48} playing={sonando} onplay={reproducir} />
   {:else}
-    <Thumbnail icon="music" size={48} />
+    <Thumbnail src={cover} alt="" icon="music" size={48} />
   {/if}
 
   <button type="button" onclick={onselect} class="flex min-w-0 flex-1 flex-col items-start gap-1 text-left">

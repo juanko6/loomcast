@@ -48,6 +48,7 @@ def guardar_campos(
     keyscale: str | None = None,
     timesig: str | None = None,
     idioma: str | None = None,
+    portada: str | None = None,
 ) -> None:
     if tags is not None:
         m.tags = tags or None
@@ -63,6 +64,8 @@ def guardar_campos(
         m.timesig = timesig
     if idioma is not None:
         m.idioma = idioma
+    if portada is not None:
+        m.portada = portada or None
 
 
 def marcar_generada(s: Session, m: Musica, seed: int) -> None:

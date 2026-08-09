@@ -89,7 +89,7 @@
     >
       <!-- Pista sonando -->
       <div class="flex min-w-0 items-center gap-3" style="width:236px">
-        <Thumbnail icon="music" size={44} />
+        <Thumbnail src={$currentTrack.cover} alt="" icon="music" size={44} />
         <div class="min-w-0">
           <p class="truncate text-sm font-medium text-text">{$currentTrack.idea || "(pista)"}</p>
           <div class="mt-0.5 flex items-center gap-1.5">

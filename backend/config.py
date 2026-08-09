@@ -156,6 +156,8 @@ MUSICA_LM_DEVICE: str = _musica.get("lm_device", "default")
 # Masterizado EBU R128 de la pista ya generada. lufs = 0 lo desactiva.
 MUSICA_LUFS: float = float(_musica.get("lufs", -14.0))
 MUSICA_TRUE_PEAK: float = float(_musica.get("true_peak", -1.0))
+# Lado en píxeles de la portada cuadrada de cada pista.
+MUSICA_PORTADA_PX: int = int(_musica.get("portada_px", 384))
 
 PROYECTOS_DIR: Path = ROOT / _cfg["paths"]["proyectos"]
 PLANTILLAS_DIR: Path = ROOT / _cfg["paths"]["plantillas"]

@@ -28,6 +28,20 @@ THE LYRICS (field "lyrics")
 - Keep it singable and concise: typically two verses and a repeated chorus, matching the requested duration.
 - Real, coherent lines — no placeholders, no explanations.
 
+THE COVER ART (field "portada")
+A prompt in English for the track's cover image, which is generated separately
+with an image model. One sentence or two, describing a SQUARE image:
+
+- Translate the *mood* of the music into a scene, not the instruments as objects.
+  A melancholic lofi track is a rainy window at night, not a photo of a piano.
+- Name the palette and the light: "muted teal and amber", "warm lamp glow",
+  "washed-out pastels", "high-contrast neon".
+- Name a texture or medium: grainy film, risograph print, oil painting, 35mm
+  photograph, cel animation.
+- **No text, no letters, no logos**: image models render them badly, and this is
+  a cover, not a poster. End the prompt with "no text".
+- Keep it safe for work and avoid recognisable real people.
+
 MUSICAL METADATA
 - "bpm": integer 10–300, matching the energy you described. Slow ballad ~70, mid-tempo pop ~110, driving electronic ~128.
 - "keyscale": exactly "<root> <major|minor>". Root must be one of C, C#, Db, D, D#, Eb, E, F, F#, Gb, G, G#, Ab, A, A#, Bb, B. Pick a mode that fits the mood, and a key that suits the voice you described.
@@ -40,4 +54,4 @@ OUTPUT RULES
 - No commentary outside the JSON.
 
 Respond ONLY with valid JSON, no additional text:
-{"tags": "one paragraph in English describing genre, instrumentation, the voice, each element's role in the mix, production and how the arrangement evolves", "lyrics": "[Intro - ...]\n[Verse 1 - ...]\n...\n[Chorus - ...]\n...", "bpm": 90, "keyscale": "C major", "timesig": "4", "idioma": "es"}
+{"tags": "one paragraph in English describing genre, instrumentation, the voice, each element's role in the mix, production and how the arrangement evolves", "lyrics": "[Intro - ...]\n[Verse 1 - ...]\n...\n[Chorus - ...]\n...", "bpm": 90, "keyscale": "C major", "timesig": "4", "idioma": "es", "portada": "a lone figure walking away down a neon-lit street at dawn, washed-out pastels, grainy film texture, no text"}

@@ -266,6 +266,11 @@ lm_device = "default"
 # Pon lufs = 0 para desactivarlo y quedarte solo con el crudo.
 lufs = -14.0
 true_peak = -1.0
+# Portada de la pista: imagen cuadrada que genera el motor de imagen por
+# defecto ([imagen].motor_generar) en un job encadenado tras la sugerencia
+# del LLM. Pequeña a propósito: a 384 px cuesta 6 s en el M3 Max y a 512 px,
+# 12 s, y se ve como miniatura de 48 px en la lista.
+portada_px = 384
 
 [paths]
 proyectos = "proyectos"

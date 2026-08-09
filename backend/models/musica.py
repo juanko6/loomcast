@@ -47,6 +47,9 @@ class Musica(Base):
     timesig: Mapped[str] = mapped_column(default="4")
     # Idioma de la letra en código ISO corto ("es", "en"…), de la lista del nodo.
     idioma: Mapped[str] = mapped_column(default="es")
+    # Prompt en inglés de la portada. La imagen en sí vive en disco
+    # (portada.png); esto se guarda para poder regenerarla sin volver al LLM.
+    portada: Mapped[str | None] = mapped_column(Text, default=None)
     # Seed de la última generación (None hasta generar).
     seed: Mapped[int | None] = mapped_column(default=None)
     # nueva | generada

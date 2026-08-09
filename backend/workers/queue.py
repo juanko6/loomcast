@@ -42,6 +42,7 @@ HANDLERS = {
     "quitar_fondo": quitar_fondo.quitar_fondo,
     "mejorar_prompt_musica": musica.mejorar_prompt,
     "generar_musica": musica.generar,
+    "generar_portada_musica": musica.generar_portada,
     "regenerar_clip": escena_individual.regenerar_clip,
     "generar_clips_mixto": escena_individual.generar_clips_mixto,
     "generar_upscale": upscale.generar_upscale,
@@ -67,8 +68,12 @@ JOBS_LLM = {
 #  - voz → subtítulos (sin revisión intermedia)
 #  - Ken Burns: upscale → clips → armado
 #  - i2v: i2v → armado
+#  - música: sugerencia del LLM → portada
 # Las escenas NO encadenan a imágenes: los prompts se revisan/editan primero.
 CADENA = {
+    # La portada va en su propio job y no dentro del de LLM: así la cola
+    # descarga el llama-server antes de que ComfyUI pida la GPU.
+    "mejorar_prompt_musica": "generar_portada_musica",
     "generar_voz": "generar_subtitulos",
     "generar_upscale": "generar_clips",
     "generar_clips": "armar_video",

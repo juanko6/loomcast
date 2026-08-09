@@ -18,6 +18,7 @@ from ...config import (
     MUSICA_LM_DEVICE,
     MUSICA_LM_TEMPERATURE,
     MUSICA_LUFS,
+    MUSICA_PORTADA_PX,
     MUSICA_TRUE_PEAK,
     PROMPTS_DIR,
 )
@@ -49,6 +50,45 @@ def ruta_audio(musica_id: int):
         for f in sorted(car.glob("musica.*")):
             return f
     return None
+
+
+def ruta_portada(musica_id: int):
+    """Portada de la pista, o None si aún no se ha generado."""
+    p = carpeta(musica_id) / "portada.png"
+    return p if p.exists() else None
+
+
+def generar_portada(musica_id: int) -> str:
+    """Genera la portada a partir del prompt que dejó el LLM.
+
+    Va en su propio job, encadenado tras `mejorar_prompt_musica`, y no dentro de
+    él: así la cola descarga el llama-server antes de pedirle la GPU a ComfyUI,
+    que es la regla de toda etapa GPU del proyecto.
+
+    Es cuadrada y pequeña a propósito (config: [musica].portada_px): se ve como
+    miniatura de 48 px en la lista, y a 384 px cuesta 6 s en el M3 Max frente a
+    los 12 s de 512.
+    """
+    with get_session() as s:
+        m = musica_repo.obtener(s, musica_id)
+        if m is None:
+            raise ValueError(f"Música {musica_id} no existe")
+        prompt = m.portada
+    if not prompt:
+        return "Sin prompt de portada: nada que generar"
+
+    carpeta(musica_id).mkdir(parents=True, exist_ok=True)
+    try:
+        comfy.generar_imagen(
+            prompt,
+            random.randint(0, 2**31 - 1),
+            carpeta(musica_id) / "portada.png",
+            MUSICA_PORTADA_PX,
+            MUSICA_PORTADA_PX,
+        )
+    finally:
+        comfy.liberar_memoria()
+    return "Portada generada"
 
 
 def _sistema(tipo: str) -> str:
@@ -84,6 +124,7 @@ def mejorar_prompt(musica_id: int) -> str:
             keyscale=normalizar_keyscale(r.keyscale),
             timesig=normalizar_timesig(r.timesig),
             idioma=normalizar_idioma(r.idioma if tipo == "cancion" else "en"),
+            portada=r.portada,
         )
         s.commit()
     return "Estilo, tempo y letra sugeridos"
