@@ -30,28 +30,52 @@ Ver [PLAN.md](PLAN.md) para la arquitectura completa y [fase0/RESULTADOS.md](fas
   - **música**: ACE-Step 1.5 XL Turbo (ver "Música")
 - ffmpeg
 
-## Arranque
+## Instalación (una vez)
 
 ```bash
 python3.12 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
-
-# Frontend: se compila una vez (y cada vez que lo toques)
-cd web && pnpm install && pnpm build && cd ..
-
-# 1. llama-server: solo si tu modelo no declara `comando` en config.toml
-#    (con `comando`, lo arranca y lo para Loomcast; ver abajo)
-# 2. ComfyUI en el 8188 (ver "Levantar ComfyUI" justo debajo)
-
-./.venv/bin/uvicorn backend.main:app --port 8700
-# UI en http://127.0.0.1:8700
 ```
 
-### Levantar ComfyUI
+El frontend se compila aparte, y hay que recompilarlo cada vez que se toque algo
+de `web/` (uvicorn sirve el build estático de `web/dist/`):
+
+```bash
+cd web && pnpm install && pnpm build && cd ..
+```
+
+Y el parche que la música necesita en Mac (ver "Música"):
+
+```bash
+./.venv/bin/python scripts/instalar_parche_mps.py
+```
+
+## Arranque diario
+
+Dos procesos, cada uno en su terminal, en este orden.
+
+**1. ComfyUI** (puerto 8188), que es quien genera imágenes, vídeo y música:
 
 ```bash
 comfy launch -- --enable-manager --enable-manager-legacy-ui --gpu-only
 ```
+
+**2. Loomcast** (puerto 8700), backend y UI en el mismo proceso:
+
+```bash
+./.venv/bin/uvicorn backend.main:app --port 8700
+```
+
+La interfaz queda en **http://127.0.0.1:8700**.
+
+El `llama-server` no hay que levantarlo: si el modelo declara `comando` en
+`config.toml`, lo arranca y lo para Loomcast según haga falta. Solo si usas un
+modelo sin `comando` tienes que levantarlo tú.
+
+Para tocar la interfaz con recarga en caliente, en vez de recompilar a mano, ver
+"Frontend".
+
+### Sobre el arranque de ComfyUI
 
 El `--` es obligatorio: separa los argumentos de comfy-cli de los que van a
 ComfyUI. Sin él, `comfy launch --gpu-only` intenta interpretar el flag como
@@ -68,8 +92,16 @@ cd ~/Documents/ComfyUI/ComfyUI && ~/Documents/ComfyUI/venv/bin/python main.py --
 **`--gpu-only` no es opcional.** En MPS, ComfyUI pone el estado de memoria en
 `SHARED`, y con ese estado manda los text encoders a la CPU; en música ese
 "text encoder" es el LM de 4B que planifica la canción, así que sin el flag una
-pista de 30 s pasa de 30 s a 167 s. Para las imágenes da igual (el encoder corre
-medio segundo), pero no cuesta nada dejarlo siempre puesto.
+pista de 30 s pasa de 30 s a 167 s.
+
+**Y por eso los workflows de imagen llevan `"device": "cpu"` en su `CLIPLoader`.**
+Los encoders `qwen_3_4b_fp4_mixed` (Z-Image) y `qwen_3_8b_fp4mixed` (FLUX.2
+Klein) llevan tensores fp8 dentro, y Metal no los soporta: con `--gpu-only` y
+sin ese `device`, cualquier generación de imagen muere con
+`[CLIPTextEncode] Undefined type Float8_e4m3fn`. El input `device` del nodo fija
+el dispositivo por encima del flag global, así que la música se queda en GPU y
+las imágenes en CPU. Si añades un workflow de imagen nuevo con un encoder fp8 o
+fp4mixed, acuérdate de ponerle `"device": "cpu"`.
 
 Dos líneas que conviene mirar en el arranque:
 
