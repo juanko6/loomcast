@@ -26,14 +26,41 @@ cd web && pnpm install && pnpm build && cd ..
 
 # 1. llama-server: solo si tu modelo no declara `comando` en config.toml
 #    (con `comando`, lo arranca y lo para Loomcast; ver abajo)
-# 2. ComfyUI corriendo (por defecto 8188), SIEMPRE con --gpu-only:
-#    comfy launch -- --gpu-only        (o: python main.py --gpu-only)
-#    Sin ese flag ComfyUI deja los text encoders en la CPU en todos los Mac, y
-#    la música tarda 5,5× más. Ver "Música" más abajo.
+# 2. ComfyUI en el 8188 (ver "Levantar ComfyUI" justo debajo)
 
 ./.venv/bin/uvicorn backend.main:app --port 8700
 # UI en http://127.0.0.1:8700
 ```
+
+### Levantar ComfyUI
+
+```bash
+comfy launch -- --enable-manager --enable-manager-legacy-ui --gpu-only
+```
+
+El `--` es obligatorio: separa los argumentos de comfy-cli de los que van a
+ComfyUI. Sin él, `comfy launch --gpu-only` intenta interpretar el flag como
+suyo.
+
+Si `comfy` no encuentra las dependencias (`ModuleNotFoundError: No module named
+'sqlalchemy'` y similares) es que lo estás llamando desde un shell sin el
+entorno de ComfyUI. Arranca entonces con su intérprete directamente:
+
+```bash
+cd ~/Documents/ComfyUI/ComfyUI && ~/Documents/ComfyUI/venv/bin/python main.py --enable-manager --enable-manager-legacy-ui --gpu-only
+```
+
+**`--gpu-only` no es opcional.** En MPS, ComfyUI pone el estado de memoria en
+`SHARED`, y con ese estado manda los text encoders a la CPU; en música ese
+"text encoder" es el LM de 4B que planifica la canción, así que sin el flag una
+pista de 30 s pasa de 30 s a 167 s. Para las imágenes da igual (el encoder corre
+medio segundo), pero no cuesta nada dejarlo siempre puesto.
+
+Dos líneas que conviene mirar en el arranque:
+
+- `[loomcast] Parche de torch.multinomial en MPS activo` — si no está, la música
+  fallará en pistas de más de ~33 s (ver "Música").
+- `Set vram state to: SHARED` — es lo normal en Mac, no es un problema.
 
 ## Frontend
 
