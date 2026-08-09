@@ -1,14 +1,17 @@
 """Custom node de ComfyUI que esquiva el bug de torch.multinomial en Metal.
 
 EL BUG
-`torch.multinomial` sobre MPS devuelve índices fuera del soporte cuando la
-distribución es grande. No es un problema de precisión ni de cómo se enmascara:
-es el TAMAÑO. Comprobado en PyTorch puro (torch 2.14.0.dev, M3 Max), muestreando
-un vocabulario de 217k con solo 64k valores no nulos:
+`torch.multinomial` sobre MPS devuelve a veces índices cuya probabilidad es
+exactamente 0.0. Lo que lo dispara no es el tamaño del tensor sino la presencia
+de entradas a cero, y la tasa crece con cuántas haya. Medido en PyTorch puro
+(torch 2.14.0.dev20260630, M3 Max), con 217000 entradas y 2000 muestras por fila:
 
-    enmascarado con finfo.min ....... 4 de 500 muestras fuera de rango
-    enmascarado con -inf en fp32 .... 4 de 500
-    muestreando solo el tramo de 64k. 0 de 500
+    sin ceros ....................... 0 de 2000
+    117000 ceros .................... 2 de 2000
+    153000 ceros .................... 6 de 2000
+    216000 ceros ................... 10 de 2000
+
+Tampoco es precisión: da igual enmascarar con finfo.min que con -inf en fp32.
 
 QUÉ ROMPE
 ACE-Step 1.5 planifica la canción con un LM que muestrea sobre el vocabulario
@@ -22,11 +25,11 @@ token corrupto se convierte en un código inválido:
   - En pistas cortas suele caer dentro del rango y degrada el plan EN SILENCIO.
 
 EL ARREGLO
-Muestrear solo el soporte real. Los valores enmascarados salen de la softmax
-como cero exacto (finfo.min / temperature desborda a -inf), así que `nonzero`
-recupera exactamente el tramo válido, se muestrea ahí y se traduce el índice de
-vuelta. Estadísticamente es la misma distribución; lo único que cambia es el
-tamaño del tensor que ve la operación rota.
+Quitar los ceros antes de muestrear. Los valores enmascarados salen de la
+softmax como cero exacto (finfo.min / temperature desborda a -inf), así que
+`nonzero` recupera el soporte real, se muestrea ahí y se traduce el índice de
+vuelta. Estadísticamente es la misma distribución; lo que desaparece es
+justamente lo que dispara el fallo.
 
 El parche se activa solo mientras corre el muestreo del LM de ACE-Step, no de
 forma global, y solo sobre MPS: cualquier otro modelo y cualquier otro backend
@@ -41,19 +44,26 @@ import torch
 
 import comfy.text_encoders.ace15 as ace15
 
-# Por encima de esto es donde la operación empieza a fallar; el soporte real de
-# ACE-Step son 64k, así que el margen es amplio por los dos lados.
-LIMITE = 100_000
+# Por debajo de esto no compensa el coste del nonzero(), y el fallo solo se ha
+# visto con distribuciones de vocabulario (decenas de miles de entradas).
+MINIMO = 1024
 
 _multinomial_original = torch.multinomial
 _muestreo_original = ace15.sample_manual_loop_no_classes
 
 
 def _multinomial_seguro(probs, num_samples=1, replacement=False, *, generator=None, out=None):
-    es_grande = probs.device.type == "mps" and probs.dim() == 2 and probs.shape[-1] > LIMITE
-    if es_grande and probs.shape[0] == 1:
+    aplica = (
+        probs.device.type == "mps"
+        and probs.dim() == 2
+        and probs.shape[0] == 1
+        and probs.shape[-1] > MINIMO
+    )
+    if aplica:
         soporte = probs[0].nonzero(as_tuple=True)[0]
-        if 0 < soporte.numel() <= LIMITE:
+        # Solo si hay ceros que quitar: sin ellos el fallo no se da y no hay
+        # motivo para tocar nada.
+        if 0 < soporte.numel() < probs.shape[-1]:
             elegido = _multinomial_original(
                 probs[:, soporte], num_samples, replacement, generator=generator
             )

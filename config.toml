@@ -247,13 +247,14 @@ lm_temperature = 0.85
 # EN GPU **SOLO** SI EL PARCHE ESTÁ INSTALADO:
 #     python scripts/instalar_parche_mps.py
 #
-# Sin él, torch.multinomial se rompe en Metal con distribuciones grandes (es del
-# tamaño, no del enmascarado: con el vocabulario de 217k salen ~4 de cada 500
-# muestras fuera de rango; con el tramo válido de 64k, cero). Eso tumba las
-# pistas de más de ~33 s y degrada en silencio las cortas.
+# Sin él, torch.multinomial en Metal devuelve a veces índices con probabilidad
+# CERO. Lo dispara la presencia de entradas a cero (aquí, los ~153k tokens que
+# no son códigos de audio y se enmascaran), y la tasa sube con cuántas haya. Eso
+# tumba las pistas de más de ~33 s y degrada en silencio las cortas.
 #
-# El parche muestrea solo el soporte real y lo arregla: 90 s en 60 s y 189 s en
-# 104 s, frente a los ~410 s que costaban los mismos 90 s con el LM en CPU.
+# El parche quita los ceros antes de muestrear y lo arregla: 90 s en 60 s y
+# 189 s en 104 s, frente a los ~410 s que costaban los mismos 90 s con el LM en
+# CPU.
 # Si alguna vez quieres quitarlo, pon "cpu" aquí: es más lento pero no depende
 # de nada externo.
 lm_device = "default"
