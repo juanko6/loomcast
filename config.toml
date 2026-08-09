@@ -237,16 +237,26 @@ duracion_s = 30
 # también el grueso del tiempo; ponlo en false para bajar a ~2 s por pista a
 # costa de generar sin plan de estructura.
 audio_codes = true
-# Temperatura del muestreo del LM planificador. DÉJALO EN 0 en Mac.
-# Con temperatura > 0 el muestreo pasa por torch.multinomial, que sobre Metal
-# devuelve índices fuera de rango y tumba la generación en cuanto la pista pasa
-# de ~33 s (medido: 33 s va, 34 s falla siempre; con el LM en CPU funciona, así
-# que es un bug de Metal, no del modelo). Con 0 usa argmax y va a cualquier
-# duración: 189 s de pista en 95 s.
-# El coste es que el PLAN de estructura se vuelve determinista para el mismo
-# prompt; la seed sigue cambiando el render, así que "regenerar" sigue dando
-# tomas distintas del mismo arreglo.
-lm_temperature = 0.0
+# Temperatura del muestreo del LM planificador. A 0 usa argmax (decodificación
+# voraz) y las pistas salen monótonas: el mismo bucle repetido. Con 0.85 el plan
+# es mucho más elaborado. Verificado a oído, no por métricas.
+lm_temperature = 0.85
+#
+# Dónde corre el LM planificador: "cpu" o "default" (la GPU).
+#
+# Va en CPU a propósito, y cuesta caro (~410 s por pista de 90 s frente a ~47 s
+# en GPU). El motivo es un bug de PyTorch en Metal: torch.multinomial se rompe
+# con distribuciones grandes. Reproducido en PyTorch puro, sin ComfyUI de por
+# medio: muestreando el vocabulario completo de 217k salen ~4 de cada 500
+# muestras fuera de rango; muestreando solo el tramo válido de 64k, cero.
+#
+# Eso se manifiesta de dos formas, y las dos importan:
+#   - Por encima de ~33 s el token corrupto se sale del rango y TUMBA la
+#     generación (33 s va, 34 s falla siempre).
+#   - Por debajo suele caer dentro del rango y degrada el plan EN SILENCIO.
+#
+# Ponlo en "default" solo si aceptas pistas de hasta 33 s y algo peores.
+lm_device = "cpu"
 
 [paths]
 proyectos = "proyectos"

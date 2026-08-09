@@ -133,7 +133,7 @@
       "clip_name1": "qwen_0.6b_ace15.safetensors",
       "clip_name2": "qwen_4b_ace15.safetensors",
       "type": "ace",
-      "device": "default"
+      "device": "{LM_DEVICE}"
     },
     "class_type": "DualCLIPLoader",
     "_meta": {

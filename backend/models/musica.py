@@ -30,8 +30,10 @@ class Musica(Base):
     # espera prosa: un párrafo con instrumentación, arreglo, mezcla y espacio.
     # None hasta que el usuario la escribe o el LLM la sugiere.
     tags: Mapped[str | None] = mapped_column(Text, default=None)
-    # Letra con marcadores [Verse 1 - ...] (solo tipo=cancion). None/"" en
-    # instrumental.
+    # De dónde saca ACE-Step la estructura, en los dos modos: en canción es la
+    # letra cantada con marcadores [Verse 1 - ...]; en instrumental, un guion de
+    # secciones con solo marcadores y sin palabras. Vacío = un único bucle
+    # repetido durante toda la pista.
     lyrics: Mapped[str | None] = mapped_column(Text, default=None)
     # Duración objetivo en segundos (placeholder {DURACION} del workflow).
     duracion_s: Mapped[int] = mapped_column(default=30)

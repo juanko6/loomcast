@@ -146,10 +146,12 @@ _musica = _cfg.get("musica", {})
 MUSICA_WORKFLOW: str = _musica.get("workflow", "workflows/musica_api.json")
 MUSICA_DURACION_S: int = _musica.get("duracion_s", 30)
 MUSICA_AUDIO_CODES: bool = _musica.get("audio_codes", True)
-# Temperatura del LM planificador. 0 usa argmax; cualquier valor > 0 pasa por
-# torch.multinomial, que en Metal devuelve índices fuera de rango en pistas de
-# más de ~33 s. Por defecto 0 para que cualquier duración funcione.
-MUSICA_LM_TEMPERATURE: float = float(_musica.get("lm_temperature", 0.0))
+# Temperatura del LM planificador: a 0 (argmax) las pistas salen monótonas.
+MUSICA_LM_TEMPERATURE: float = float(_musica.get("lm_temperature", 0.85))
+# Dónde corre el LM: "cpu" esquiva el bug de torch.multinomial en Metal, que con
+# temperatura > 0 tumba las pistas de más de ~33 s y degrada el plan en las
+# cortas. Es lento pero correcto; ver el comentario de [musica] en config.toml.
+MUSICA_LM_DEVICE: str = _musica.get("lm_device", "cpu")
 
 PROYECTOS_DIR: Path = ROOT / _cfg["paths"]["proyectos"]
 PLANTILLAS_DIR: Path = ROOT / _cfg["paths"]["plantillas"]

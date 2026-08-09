@@ -15,6 +15,7 @@ from ...clients import comfy, llm
 from ...config import (
     MUSICA_AUDIO_CODES,
     MUSICA_DIR,
+    MUSICA_LM_DEVICE,
     MUSICA_LM_TEMPERATURE,
     PROMPTS_DIR,
 )
@@ -54,10 +55,14 @@ def mejorar_prompt(musica_id: int) -> str:
         m = musica_repo.obtener(s, musica_id)
         if m is None:
             raise ValueError(f"Música {musica_id} no existe")
-        tipo, idea = m.tipo, m.idea
+        tipo, idea, duracion_s = m.tipo, m.idea, m.duracion_s
 
-    r = llm.chat(_sistema(tipo), idea, MusicaPromptLLM)
-    lyrics = r.lyrics if tipo == "cancion" else ""
+    # La duración va en el mensaje porque el guion de secciones se escala con
+    # ella: una pista de 30 s lleva 3 o 4 secciones y una de 180 s, siete u ocho.
+    r = llm.chat(_sistema(tipo), f"{idea}\n\n(Duración: {duracion_s} segundos)", MusicaPromptLLM)
+    # El guion de secciones también va en instrumental: es lo que evita que la
+    # pista sea un mismo bucle repetido durante toda su duración.
+    lyrics = r.lyrics
 
     with get_session() as s:
         m = musica_repo.obtener(s, musica_id)
@@ -87,7 +92,10 @@ def generar(musica_id: int) -> str:
             raise ValueError("La pista no tiene etiquetas de estilo todavía")
         tipo = m.tipo
         tags = m.tags
-        lyrics = m.lyrics if tipo == "cancion" else ""
+        # En canción son la letra cantada; en instrumental, el guion de secciones
+        # (solo marcadores [Intro - ...], sin palabras). Los dos van al mismo
+        # campo del nodo, que es de donde ACE-Step saca la estructura.
+        lyrics = m.lyrics
         duracion_s = m.duracion_s
         bpm, keyscale, timesig, idioma = m.bpm, m.keyscale, m.timesig, m.idioma
         seed = m.seed if m.seed is not None else random.randint(0, 2**31 - 1)
@@ -106,6 +114,7 @@ def generar(musica_id: int) -> str:
             carpeta(musica_id) / "musica",
             audio_codes=MUSICA_AUDIO_CODES,
             lm_temperature=MUSICA_LM_TEMPERATURE,
+            lm_device=MUSICA_LM_DEVICE,
         )
     finally:
         comfy.liberar_memoria()

@@ -101,16 +101,24 @@
           placeholder="Ej: A warm lofi hip hop track built on a mellow upright piano and a lazy, brushed drum groove. A soft sub-bass anchors the track without intruding, and rain and vinyl crackle sit far back in the mix, leaving generous space around the piano."
         ></textarea>
       </Field>
-      {#if esCancion}
-        <Field label="Letra" hint="Marcadores con indicación dentro: [Verse 1 - voz susurrada sobre guitarra].">
-          <textarea
-            class="control"
-            rows="8"
-            bind:value={lyrics}
-            placeholder={"[Intro - piano y batería con escobillas]\n[Verse 1 - voz femenina cercana]\n...\n[Chorus - armonías apiladas]\n..."}
-          ></textarea>
-        </Field>
-      {/if}
+      <!-- El mismo campo del nodo en los dos modos: es de donde ACE-Step saca
+           la estructura. En instrumental lleva solo marcadores (sin palabras);
+           dejarlo vacío es lo que hacía que la pista fuese un único bucle. -->
+      <Field
+        label={esCancion ? "Letra" : "Estructura"}
+        hint={esCancion
+          ? "Marcadores con indicación dentro: [Verse 1 - voz susurrada sobre guitarra]."
+          : "Solo marcadores, sin letra. Es lo que evita que la pista sea el mismo bucle todo el rato."}
+      >
+        <textarea
+          class="control"
+          rows="8"
+          bind:value={lyrics}
+          placeholder={esCancion
+            ? "[Intro - piano y batería con escobillas]\n[Verse 1 - voz femenina cercana]\n...\n[Chorus - armonías apiladas]\n..."
+            : "[Intro - piano solo, sin batería]\n[Sección A - entran batería y bajo]\n[Break - se va la batería, piano con reverb]\n[Sección B - vuelve más densa, trompeta lleva la melodía]\n[Outro - se deshacen las capas]"}
+        ></textarea>
+      </Field>
     {/if}
 
     <Field label="Duración (segundos)">

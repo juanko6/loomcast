@@ -322,7 +322,8 @@ def generar_musica(
     idioma: str,
     destino: Path,
     audio_codes: bool = True,
-    lm_temperature: float = 0.0,
+    lm_temperature: float = 0.85,
+    lm_device: str = "cpu",
 ) -> Path:
     """Genera una pista de música con el workflow ACE-Step 1.5 configurable y la
     guarda junto a `destino` conservando la extensión de origen (devuelve la
@@ -339,10 +340,13 @@ def generar_musica(
     derive dentro de la misma pista. `audio_codes` activa el LM planificador,
     que sube la calidad a cambio de tiempo.
 
-    `lm_temperature` a 0 no es un capricho: ver MUSICA_LM_TEMPERATURE en
-    config.py. Con temperatura > 0 el muestreo del LM pasa por
-    `torch.multinomial`, que en Metal devuelve índices inválidos en pistas de
-    más de ~33 s y tumba la generación.
+    `lyrics` lleva la letra cantada en canción y el guion de secciones en
+    instrumental: los dos alimentan el mismo campo del nodo, que es de donde
+    ACE-Step saca la estructura. Vacío = pista de un solo bucle.
+
+    `lm_temperature` y `lm_device` van juntos: la temperatura alta es lo que
+    hace el plan elaborado, pero obliga a `lm_device="cpu"` porque
+    `torch.multinomial` está roto en Metal. Ver [musica] en config.toml.
     """
     wf_path = ROOT / MUSICA_WORKFLOW
     if not wf_path.exists():
@@ -366,6 +370,7 @@ def generar_musica(
             IDIOMA=idioma,
             AUDIO_CODES=audio_codes,
             LM_TEMP=float(lm_temperature),
+            LM_DEVICE=lm_device,
         )
         try:
             entry = _encolar_y_esperar(c, wf)
@@ -373,13 +378,15 @@ def generar_musica(
             # El bug de multinomial en Metal aflora como un índice negativo
             # contra la tabla de códigos de audio, en un nodo que no es el
             # culpable. Sin traducir, es indescifrable.
-            if "out of bounds" in str(e) and lm_temperature > 0:
+            if "out of bounds" in str(e) and lm_temperature > 0 and lm_device != "cpu":
                 raise ComfyError(
                     f"ACE-Step falló generando el plan de la pista ({duracion_s} s). "
-                    f"Es el bug de torch.multinomial en Metal: con "
-                    f"[musica].lm_temperature > 0 (ahora {lm_temperature}) solo "
-                    "aguanta pistas de hasta ~33 s. Ponlo a 0 para que use "
-                    "argmax y funcione a cualquier duración."
+                    "Es el bug de torch.multinomial en Metal: con "
+                    f"[musica].lm_temperature > 0 (ahora {lm_temperature}) y el LM "
+                    "en la GPU, solo aguanta pistas de hasta ~33 s. Pon "
+                    '[musica].lm_device = "cpu" (más lento pero sin límite), o '
+                    "baja lm_temperature a 0 (rápido, pero las pistas salen "
+                    "monótonas)."
                 ) from e
             raise
         return _descargar_primer_audio(c, entry, destino)
