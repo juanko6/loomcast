@@ -210,6 +210,21 @@ libera los modelos al terminar).
 El LM planificador se apaga con `config.toml [musica].audio_codes = false`: baja
 a ~2 s por pista, pero sin plan de estructura y con peor calidad.
 
+### Portada
+
+Al terminar de generar una pista se encadena un job que le crea una portada
+cuadrada con el motor de imagen por defecto, a partir de un prompt que el LLM
+dejó junto al resto de campos. Se ve como miniatura en la lista y a tamaño
+completo en el panel de resultado y en el reproductor.
+
+Va después de la pista y no tras la sugerencia del LLM, para que solo tengan
+portada las pistas que existen de verdad; cada regeneración estrena la suya. Una
+pista rellenada a mano, sin pasar por el LLM, no tiene prompt de portada y se
+queda con la miniatura de icono.
+
+384 px por lado (`[musica].portada_px`). Medido con Z-Image en el M3 Max: 256 en
+4 s, 320 y 384 en 6 s, 512 en 12 s y 640 en 18 s — 384 sale gratis frente a 320.
+
 ### Masterizado
 
 ACE-Step entrega el audio crudo: cada pista sale a un volumen distinto y con los

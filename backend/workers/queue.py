@@ -68,16 +68,17 @@ JOBS_LLM = {
 #  - voz → subtítulos (sin revisión intermedia)
 #  - Ken Burns: upscale → clips → armado
 #  - i2v: i2v → armado
-#  - música: sugerencia del LLM → portada
+#  - música: pista generada → portada
 # Las escenas NO encadenan a imágenes: los prompts se revisan/editan primero.
 CADENA = {
-    # La portada va en su propio job y no dentro del de LLM: así la cola
-    # descarga el llama-server antes de que ComfyUI pida la GPU.
-    "mejorar_prompt_musica": "generar_portada_musica",
     "generar_voz": "generar_subtitulos",
     "generar_upscale": "generar_clips",
     "generar_clips": "armar_video",
     "generar_i2v": "armar_video",
+    # La portada se hace DESPUÉS de la pista, no tras la sugerencia del LLM:
+    # así solo la tienen las pistas que existen de verdad, y cada regeneración
+    # estrena portada.
+    "generar_musica": "generar_portada_musica",
     "generar_clips_mixto": "armar_video",
 }
 

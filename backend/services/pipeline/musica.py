@@ -61,13 +61,17 @@ def ruta_portada(musica_id: int):
 def generar_portada(musica_id: int) -> str:
     """Genera la portada a partir del prompt que dejó el LLM.
 
-    Va en su propio job, encadenado tras `mejorar_prompt_musica`, y no dentro de
-    él: así la cola descarga el llama-server antes de pedirle la GPU a ComfyUI,
-    que es la regla de toda etapa GPU del proyecto.
+    Va en su propio job encadenado tras `generar_musica`: así solo tienen
+    portada las pistas que existen de verdad, y cada regeneración estrena la
+    suya. Al ser un job aparte y no parte del de LLM, la cola descarga el
+    llama-server antes de pedirle la GPU a ComfyUI.
 
     Es cuadrada y pequeña a propósito (config: [musica].portada_px): se ve como
     miniatura de 48 px en la lista, y a 384 px cuesta 6 s en el M3 Max frente a
     los 12 s de 512.
+
+    Sin prompt de portada (pista rellenada a mano, sin pasar por el LLM) no
+    hace nada: es preferible una miniatura con icono que inventarse una imagen.
     """
     with get_session() as s:
         m = musica_repo.obtener(s, musica_id)
