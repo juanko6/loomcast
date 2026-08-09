@@ -242,21 +242,21 @@ audio_codes = true
 # es mucho más elaborado. Verificado a oído, no por métricas.
 lm_temperature = 0.85
 #
-# Dónde corre el LM planificador: "cpu" o "default" (la GPU).
+# Dónde corre el LM planificador: "default" (la GPU) o "cpu".
 #
-# Va en CPU a propósito, y cuesta caro (~410 s por pista de 90 s frente a ~47 s
-# en GPU). El motivo es un bug de PyTorch en Metal: torch.multinomial se rompe
-# con distribuciones grandes. Reproducido en PyTorch puro, sin ComfyUI de por
-# medio: muestreando el vocabulario completo de 217k salen ~4 de cada 500
-# muestras fuera de rango; muestreando solo el tramo válido de 64k, cero.
+# EN GPU **SOLO** SI EL PARCHE ESTÁ INSTALADO:
+#     python scripts/instalar_parche_mps.py
 #
-# Eso se manifiesta de dos formas, y las dos importan:
-#   - Por encima de ~33 s el token corrupto se sale del rango y TUMBA la
-#     generación (33 s va, 34 s falla siempre).
-#   - Por debajo suele caer dentro del rango y degrada el plan EN SILENCIO.
+# Sin él, torch.multinomial se rompe en Metal con distribuciones grandes (es del
+# tamaño, no del enmascarado: con el vocabulario de 217k salen ~4 de cada 500
+# muestras fuera de rango; con el tramo válido de 64k, cero). Eso tumba las
+# pistas de más de ~33 s y degrada en silencio las cortas.
 #
-# Ponlo en "default" solo si aceptas pistas de hasta 33 s y algo peores.
-lm_device = "cpu"
+# El parche muestrea solo el soporte real y lo arregla: 90 s en 60 s y 189 s en
+# 104 s, frente a los ~410 s que costaban los mismos 90 s con el LM en CPU.
+# Si alguna vez quieres quitarlo, pon "cpu" aquí: es más lento pero no depende
+# de nada externo.
+lm_device = "default"
 
 [paths]
 proyectos = "proyectos"
