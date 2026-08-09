@@ -2,8 +2,10 @@
   import Field from "../primitives/Field.svelte";
   import Segmented from "../primitives/Segmented.svelte";
   import Button from "../primitives/Button.svelte";
-  import type { MusicaDetalle } from "@/lib/musica";
+  import { IDIOMAS, KEYSCALES, TIMESIGS, type Musical, type MusicaDetalle } from "@/lib/musica";
   import type { TipoMusica } from "@/lib/types";
+
+  type Campos = { tags: string; lyrics: string; duracion_s: number } & Musical;
 
   let {
     detail = null,
@@ -15,8 +17,8 @@
     detail?: MusicaDetalle | null;
     busy?: boolean;
     oncreate: (p: { tipo: TipoMusica; idea: string; duracion_s: number }) => void;
-    onsuggest: (p: { tags: string; lyrics: string; duracion_s: number }) => void;
-    ongenerate: (p: { tags: string; lyrics: string; duracion_s: number }) => void;
+    onsuggest: (p: Campos) => void;
+    ongenerate: (p: Campos) => void;
   } = $props();
 
   // Borrador local; se re-sincroniza cuando cambia la pista seleccionada (o al
@@ -27,6 +29,10 @@
   let tags = $state("");
   let lyrics = $state("");
   let duracion = $state(30);
+  let bpm = $state(120);
+  let keyscale = $state("C major");
+  let timesig = $state("4");
+  let idioma = $state("es");
 
   $effect(() => {
     const d = detail;
@@ -35,10 +41,23 @@
     tags = d?.tags ?? "";
     lyrics = d?.lyrics ?? "";
     duracion = d?.duracion_s ?? 30;
+    bpm = d?.bpm ?? 120;
+    keyscale = d?.keyscale ?? "C major";
+    timesig = d?.timesig ?? "4";
+    idioma = d?.idioma ?? "es";
   });
 
   const esCancion = $derived((detail ? detail.tipo : tipo) === "cancion");
   const nuevo = $derived(detail === null);
+  const campos = (): Campos => ({
+    tags,
+    lyrics,
+    duracion_s: duracion,
+    bpm,
+    keyscale,
+    timesig,
+    idioma,
+  });
 </script>
 
 <div class="flex h-full flex-col">
@@ -71,17 +90,24 @@
         <p class="text-xs font-medium tracking-wide text-muted">Editando pista</p>
         <h2 class="line-clamp-2 text-sm font-semibold break-words text-text">{idea || "(pista sin título)"}</h2>
       </div>
-      <Field label="Etiquetas de estilo (inglés, coma-separadas)">
+      <Field
+        label="Descripción de estilo (inglés)"
+        hint="ACE-Step 1.5 espera prosa, no etiquetas: di qué instrumentos hay y qué papel tiene cada uno en la mezcla."
+      >
         <textarea
           class="control"
-          rows="3"
+          rows="6"
           bind:value={tags}
-          placeholder="Ej: lofi hip hop, warm piano, rain, mellow, slow ~70 BPM, instrumental"
+          placeholder="Ej: A warm lofi hip hop track built on a mellow upright piano and a lazy, brushed drum groove. A soft sub-bass anchors the track without intruding, and rain and vinyl crackle sit far back in the mix, leaving generous space around the piano."
         ></textarea>
       </Field>
       {#if esCancion}
-        <Field label="Letra" hint="Usa marcadores [verse] / [chorus].">
-          <textarea class="control" rows="8" bind:value={lyrics} placeholder="[verse]\n...\n[chorus]\n..."
+        <Field label="Letra" hint="Marcadores con indicación dentro: [Verse 1 - voz susurrada sobre guitarra].">
+          <textarea
+            class="control"
+            rows="8"
+            bind:value={lyrics}
+            placeholder={"[Intro - piano y batería con escobillas]\n[Verse 1 - voz femenina cercana]\n...\n[Chorus - armonías apiladas]\n..."}
           ></textarea>
         </Field>
       {/if}
@@ -90,6 +116,33 @@
     <Field label="Duración (segundos)">
       <input class="control" type="number" min="5" max="600" step="5" bind:value={duracion} />
     </Field>
+
+    {#if !nuevo}
+      <!-- Conditioning musical de 1.5. Fijar tempo, tonalidad y compás es lo que
+           evita que el arreglo derive y los instrumentos se tapen entre sí. -->
+      <div class="grid grid-cols-2 gap-3">
+        <Field label="Tempo (BPM)">
+          <input class="control" type="number" min="10" max="300" bind:value={bpm} />
+        </Field>
+        <Field label="Compás">
+          <select class="control" bind:value={timesig}>
+            {#each TIMESIGS as t}<option value={t}>{t}/4</option>{/each}
+          </select>
+        </Field>
+        <Field label="Tonalidad">
+          <select class="control" bind:value={keyscale}>
+            {#each KEYSCALES as k}<option value={k}>{k}</option>{/each}
+          </select>
+        </Field>
+        {#if esCancion}
+          <Field label="Idioma de la letra">
+            <select class="control" bind:value={idioma}>
+              {#each IDIOMAS as i}<option value={i.value}>{i.label}</option>{/each}
+            </select>
+          </Field>
+        {/if}
+      </div>
+    {/if}
   </div>
 
   <!-- Barra de acción fija abajo (patrón Mureka) -->
@@ -107,15 +160,17 @@
         <Button
           variant="secondary"
           disabled={busy}
-          onclick={() => onsuggest({ tags, lyrics, duracion_s: duracion })}
-          title="El LLM sugiere las etiquetas{esCancion ? ' y la letra' : ''} a partir de tu idea"
+          onclick={() => onsuggest(campos())}
+          title="El LLM sugiere la descripción, el tempo y la tonalidad{esCancion
+            ? ' y la letra'
+            : ''} a partir de tu idea"
         >
           Sugerir con LLM
         </Button>
         <Button
           class="w-full"
           disabled={busy || !tags.trim()}
-          onclick={() => ongenerate({ tags, lyrics, duracion_s: duracion })}
+          onclick={() => ongenerate(campos())}
         >
           {detail?.tiene_audio ? "Regenerar (otra distinta)" : "Generar música"}
         </Button>

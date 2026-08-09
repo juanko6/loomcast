@@ -35,16 +35,20 @@ def _render(crudo: str, **valores) -> dict:
 
     Los placeholders de texto ({PROMPT}, {IMAGE}, {TAGS}…) viven dentro de
     comillas y se escapan para no romper el JSON. Los numéricos ({SEED},
-    {WIDTH}, {FRAMES}…) van **entrecomillados en el archivo** y se sustituyen
-    incluyendo las comillas: así el workflow sigue siendo JSON válido y se puede
-    abrir tal cual en ComfyUI, pero ComfyUI recibe el número.
+    {WIDTH}, {FRAMES}…) y los booleanos ({AUDIO_CODES}) van **entrecomillados en
+    el archivo** y se sustituyen incluyendo las comillas: así el workflow sigue
+    siendo JSON válido y se puede abrir tal cual en ComfyUI, pero ComfyUI recibe
+    el número o el booleano.
     """
     for clave, valor in valores.items():
         marca = "{" + clave + "}"
         if isinstance(valor, str):
             crudo = crudo.replace(marca, json.dumps(valor)[1:-1])
         else:
-            crudo = crudo.replace(f'"{marca}"', str(valor))
+            # json.dumps y no str(): los booleanos de Python son True/False y
+            # el JSON los quiere en minúscula. Va antes que cualquier trato de
+            # int porque bool es subclase de int.
+            crudo = crudo.replace(f'"{marca}"', json.dumps(valor))
     faltan = [m for m in valores if "{" + m + "}" in crudo]
     if faltan:
         raise ComfyError(f"Placeholders sin sustituir en el workflow: {faltan}")
@@ -285,24 +289,36 @@ def generar_musica(
     lyrics: str,
     seed: int,
     duracion_s: int,
+    bpm: int,
+    keyscale: str,
+    timesig: str,
+    idioma: str,
     destino: Path,
+    audio_codes: bool = True,
 ) -> Path:
-    """Genera una pista de música con el workflow ACE-Step configurable y la
+    """Genera una pista de música con el workflow ACE-Step 1.5 configurable y la
     guarda junto a `destino` conservando la extensión de origen (devuelve la
     ruta final).
 
-    El workflow (config: [musica].workflow) debe traer los placeholders
-    {TAGS}, {LYRICS}, {SEED} y {DURACION}, y terminar en un nodo de guardado de
-    audio (SaveAudio / SaveAudioMP3). Los numéricos ({SEED}, {DURACION}) van
-    entrecomillados en el JSON; ver `_render`.
+    El workflow (config: [musica].workflow) debe traer los placeholders de texto
+    {TAGS}, {LYRICS}, {KEYSCALE}, {TIMESIG} e {IDIOMA}, los numéricos {SEED},
+    {DURACION} y {BPM}, el booleano {AUDIO_CODES}, y terminar en un nodo de
+    guardado de audio. Los numéricos y el booleano van entrecomillados en el
+    JSON; ver `_render`.
+
+    {BPM}, {KEYSCALE} y {TIMESIG} son el conditioning musical que ACE-Step 1.5
+    añade sobre v1: fijan tempo, tonalidad y compás para que el arreglo no
+    derive dentro de la misma pista. `audio_codes` activa el LM planificador,
+    que sube la calidad a cambio de tiempo.
     """
     wf_path = ROOT / MUSICA_WORKFLOW
     if not wf_path.exists():
         raise ComfyError(
             f"No existe el workflow de música en {wf_path}. Exporta la plantilla "
-            "ACE-Step de ComfyUI en formato API con los placeholders {TAGS}, "
-            "{LYRICS}, {SEED} y {DURACION} (y un nodo SaveAudio), y ponlo en esa "
-            "ruta (o ajusta config.toml [musica].workflow)."
+            "ACE-Step 1.5 de ComfyUI en formato API con los placeholders {TAGS}, "
+            "{LYRICS}, {SEED}, {DURACION}, {BPM}, {KEYSCALE}, {TIMESIG}, "
+            "{IDIOMA} y {AUDIO_CODES} (y un nodo de guardado de audio), y ponlo "
+            "en esa ruta (o ajusta config.toml [musica].workflow)."
         )
     with httpx.Client(timeout=30) as c:
         wf = _render(
@@ -311,6 +327,11 @@ def generar_musica(
             LYRICS=lyrics,
             SEED=seed,
             DURACION=duracion_s,
+            BPM=bpm,
+            KEYSCALE=keyscale,
+            TIMESIG=timesig,
+            IDIOMA=idioma,
+            AUDIO_CODES=audio_codes,
         )
         entry = _encolar_y_esperar(c, wf)
         return _descargar_primer_audio(c, entry, destino)

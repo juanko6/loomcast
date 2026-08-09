@@ -7,15 +7,15 @@ from .base import Base, now_utc
 
 
 class Musica(Base):
-    """Una pista de música generada con ACE-Step vía ComfyUI, independiente del
-    pipeline de video. Cubre los tres usos con dos modos:
+    """Una pista de música generada con ACE-Step 1.5 vía ComfyUI, independiente
+    del pipeline de video. Cubre los tres usos con dos modos:
       - `tipo="instrumental"`: música de fondo / jingle (sin voz), solo `tags`.
       - `tipo="cancion"`: canción con voz cantada, `tags` + `lyrics` con
-        marcadores [verse]/[chorus].
+        marcadores [Verse 1 - ...]/[Chorus - ...].
 
     El ciclo de vida vive en `estado`: nueva (idea + campos editables) →
     generada (el archivo de audio existe en disco). La ayuda del LLM es opcional
-    (rellena tags/lyrics desde la idea) y no cambia el estado.
+    (rellena los campos desde la idea) y no cambia el estado.
     """
 
     __tablename__ = "musicas"
@@ -25,14 +25,26 @@ class Musica(Base):
     tipo: Mapped[str] = mapped_column(default="instrumental")
     # Lo que escribió el usuario (español): la idea/ambiente de la pista.
     idea: Mapped[str] = mapped_column(Text)
-    # Etiquetas de estilo para ACE-Step (inglés, coma-separadas). None hasta que
-    # el usuario las escribe o el LLM las sugiere.
+    # Descripción de estilo para ACE-Step 1.5 (inglés). Se llama `tags` porque
+    # así se llama la entrada del nodo TextEncodeAceStepAudio1.5, pero el modelo
+    # espera prosa: un párrafo con instrumentación, arreglo, mezcla y espacio.
+    # None hasta que el usuario la escribe o el LLM la sugiere.
     tags: Mapped[str | None] = mapped_column(Text, default=None)
-    # Letra con marcadores [verse]/[chorus] (solo tipo=cancion). None/"" en
+    # Letra con marcadores [Verse 1 - ...] (solo tipo=cancion). None/"" en
     # instrumental.
     lyrics: Mapped[str | None] = mapped_column(Text, default=None)
     # Duración objetivo en segundos (placeholder {DURACION} del workflow).
     duracion_s: Mapped[int] = mapped_column(default=30)
+    # Conditioning musical de ACE-Step 1.5, lo que v1 no tenía: sin tempo,
+    # tonalidad y compás fijos el arreglo deriva y los instrumentos chocan.
+    # Los tres se validan contra las listas del nodo en services/musica.py.
+    bpm: Mapped[int] = mapped_column(default=120)
+    # "<raíz> <major|minor>", p. ej. "C major" o "E minor".
+    keyscale: Mapped[str] = mapped_column(default="C major")
+    # Compás como cadena: "2" | "3" | "4" | "6" (el nodo usa un combo de texto).
+    timesig: Mapped[str] = mapped_column(default="4")
+    # Idioma de la letra en código ISO corto ("es", "en"…), de la lista del nodo.
+    idioma: Mapped[str] = mapped_column(default="es")
     # Seed de la última generación (None hasta generar).
     seed: Mapped[int | None] = mapped_column(default=None)
     # nueva | generada

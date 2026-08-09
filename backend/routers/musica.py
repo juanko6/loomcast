@@ -28,7 +28,15 @@ def crear(body: MusicaGenerarIn):
     if not body.idea.strip() and not body.tags.strip():
         raise HTTPException(400, "Escribe una idea o unas etiquetas de estilo")
     return musica_service.crear(
-        body.tipo, body.idea, body.tags, body.lyrics, body.duracion_s
+        body.tipo,
+        body.idea,
+        body.tags,
+        body.lyrics,
+        body.duracion_s,
+        body.bpm,
+        body.keyscale,
+        body.timesig,
+        body.idioma,
     )
 
 
@@ -44,7 +52,14 @@ def detalle(musica_id: int):
 def editar(musica_id: int, body: MusicaCamposIn):
     try:
         musica_service.editar_campos(
-            musica_id, body.tags, body.lyrics, body.duracion_s
+            musica_id,
+            body.tags,
+            body.lyrics,
+            body.duracion_s,
+            body.bpm,
+            body.keyscale,
+            body.timesig,
+            body.idioma,
         )
         return {"ok": True}
     except musica_service.MusicaNoExiste:
@@ -65,7 +80,15 @@ def generar(musica_id: int, body: MusicaLanzarIn | None = None):
     try:
         return {
             "job_id": musica_service.generar(
-                musica_id, b.tags, b.lyrics, b.duracion_s, b.seed
+                musica_id,
+                b.tags,
+                b.lyrics,
+                b.duracion_s,
+                b.seed,
+                b.bpm,
+                b.keyscale,
+                b.timesig,
+                b.idioma,
             )
         }
     except musica_service.MusicaNoExiste:

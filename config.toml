@@ -210,16 +210,33 @@ generar = "workflows/flux2_klein_t2i_api.json"
 editar = "workflows/flux2_klein_edit_api.json"
 
 [musica]
-# Generación de música local con ACE-Step (ACE Studio + StepFun): corre en
-# Apple Silicon vía Metal/MPS y tiene soporte nativo en ComfyUI. Descarga
-# `ace_step_v1_3.5b.safetensors` a ComfyUI/models/checkpoints y exporta la
-# plantilla "ACE-Step Text-to-Music" en formato API con los placeholders
-# {TAGS} (TextEncodeAceStepAudio→tags), {LYRICS} (→lyrics),
-# {DURACION} (EmptyAceStepLatentAudio→seconds) y {SEED} (KSampler→seed), más un
-# nodo SaveAudio (o SaveAudioMP3).
+# Generación de música local con ACE-Step 1.5 XL Turbo (ACE Studio + StepFun):
+# corre en Apple Silicon vía Metal/MPS y tiene soporte nativo en ComfyUI (nodos
+# TextEncodeAceStepAudio1.5 / EmptyAceStep1.5LatentAudio, sin custom nodes).
+# Sale a 48 kHz y, a diferencia de v1, acepta conditioning musical explícito
+# (tempo, tonalidad, compás), que es lo que evita que el arreglo derive y los
+# instrumentos se tapen entre sí.
+#
+# Descarga a ComfyUI/models/ desde Comfy-Org/ace_step_1.5_ComfyUI_files:
+#   diffusion_models/  acestep_v1.5_xl_turbo_bf16.safetensors  (9,97 GB)
+#   text_encoders/     qwen_0.6b_ace15.safetensors             (1,19 GB)
+#   text_encoders/     qwen_4b_ace15.safetensors               (8,38 GB)
+#   vae/               ace_1.5_vae.safetensors                 (0,34 GB)
+# Ojo: NO hay versión GGUF usable en ComfyUI (los GGUF que circulan son para
+# acestep.cpp, y ComfyUI-GGUF no soporta la arquitectura ace-step).
 workflow = "workflows/musica_api.json"
 # Duración por defecto de una pista nueva, en segundos.
 duracion_s = 30
+# IMPORTANTE: arranca ComfyUI con --gpu-only (`comfy launch -- --gpu-only`). Sin
+# ese flag ComfyUI deja los text encoders en la CPU en todos los Mac, y aquí el
+# "text encoder" es el LM de 4B que planifica la canción: 166,6 s por pista de
+# 30 s en vez de 30,1 s. Ver la sección "Música" del README.
+#
+# Activa el LM planificador (generate_audio_codes): un Qwen que planea la
+# estructura de la pista antes de sintetizarla. Es lo que sube la calidad y
+# también el grueso del tiempo; ponlo en false para bajar a ~2 s por pista a
+# costa de generar sin plan de estructura.
+audio_codes = true
 
 [paths]
 proyectos = "proyectos"

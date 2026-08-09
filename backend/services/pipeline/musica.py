@@ -1,9 +1,10 @@
-"""Generación de música con ACE-Step, independiente del pipeline de video.
+"""Generación de música con ACE-Step 1.5, independiente del pipeline de video.
 
 Dos etapas, disparadas por el usuario desde la UI:
-  1. mejorar_prompt (opcional) — el LLM convierte la idea en etiquetas de estilo
-     (y, si es canción, en letra con marcadores [verse]/[chorus]).
-  2. generar — ACE-Step (vía ComfyUI) sintetiza la pista de audio.
+  1. mejorar_prompt (opcional) — el LLM convierte la idea en una descripción de
+     estilo en prosa, el tempo/tonalidad/compás, y si es canción la letra con
+     marcadores [Verse 1 - ...].
+  2. generar — ACE-Step 1.5 (vía ComfyUI) sintetiza la pista de audio.
 
 El modo (`tipo`) decide qué prompt de sistema usa la etapa 1 y si se envía letra
 a la etapa 2: "instrumental" (música de fondo / jingle, sin voz) o "cancion".
@@ -11,10 +12,16 @@ a la etapa 2: "instrumental" (música de fondo / jingle, sin voz) o "cancion".
 import random
 
 from ...clients import comfy, llm
-from ...config import MUSICA_DIR, PROMPTS_DIR
+from ...config import MUSICA_AUDIO_CODES, MUSICA_DIR, PROMPTS_DIR
 from ...db import get_session
 from ...repositories import musica as musica_repo
 from ...schemas import MusicaPromptLLM
+from ..musica_combos import (
+    normalizar_bpm,
+    normalizar_idioma,
+    normalizar_keyscale,
+    normalizar_timesig,
+)
 
 
 def carpeta(musica_id: int):
@@ -49,9 +56,21 @@ def mejorar_prompt(musica_id: int) -> str:
 
     with get_session() as s:
         m = musica_repo.obtener(s, musica_id)
-        musica_repo.guardar_campos(s, m, r.tags, lyrics, None)
+        # El LLM propone tempo/tonalidad/compás/idioma, pero son combos cerrados
+        # del nodo: se normalizan antes de guardar o el workflow revienta.
+        musica_repo.guardar_campos(
+            s,
+            m,
+            r.tags,
+            lyrics,
+            None,
+            bpm=normalizar_bpm(r.bpm),
+            keyscale=normalizar_keyscale(r.keyscale),
+            timesig=normalizar_timesig(r.timesig),
+            idioma=normalizar_idioma(r.idioma if tipo == "cancion" else "en"),
+        )
         s.commit()
-    return "Etiquetas y letra sugeridas"
+    return "Estilo, tempo y letra sugeridos"
 
 
 def generar(musica_id: int) -> str:
@@ -65,11 +84,23 @@ def generar(musica_id: int) -> str:
         tags = m.tags
         lyrics = m.lyrics if tipo == "cancion" else ""
         duracion_s = m.duracion_s
+        bpm, keyscale, timesig, idioma = m.bpm, m.keyscale, m.timesig, m.idioma
         seed = m.seed if m.seed is not None else random.randint(0, 2**31 - 1)
 
     carpeta(musica_id).mkdir(parents=True, exist_ok=True)
     try:
-        comfy.generar_musica(tags, lyrics or "", seed, duracion_s, carpeta(musica_id) / "musica")
+        comfy.generar_musica(
+            tags,
+            lyrics or "",
+            seed,
+            duracion_s,
+            bpm,
+            keyscale,
+            timesig,
+            idioma,
+            carpeta(musica_id) / "musica",
+            audio_codes=MUSICA_AUDIO_CODES,
+        )
     finally:
         comfy.liberar_memoria()
 

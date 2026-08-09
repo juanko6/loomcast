@@ -11,6 +11,16 @@ from ..repositories import jobs as jobs_repo
 from ..repositories import musica as musica_repo
 from ..services.pipeline import musica as musica_pipeline
 from ..workers import queue
+from .musica_combos import (
+    BPM_DEFECTO,
+    IDIOMA_DEFECTO,
+    KEYSCALE_DEFECTO,
+    TIMESIG_DEFECTO,
+    normalizar_bpm,
+    normalizar_idioma,
+    normalizar_keyscale,
+    normalizar_timesig,
+)
 
 TIPOS_JOB = ["mejorar_prompt_musica", "generar_musica"]
 # Tope de duración en segundos (ACE-Step 1.5 llega a ~10 min; se acota para no
@@ -26,11 +36,36 @@ def _normalizar_dur(v: int) -> int:
     return max(DUR_MIN, min(DUR_MAX, int(v)))
 
 
-def crear(tipo: str, idea: str, tags: str, lyrics: str, duracion_s: int) -> dict:
+def crear(
+    tipo: str,
+    idea: str,
+    tags: str,
+    lyrics: str,
+    duracion_s: int,
+    bpm: int | None = None,
+    keyscale: str | None = None,
+    timesig: str | None = None,
+    idioma: str | None = None,
+) -> dict:
     t = "cancion" if tipo == "cancion" else "instrumental"
     with get_session() as s:
         m = musica_repo.crear(
-            s, t, idea.strip(), tags.strip(), lyrics.strip(), _normalizar_dur(duracion_s)
+            s,
+            t,
+            idea.strip(),
+            tags.strip(),
+            lyrics.strip(),
+            _normalizar_dur(duracion_s),
+            normalizar_bpm(bpm if bpm is not None else BPM_DEFECTO),
+            normalizar_keyscale(keyscale if keyscale is not None else KEYSCALE_DEFECTO),
+            normalizar_timesig(timesig if timesig is not None else TIMESIG_DEFECTO),
+            # Una pista instrumental no canta: el idioma solo importa en canción,
+            # y para instrumental "en" es lo que usan las plantillas oficiales.
+            normalizar_idioma(
+                idioma
+                if idioma is not None
+                else (IDIOMA_DEFECTO if t == "cancion" else "en")
+            ),
         )
         s.commit()
         return {"id": m.id}
@@ -41,14 +76,36 @@ def editar_campos(
     tags: str | None,
     lyrics: str | None,
     duracion_s: int | None,
+    bpm: int | None = None,
+    keyscale: str | None = None,
+    timesig: str | None = None,
+    idioma: str | None = None,
 ) -> None:
     with get_session() as s:
         m = musica_repo.obtener(s, musica_id)
         if m is None:
             raise MusicaNoExiste(musica_id)
-        dur = _normalizar_dur(duracion_s) if duracion_s is not None else None
-        musica_repo.guardar_campos(s, m, tags, lyrics, dur)
+        musica_repo.guardar_campos(s, m, tags, lyrics, *_musicales(
+            duracion_s, bpm, keyscale, timesig, idioma
+        ))
         s.commit()
+
+
+def _musicales(
+    duracion_s: int | None,
+    bpm: int | None,
+    keyscale: str | None,
+    timesig: str | None,
+    idioma: str | None,
+) -> tuple:
+    """Normaliza los campos musicales dejando los None como None (no tocar)."""
+    return (
+        _normalizar_dur(duracion_s) if duracion_s is not None else None,
+        normalizar_bpm(bpm) if bpm is not None else None,
+        normalizar_keyscale(keyscale) if keyscale is not None else None,
+        normalizar_timesig(timesig) if timesig is not None else None,
+        normalizar_idioma(idioma) if idioma is not None else None,
+    )
 
 
 def mejorar(musica_id: int) -> int:
@@ -65,13 +122,18 @@ def generar(
     lyrics: str | None,
     duracion_s: int | None,
     seed: int | None,
+    bpm: int | None = None,
+    keyscale: str | None = None,
+    timesig: str | None = None,
+    idioma: str | None = None,
 ) -> int:
     with get_session() as s:
         m = musica_repo.obtener(s, musica_id)
         if m is None:
             raise MusicaNoExiste(musica_id)
-        dur = _normalizar_dur(duracion_s) if duracion_s is not None else None
-        musica_repo.guardar_campos(s, m, tags, lyrics, dur)
+        musica_repo.guardar_campos(s, m, tags, lyrics, *_musicales(
+            duracion_s, bpm, keyscale, timesig, idioma
+        ))
         # seed None = pista nueva (el pipeline elige una aleatoria); un seed
         # concreto reproduce la misma pista.
         m.seed = seed
@@ -94,6 +156,10 @@ def _a_dict(s, m) -> dict:
         "tags": m.tags,
         "lyrics": m.lyrics,
         "duracion_s": m.duracion_s,
+        "bpm": m.bpm,
+        "keyscale": m.keyscale,
+        "timesig": m.timesig,
+        "idioma": m.idioma,
         "seed": m.seed,
         "estado": m.estado,
         "tiene_audio": musica_pipeline.ruta_audio(m.id) is not None,

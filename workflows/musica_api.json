@@ -2,17 +2,17 @@
   "3": {
     "inputs": {
       "seed": "{SEED}",
-      "steps": 50,
-      "cfg": 5.0,
+      "steps": 8,
+      "cfg": 1.0,
       "sampler_name": "euler",
       "scheduler": "simple",
       "denoise": 1.0,
       "model": [
-        "62",
+        "78",
         0
       ],
       "positive": [
-        "14",
+        "94",
         0
       ],
       "negative": [
@@ -20,38 +20,13 @@
         0
       ],
       "latent_image": [
-        "17",
+        "98",
         0
       ]
     },
     "class_type": "KSampler",
     "_meta": {
       "title": "KSampler"
-    }
-  },
-  "14": {
-    "inputs": {
-      "tags": "{TAGS}",
-      "lyrics": "{LYRICS}",
-      "lyrics_strength": 1.0,
-      "clip": [
-        "40",
-        1
-      ]
-    },
-    "class_type": "TextEncodeAceStepAudio",
-    "_meta": {
-      "title": "TextEncodeAceStepAudio"
-    }
-  },
-  "17": {
-    "inputs": {
-      "seconds": "{DURACION}",
-      "batch_size": 1
-    },
-    "class_type": "EmptyAceStepLatentAudio",
-    "_meta": {
-      "title": "EmptyAceStepLatentAudio"
     }
   },
   "18": {
@@ -61,8 +36,8 @@
         0
       ],
       "vae": [
-        "40",
-        2
+        "106",
+        0
       ]
     },
     "class_type": "VAEDecodeAudio",
@@ -82,32 +57,10 @@
       "title": "PreviewAudio"
     }
   },
-  "40": {
-    "inputs": {
-      "ckpt_name": "ace_step_v1_3.5b.safetensors"
-    },
-    "class_type": "CheckpointLoaderSimple",
-    "_meta": {
-      "title": "Load Checkpoint"
-    }
-  },
-  "45": {
-    "inputs": {
-      "shift": 5.000000000000001,
-      "model": [
-        "40",
-        0
-      ]
-    },
-    "class_type": "ModelSamplingSD3",
-    "_meta": {
-      "title": "ModelSamplingSD3"
-    }
-  },
   "47": {
     "inputs": {
       "conditioning": [
-        "14",
+        "94",
         0
       ]
     },
@@ -116,29 +69,84 @@
       "title": "ConditioningZeroOut"
     }
   },
-  "61": {
+  "78": {
     "inputs": {
-      "multiplier": 1.0000000000000002
-    },
-    "class_type": "LatentOperationTonemapReinhard",
-    "_meta": {
-      "title": "LatentOperationTonemapReinhard"
-    }
-  },
-  "62": {
-    "inputs": {
+      "shift": 3.0,
       "model": [
-        "45",
-        0
-      ],
-      "operation": [
-        "61",
+        "104",
         0
       ]
     },
-    "class_type": "LatentApplyOperationCFG",
+    "class_type": "ModelSamplingAuraFlow",
     "_meta": {
-      "title": "LatentApplyOperationCFG"
+      "title": "ModelSamplingAuraFlow"
+    }
+  },
+  "94": {
+    "inputs": {
+      "tags": "{TAGS}",
+      "lyrics": "{LYRICS}",
+      "seed": "{SEED}",
+      "bpm": "{BPM}",
+      "duration": "{DURACION}",
+      "timesignature": "{TIMESIG}",
+      "language": "{IDIOMA}",
+      "keyscale": "{KEYSCALE}",
+      "generate_audio_codes": "{AUDIO_CODES}",
+      "cfg_scale": 2.0,
+      "temperature": 0.85,
+      "top_p": 0.9,
+      "top_k": 0,
+      "min_p": 0.0,
+      "clip": [
+        "105",
+        0
+      ]
+    },
+    "class_type": "TextEncodeAceStepAudio1.5",
+    "_meta": {
+      "title": "TextEncodeAceStepAudio1.5"
+    }
+  },
+  "98": {
+    "inputs": {
+      "seconds": "{DURACION}",
+      "batch_size": 1
+    },
+    "class_type": "EmptyAceStep1.5LatentAudio",
+    "_meta": {
+      "title": "Empty Ace Step 1.5 Latent Audio"
+    }
+  },
+  "104": {
+    "inputs": {
+      "unet_name": "acestep_v1.5_xl_turbo_bf16.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "105": {
+    "inputs": {
+      "clip_name1": "qwen_0.6b_ace15.safetensors",
+      "clip_name2": "qwen_4b_ace15.safetensors",
+      "type": "ace",
+      "device": "default"
+    },
+    "class_type": "DualCLIPLoader",
+    "_meta": {
+      "title": "DualCLIPLoader"
+    }
+  },
+  "106": {
+    "inputs": {
+      "vae_name": "ace_1.5_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
     }
   }
 }

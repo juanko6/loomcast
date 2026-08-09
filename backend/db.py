@@ -52,6 +52,21 @@ def _migrar() -> None:
             c.execute(text("ALTER TABLE jobs ADD COLUMN params TEXT DEFAULT '{}'"))
             c.commit()
 
+        # Conditioning musical de ACE-Step 1.5 (las pistas de v1 se quedan con
+        # estos valores por defecto; da igual, hay que regenerarlas de todos
+        # modos porque el modelo cambió).
+        cols = [r[1] for r in c.execute(text("PRAGMA table_info(musicas)"))]
+        nuevas = {
+            "bpm": "INTEGER DEFAULT 120",
+            "keyscale": "VARCHAR DEFAULT 'C major'",
+            "timesig": "VARCHAR DEFAULT '4'",
+            "idioma": "VARCHAR DEFAULT 'es'",
+        }
+        for col, tipo in nuevas.items():
+            if col not in cols:
+                c.execute(text(f"ALTER TABLE musicas ADD COLUMN {col} {tipo}"))
+        c.commit()
+
 
 def get_session() -> Session:
     return SessionLocal()

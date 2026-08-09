@@ -68,9 +68,20 @@ class ImagenLibrePromptLLM(BaseModel):
 
 
 class MusicaPromptLLM(BaseModel):
-    # Etiquetas de estilo para ACE-Step (inglés, coma-separadas): género,
-    # instrumentos, ambiente, tempo…
-    tags: str = Field(min_length=3)
-    # Letra con marcadores [verse]/[chorus]/[bridge]; cadena vacía para pistas
-    # instrumentales.
+    # Descripción de estilo para ACE-Step 1.5 (inglés, en prosa): género,
+    # instrumentación, rol de cada elemento en la mezcla, producción y cómo
+    # evoluciona el arreglo. Se llama `tags` porque así se llama la entrada del
+    # nodo, pero 1.5 no espera etiquetas coma-separadas sino un párrafo.
+    tags: str = Field(min_length=20)
+    # Letra con marcadores [Verse 1 - ...] / [Chorus - ...]; cadena vacía para
+    # pistas instrumentales.
     lyrics: str = ""
+    # Conditioning musical. Los cuatro se normalizan contra los combos del nodo
+    # en services/musica_combos.py, así que aquí basta con tipos laxos.
+    bpm: int = 120
+    # "<raíz> <major|minor>", p. ej. "E minor".
+    keyscale: str = "C major"
+    # "2" | "3" | "4" | "6".
+    timesig: str = "4"
+    # Código corto del idioma de la letra: "es", "en"…
+    idioma: str = "es"

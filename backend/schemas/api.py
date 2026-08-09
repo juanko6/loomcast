@@ -101,11 +101,17 @@ class MusicaGenerarIn(BaseModel):
     # instrumental (música de fondo / jingle, sin voz) | cancion (con letra)
     tipo: str = "instrumental"
     idea: str = ""
-    # Opcionales: si el usuario ya escribió las etiquetas/letra a mano, se
+    # Opcionales: si el usuario ya escribió la descripción/letra a mano, se
     # guardan al crear; si no, se rellenan luego con "mejorar" (LLM).
     tags: str = ""
     lyrics: str = ""
     duracion_s: int = 30
+    # Conditioning musical de ACE-Step 1.5. None = valor por defecto del
+    # servicio; se normaliza contra los combos del nodo antes de guardar.
+    bpm: int | None = None
+    keyscale: str | None = None
+    timesig: str | None = None
+    idioma: str | None = None
 
 
 class MusicaCamposIn(BaseModel):
@@ -113,6 +119,10 @@ class MusicaCamposIn(BaseModel):
     tags: str | None = None
     lyrics: str | None = None
     duracion_s: int | None = None
+    bpm: int | None = None
+    keyscale: str | None = None
+    timesig: str | None = None
+    idioma: str | None = None
 
 
 class MusicaLanzarIn(BaseModel):
@@ -122,3 +132,7 @@ class MusicaLanzarIn(BaseModel):
     lyrics: str | None = None
     duracion_s: int | None = None
     seed: int | None = None
+    bpm: int | None = None
+    keyscale: str | None = None
+    timesig: str | None = None
+    idioma: str | None = None

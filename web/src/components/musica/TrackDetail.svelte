@@ -47,6 +47,9 @@
           <Chip tone="accent">{tipoLabel}</Chip>
           {#if detail.seed != null}<Chip>seed {detail.seed}</Chip>{/if}
           <Chip>{detail.duracion_s}s</Chip>
+          <Chip>{detail.bpm} BPM</Chip>
+          <Chip>{detail.keyscale}</Chip>
+          <Chip>{detail.timesig}/4</Chip>
         </div>
 
         <div class="flex items-center gap-2">

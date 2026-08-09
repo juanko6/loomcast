@@ -10,6 +10,10 @@ def crear(
     tags: str | None,
     lyrics: str | None,
     duracion_s: int,
+    bpm: int,
+    keyscale: str,
+    timesig: str,
+    idioma: str,
 ) -> Musica:
     m = Musica(
         tipo=tipo,
@@ -17,6 +21,10 @@ def crear(
         tags=tags or None,
         lyrics=lyrics or None,
         duracion_s=duracion_s,
+        bpm=bpm,
+        keyscale=keyscale,
+        timesig=timesig,
+        idioma=idioma,
     )
     s.add(m)
     return m
@@ -36,6 +44,10 @@ def guardar_campos(
     tags: str | None,
     lyrics: str | None,
     duracion_s: int | None,
+    bpm: int | None = None,
+    keyscale: str | None = None,
+    timesig: str | None = None,
+    idioma: str | None = None,
 ) -> None:
     if tags is not None:
         m.tags = tags or None
@@ -43,6 +55,14 @@ def guardar_campos(
         m.lyrics = lyrics or None
     if duracion_s is not None:
         m.duracion_s = duracion_s
+    if bpm is not None:
+        m.bpm = bpm
+    if keyscale is not None:
+        m.keyscale = keyscale
+    if timesig is not None:
+        m.timesig = timesig
+    if idioma is not None:
+        m.idioma = idioma
 
 
 def marcar_generada(s: Session, m: Musica, seed: int) -> None:

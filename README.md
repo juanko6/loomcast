@@ -26,7 +26,10 @@ cd web && pnpm install && pnpm build && cd ..
 
 # 1. llama-server: solo si tu modelo no declara `comando` en config.toml
 #    (con `comando`, lo arranca y lo para Loomcast; ver abajo)
-# 2. ComfyUI corriendo (por defecto 8188)
+# 2. ComfyUI corriendo (por defecto 8188), SIEMPRE con --gpu-only:
+#    comfy launch -- --gpu-only        (o: python main.py --gpu-only)
+#    Sin ese flag ComfyUI deja los text encoders en la CPU en todos los Mac, y
+#    la música tarda 5,5× más. Ver "Música" más abajo.
 
 ./.venv/bin/uvicorn backend.main:app --port 8700
 # UI en http://127.0.0.1:8700
@@ -97,6 +100,47 @@ Voces reutilizables generadas con Qwen3-TTS VoiceDesign, guardadas en `voces/<sl
   - **Ken Burns** (con movimiento): Real-ESRGAN x4 → zoom/paneo nativo a 60fps → subtítulos superpuestos (`overlay` ffmpeg) + voz. Cadena upscale→clips→armado.
   - **Image-to-video** (movimiento IA): anima cada escena con un workflow i2v de ComfyUI + RIFE a 60fps (ver abajo).
 - ⬜ Fase 5 (resto) — plantillas `historia`/`drama-chisme`, música, empaquetado
+
+## Música (ACE-Step 1.5 XL Turbo)
+
+Sección independiente del pipeline de vídeo, con dos modos: `instrumental` (fondo
+o jingle) y `cancion` (voz cantada + letra). El modelo es **ACE-Step 1.5 XL
+Turbo**, con soporte nativo en ComfyUI (sin custom nodes). Descarga a
+`ComfyUI/models/` desde `Comfy-Org/ace_step_1.5_ComfyUI_files`:
+`acestep_v1.5_xl_turbo_bf16` (diffusion_models), `qwen_0.6b_ace15` y
+`qwen_4b_ace15` (text_encoders) y `ace_1.5_vae` (vae). **No uses los GGUF que
+circulan**: son para `acestep.cpp`, y ComfyUI-GGUF no soporta esta arquitectura.
+
+Dos cosas hacen la calidad, y las dos van en contra de la intuición de v1:
+
+- **La descripción de estilo es prosa, no etiquetas.** 1.5 quiere un párrafo que
+  diga qué instrumentos hay y **qué papel tiene cada uno en la mezcla** ("a soft
+  sub-bass anchors the track without intruding"). Una lista coma-separada al
+  estilo de v1 rinde peor. Los prompts de `prompts/musica_*.md` ya piden esto.
+- **El conditioning musical (BPM, tonalidad, compás) es obligatorio y decide.**
+  Es lo que v1 no tenía: sin él el arreglo deriva de tempo y tonalidad dentro de
+  la misma pista, y los instrumentos chocan y se tapan. Los rellena el LLM y son
+  editables en la UI; `services/musica_combos.py` los normaliza contra las
+  listas cerradas del nodo (un valor fuera de lista hace fallar el prompt entero
+  en ComfyUI).
+
+### ComfyUI necesita `--gpu-only`
+
+**Sin este flag la música tarda 5,5× más.** ComfyUI decide en
+`model_management.py` que en MPS el estado de memoria es `SHARED`, y
+`text_encoder_device()` solo manda el text encoder a la GPU si el estado es
+`HIGH_VRAM` o `NORMAL_VRAM` — así que en **todos** los Mac los text encoders caen
+a la CPU. Para Z-Image o Flux da igual (el encoder corre medio segundo), pero en
+ACE-Step 1.5 ese "text encoder" es un LM de 4B que genera el plan de la canción
+de forma autorregresiva, cientos de pasos secuenciales. En CPU eso son minutos.
+
+Medido en M3 Max, 30 s de pista, misma seed: **166,6 s en CPU → 30,1 s con
+`--gpu-only`** (16,1 s si los modelos ya están en memoria; la diferencia es
+cargar el encoder de 8,38 GB, que se paga en cada pista porque el pipeline
+libera los modelos al terminar).
+
+El LM planificador se apaga con `config.toml [musica].audio_codes = false`: baja
+a ~2 s por pista, pero sin plan de estructura y con peor calidad.
 
 ## Modo i2v (image-to-video)
 

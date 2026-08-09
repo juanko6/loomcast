@@ -139,12 +139,13 @@ for _modo, _defecto in (("generar", IMAGEN_MOTOR_GENERAR), ("editar", IMAGEN_MOT
 IMAGEN_WIDTH: int = _imagen.get("width", 768)
 IMAGEN_HEIGHT: int = _imagen.get("height", 1344)
 
-# Generación de música (ACE-Step). Como en [i2v]/[edicion], apunta a un workflow
-# de ComfyUI en formato API que TÚ exportas con los placeholders {TAGS},
-# {LYRICS}, {SEED} y {DURACION}, y un nodo SaveAudio.
+# Generación de música (ACE-Step 1.5). Como en [i2v]/[edicion], apunta a un
+# workflow de ComfyUI en formato API con los placeholders {TAGS}, {LYRICS},
+# {SEED}, {DURACION}, {BPM}, {KEYSCALE}, {TIMESIG}, {IDIOMA} y {AUDIO_CODES}.
 _musica = _cfg.get("musica", {})
 MUSICA_WORKFLOW: str = _musica.get("workflow", "workflows/musica_api.json")
 MUSICA_DURACION_S: int = _musica.get("duracion_s", 30)
+MUSICA_AUDIO_CODES: bool = _musica.get("audio_codes", True)
 
 PROYECTOS_DIR: Path = ROOT / _cfg["paths"]["proyectos"]
 PLANTILLAS_DIR: Path = ROOT / _cfg["paths"]["plantillas"]

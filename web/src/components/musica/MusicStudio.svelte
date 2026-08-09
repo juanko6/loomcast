@@ -14,9 +14,13 @@
     mejorarMusica,
     generarMusica,
     borrarMusica,
+    type Musical,
     type MusicaDetalle,
   } from "@/lib/musica";
+
   import type { MusicaResumen, TipoMusica } from "@/lib/types";
+
+  type Campos = { tags: string; lyrics: string; duracion_s: number } & Musical;
 
   let tracks = $state<MusicaResumen[]>([]);
   let selectedId = $state<number | null>(null);
@@ -67,10 +71,10 @@
     }
   }
 
-  async function handleSuggest(p: { tags: string; lyrics: string; duracion_s: number }) {
+  async function handleSuggest(p: Campos) {
     if (selectedId == null) return;
     try {
-      // Guarda el borrador antes de que el LLM reescriba etiquetas/letra.
+      // Guarda el borrador antes de que el LLM reescriba descripción/letra.
       await editarMusica(selectedId, p);
       await mejorarMusica(selectedId);
       refrescarJobs();
@@ -80,7 +84,7 @@
     }
   }
 
-  async function handleGenerate(p: { tags: string; lyrics: string; duracion_s: number }) {
+  async function handleGenerate(p: Campos) {
     if (selectedId == null) return;
     try {
       // seed null = pista nueva (el backend elige una aleatoria distinta).
