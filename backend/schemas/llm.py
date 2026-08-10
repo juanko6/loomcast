@@ -56,6 +56,22 @@ class EtiquetasLLM(BaseModel):
     tiktok: str = Field(min_length=1, max_length=250)
 
 
+class PersonajeLLM(BaseModel):
+    # Token con el que las escenas lo referencian: {ANA}. Se normaliza a
+    # mayúsculas al guardarlo, así que aquí basta con exigir que venga algo.
+    clave: str = Field(min_length=1, max_length=24)
+    nombre: str = Field(min_length=1, max_length=60)
+    # Descripción física en inglés, concreta y visual. Es lo que se sustituye
+    # palabra por palabra en cada prompt donde salga el personaje.
+    ficha: str = Field(min_length=20)
+
+
+class CastingLLM(BaseModel):
+    # Lista vacía cuando el guion no tiene personas recurrentes (lo normal en
+    # curiosidades): no hay nada que fijar y las escenas van como siempre.
+    personajes: list[PersonajeLLM] = []
+
+
 class EscenaLLM(BaseModel):
     prompt: str = Field(min_length=20)
     # Qué se mueve en la escena; solo lo usa el modo i2v

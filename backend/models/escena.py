@@ -22,6 +22,10 @@ class Escena(Base):
     # escena). El prompt visual describe una imagen fija y no dirige movimiento.
     prompt_movimiento: Mapped[str] = mapped_column(Text, default="")
     seed: Mapped[int] = mapped_column(default=0)
+    # Claves de los personajes que salen en la escena, separadas por coma. Se
+    # deduce de qué fichas se sustituyeron de verdad en el prompt, no de lo que
+    # el LLM diga que ha usado.
+    personajes: Mapped[str] = mapped_column(default="")
     # Modo con el que se quiere animar esta escena (estatico|kenburns|i2v).
     # Vacío = usar el modo global que se elija al generar el video.
     modo: Mapped[str] = mapped_column(default="")

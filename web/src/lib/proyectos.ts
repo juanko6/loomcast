@@ -29,6 +29,15 @@ export interface Escena {
   en_cola: string | null;
 }
 
+// Personaje recurrente del vídeo. La `ficha` es la descripción física en
+// inglés que se pega literal en cada prompt donde sale, para que el generador
+// dibuje a la misma persona en todas sus escenas.
+export interface Personaje {
+  clave: string;
+  nombre: string;
+  ficha: string;
+}
+
 export interface Guion {
   gancho: string;
   narracion?: string;
@@ -61,6 +70,7 @@ export interface ProyectoDetalle {
   voz_disponible: boolean;
   subtitulos: string | null;
   escenas: Escena[];
+  personajes: Personaje[];
   imagenes_completas: boolean;
   video_disponible: boolean;
   versiones: Version[];
@@ -118,6 +128,14 @@ export const generarVoz = (id: number, modo: "clon" | "design", instruct?: strin
 
 export const generarMetadatos = (id: number) =>
   api<{ job_id: number }>(`/proyectos/${id}/metadatos`, { method: "POST" });
+
+export const generarCasting = (id: number) =>
+  api<{ job_id: number }>(`/proyectos/${id}/casting`, { method: "POST" });
+export const guardarCasting = (id: number, personajes: Personaje[]) =>
+  api<{ actualizados: number }>(`/proyectos/${id}/casting`, {
+    method: "PUT",
+    body: { personajes },
+  });
 
 export const generarEscenas = (id: number) =>
   api<{ job_id: number }>(`/proyectos/${id}/escenas`, { method: "POST" });
@@ -206,6 +224,7 @@ export const ETAPA_VIDEO: Record<string, string> = {
   generar_voz: "Generando la narración…",
   generar_subtitulos: "Transcribiendo subtítulos…",
   generar_metadatos: "Escribiendo los metadatos…",
+  generar_casting: "Fijando el reparto…",
   generar_escenas: "Proponiendo las escenas…",
   generar_imagenes: "Generando las imágenes…",
   armar_estatico: "Armando vídeo estático…",

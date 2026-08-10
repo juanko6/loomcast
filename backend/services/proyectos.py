@@ -11,6 +11,7 @@ from ..repositories import guiones as guiones_repo
 from ..repositories import ideas as ideas_repo
 from ..repositories import jobs as jobs_repo
 from ..repositories import metadatos as metadatos_repo
+from ..repositories import personajes as personajes_repo
 from ..repositories import plantillas as plantillas_repo
 from ..repositories import proyectos as proyectos_repo
 from ..repositories import voces as voces_repo
@@ -18,6 +19,7 @@ from ..workers import queue
 
 TIPOS_JOB_PROYECTO = [
     "generar_guion", "generar_metadatos", "generar_voz", "generar_subtitulos",
+    "generar_casting",
     "generar_escenas", "generar_imagenes", "generar_upscale", "generar_clips",
     "generar_i2v", "armar_video", "armar_estatico",
     "regenerar_imagen", "regenerar_clip", "generar_clips_mixto",
@@ -88,6 +90,10 @@ def detalle(pid: int) -> dict:
         en_cola = jobs_repo.escenas_en_cola(s, pid)
         escenas = [_escena_dict(e, base_dir, en_cola)
                    for e in escenas_repo.por_proyecto(s, pid)]
+        personajes = [
+            {"clave": x.clave, "nombre": x.nombre, "ficha": x.ficha}
+            for x in personajes_repo.por_proyecto(s, pid)
+        ]
         todas_imagenes = bool(escenas) and all(e["imagen"] for e in escenas)
         guion_dict = json.loads(guion.contenido) if guion else None
         # Instruct por defecto del modo expresivo: el que sugirió el guion para
@@ -109,6 +115,7 @@ def detalle(pid: int) -> dict:
             "voz_disponible": (base_dir / "voz.mp3").exists(),
             "subtitulos": srt.read_text() if srt.exists() else None,
             "escenas": escenas,
+            "personajes": personajes,
             "imagenes_completas": todas_imagenes,
             "video_disponible": (base_dir / "final.mp4").exists(),
             "versiones": _versiones(base_dir),
@@ -144,6 +151,16 @@ def seleccionar_voz(pid: int, voz_slug: str) -> None:
             raise VozNoDisponible(voz_slug)
         p.voz = voz_slug
         s.commit()
+
+
+def editar_personajes(pid: int, cambios: dict[str, dict]) -> int:
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        n = personajes_repo.actualizar(s, pid, cambios)
+        s.commit()
+        return n
 
 
 def editar_prompts_escenas(pid: int, prompts: dict[int, dict]) -> int:

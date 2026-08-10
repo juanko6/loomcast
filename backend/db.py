@@ -34,6 +34,7 @@ def _migrar() -> None:
             "clip_modo": "VARCHAR DEFAULT ''",
             "imagen_s": "FLOAT DEFAULT 0",
             "clip_s": "FLOAT DEFAULT 0",
+            "personajes": "VARCHAR DEFAULT ''",
         }
         for col, tipo in nuevas.items():
             if col not in cols:

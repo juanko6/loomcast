@@ -10,6 +10,7 @@ from ..services import llm_runtime, progreso
 from ..services.pipeline import (
     armado,
     armado_estatico,
+    casting,
     clips,
     crear_voz,
     escena_individual,
@@ -33,6 +34,7 @@ HANDLERS = {
     "clonar_voz": crear_voz.clonar_voz,
     "generar_voz": voz.generar_voz,
     "generar_subtitulos": subtitulos.generar_subtitulos,
+    "generar_casting": casting.generar_casting,
     "generar_escenas": escenas.generar_escenas,
     "generar_imagenes": imagenes.generar_imagenes,
     "regenerar_imagen": imagenes.regenerar_imagen,
@@ -59,6 +61,7 @@ JOBS_LLM = {
     "generar_ideas",
     "generar_guion",
     "generar_metadatos",
+    "generar_casting",
     "generar_escenas",
     "mejorar_prompt_imagen",
     "mejorar_prompt_musica",

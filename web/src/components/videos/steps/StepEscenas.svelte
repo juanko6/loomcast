@@ -2,7 +2,7 @@
   import Button from "../../primitives/Button.svelte";
   import Chip from "../../primitives/Chip.svelte";
   import { media } from "@/lib/api";
-  import { NOMBRE_MODO, type ProyectoDetalle } from "@/lib/proyectos";
+  import { NOMBRE_MODO, type Personaje, type ProyectoDetalle } from "@/lib/proyectos";
 
   let {
     p,
@@ -10,6 +10,8 @@
     bust = 0,
     ongenerar,
     onguardar,
+    ongenerarcasting,
+    onguardarcasting,
     ongenerarimagenes,
     onregenimagen,
     onregenclip,
@@ -21,6 +23,8 @@
     bust?: number;
     ongenerar: () => void;
     onguardar: (e: { orden: number; prompt: string; prompt_movimiento: string | null }[]) => void;
+    ongenerarcasting: () => void;
+    onguardarcasting: (p: Personaje[]) => void;
     ongenerarimagenes: (e: { orden: number; prompt: string; prompt_movimiento: string | null }[]) => void;
     onregenimagen: (orden: number, nuevoSeed: boolean) => void;
     onregenclip: (orden: number, modo: string) => void;
@@ -49,6 +53,29 @@
     modos = md;
   });
 
+  // Borrador local del reparto (mismo patrón que los prompts).
+  let fichas = $state<Record<string, string>>({});
+  $effect(() => {
+    const f: Record<string, string> = {};
+    for (const c of p.personajes) f[c.clave] = c.ficha;
+    fichas = f;
+  });
+
+  // Un casting ya generado que sale vacío es una respuesta válida (el guion no
+  // tiene personajes recurrentes), pero es indistinguible de "aún no generado".
+  // Se resuelve mirando si ya hay escenas: si las hay, el casting ya se resolvió.
+  const castingHecho = $derived(p.personajes.length > 0);
+
+  function guardarFichas() {
+    onguardarcasting(
+      p.personajes.map((c) => ({
+        clave: c.clave,
+        nombre: c.nombre,
+        ficha: (fichas[c.clave] ?? "").trim(),
+      })),
+    );
+  }
+
   function recogerPrompts() {
     return p.escenas.map((e) => ({
       orden: e.orden,
@@ -68,6 +95,57 @@
     onfijarmodos(p.escenas.map((e) => ({ orden: e.orden, modo })));
   }
 </script>
+
+<!-- Reparto: va antes de los prompts porque es lo que se inyecta en ellos. -->
+<section class="mb-5 max-w-3xl rounded-xl border border-line bg-surface-2 p-4">
+  <h3 class="text-sm font-semibold">Reparto</h3>
+  <p class="mt-1 text-sm text-dim">
+    Descripción física fija de quien sale en varias escenas. Se pega tal cual en cada prompt
+    donde aparece, que es lo que hace que el generador dibuje a la misma persona y no a una
+    distinta cada cuatro segundos. Un vídeo sin personajes recurrentes no necesita reparto.
+  </p>
+
+  {#if castingHecho}
+    <div class="mt-3 space-y-3">
+      {#each p.personajes as c (c.clave)}
+        <div>
+          <div class="mb-1 flex flex-wrap items-center gap-2">
+            <Chip tone="accent">{"{" + c.clave + "}"}</Chip>
+            <span class="text-xs text-muted">{c.nombre}</span>
+          </div>
+          <textarea
+            class="control min-h-16 text-sm"
+            bind:value={fichas[c.clave]}
+            placeholder="Descripción física en inglés"
+          ></textarea>
+        </div>
+      {/each}
+    </div>
+    <div class="mt-3 flex flex-wrap items-center gap-2">
+      <Button size="sm" onclick={guardarFichas}>Guardar reparto</Button>
+      <Button variant="secondary" size="sm" disabled={busy} onclick={ongenerarcasting}>
+        Regenerar reparto
+      </Button>
+      {#if p.escenas.length}
+        <span class="text-xs text-muted">
+          Los prompts ya escritos no cambian solos: regenéralos para aplicar el reparto nuevo.
+        </span>
+      {/if}
+    </div>
+  {:else}
+    <div class="mt-3 flex flex-wrap items-center gap-2">
+      <Button variant="secondary" size="sm" disabled={busy} onclick={ongenerarcasting}>
+        {p.escenas.length ? "Buscar reparto en el guion" : "Generar reparto"}
+      </Button>
+      {#if p.escenas.length}
+        <span class="text-xs text-muted">
+          Este vídeo no tiene reparto fijado. Si sus escenas llevan personas, generarlo y
+          regenerar los prompts hará que se parezcan entre sí.
+        </span>
+      {/if}
+    </div>
+  {/if}
+</section>
 
 {#if !p.escenas.length}
   <div class="max-w-2xl space-y-3">

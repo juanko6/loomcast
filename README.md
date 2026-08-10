@@ -146,13 +146,41 @@ arrancaría la barra por la mitad.
 ## Flujo de creación (UI)
 
 Tema → ideas → seleccionar/aprobar → y ya en el proyecto, los cinco pasos del
-stepper: **1** guion (editar/regenerar) → **2** voz (elegir del banco o crear nueva → generar narración) → **3** metadatos → **4** escenas (generar prompts → editarlos → aceptar y generar imágenes) → **5** armar video final.
+stepper: **1** guion (editar/regenerar) → **2** voz (elegir del banco o crear nueva → generar narración) → **3** metadatos → **4** escenas (reparto → generar prompts → editarlos → aceptar y generar imágenes) → **5** armar video final.
 
-Puntos de revisión humana: selección de ideas, guion, elección de voz, y **prompts de escena antes de gastar GPU en las imágenes**.
+Puntos de revisión humana: selección de ideas, guion, elección de voz, reparto, y **prompts de escena antes de gastar GPU en las imágenes**.
+
+### Reparto (consistencia de personajes)
+
+Cada escena se prompt-ea por separado, así que el LLM no recuerda lo que
+escribió en la anterior: el mismo personaje sale "a young woman" en una escena
+y "a woman in her thirties" en otra, y el generador dibuja a dos personas
+distintas. Por eso el paso 4 empieza fijando el reparto.
+
+El LLM lee el guion y devuelve, por cada personaje recurrente, una ficha física
+en inglés (edad, complexión, pelo, ojos, ropa, un rasgo). Puedes editarla. Al
+generar los prompts de escena, el LLM referencia a cada personaje con su
+marcador `{CLAVE}` en vez de describirlo, y Loomcast lo sustituye por la ficha
+**literal** antes de guardar: lo que se lee en la UI es exactamente lo que se le
+manda al generador. Que sea literal es el punto — si se deja que el LLM
+parafrasee la descripción en cada escena, el personaje vuelve a derivar, solo
+que más despacio.
+
+En el prompt de movimiento se sustituye una forma abreviada ("a woman in her
+early thirties"), que ahí solo hace falta saber quién se mueve y el prompt debe
+caber en 25-45 palabras.
+
+Un reparto vacío es una respuesta válida: en *curiosidades* es lo normal. En
+*drama* casi nunca lo es, y el prompt incluye al narrador aunque el guion nunca
+lo describa. Editar una ficha no reescribe los prompts ya generados: hay que
+regenerarlos.
+
+Esto fija ropa, pelo, edad y complexión. **No fija la cara**: con solo texto no
+se llega ahí, hace falta un retrato de referencia y generar por edición.
 
 ## Ciclo de vida del LLM
 
-Solo cuatro etapas usan el llama-server (ideas, guion, metadatos y prompts de escena); el resto del pipeline pelea por la misma memoria unificada. Por eso el modelo de texto no vive residente: Loomcast lo **carga al empezar una etapa de texto y lo descarga antes de cualquier etapa de voz/GPU**, igual que ya hacía con ComfyUI (`/free`) y Qwen3-TTS.
+Solo cinco etapas usan el llama-server (ideas, guion, metadatos, reparto y prompts de escena); el resto del pipeline pelea por la misma memoria unificada. Por eso el modelo de texto no vive residente: Loomcast lo **carga al empezar una etapa de texto y lo descarga antes de cualquier etapa de voz/GPU**, igual que ya hacía con ComfyUI (`/free`) y Qwen3-TTS.
 
 Declara cada modelo en `[[llm.modelos]]` de `config.toml` con el script que lo levanta:
 

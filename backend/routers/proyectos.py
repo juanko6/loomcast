@@ -5,6 +5,7 @@ from ..schemas import (
     EscenasIn,
     GuionIn,
     ModosEscenasIn,
+    PersonajesIn,
     RegenerarClipIn,
     RegenerarImagenIn,
     VideoIn,
@@ -69,6 +70,22 @@ def generar_voz(pid: int, body: VozGenerarIn | None = None):
 @router.post("/{pid}/subtitulos")
 def regenerar_subtitulos(pid: int):
     return {"job_id": proyectos_service.encolar_etapa(pid, "generar_subtitulos")}
+
+
+@router.post("/{pid}/casting")
+def generar_casting(pid: int):
+    return {"job_id": proyectos_service.encolar_etapa(pid, "generar_casting")}
+
+
+@router.put("/{pid}/casting")
+def editar_casting(pid: int, body: PersonajesIn):
+    try:
+        cambios = {
+            x.clave: {"nombre": x.nombre, "ficha": x.ficha} for x in body.personajes
+        }
+        return {"actualizados": proyectos_service.editar_personajes(pid, cambios)}
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
 
 
 @router.post("/{pid}/escenas")

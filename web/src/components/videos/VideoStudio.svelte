@@ -159,6 +159,8 @@
       voces = await API.listarVoces();
     },
     generarMetadatos: () => tras(API.generarMetadatos(pid())),
+    generarCasting: () => tras(API.generarCasting(pid())),
+    guardarCasting: (p: API.Personaje[]) => tras(API.guardarCasting(pid(), p)),
     generarEscenas: () => tras(API.generarEscenas(pid())),
     guardarEscenas: (e: Parameters<typeof API.guardarEscenas>[1]) =>
       tras(API.guardarEscenas(pid(), e)),

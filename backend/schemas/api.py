@@ -50,6 +50,18 @@ class EscenasIn(BaseModel):
     escenas: list[EscenaPromptIn]
 
 
+class PersonajeIn(BaseModel):
+    # La clave identifica al personaje y no se edita: es el marcador con el que
+    # ya están escritos los prompts de escena.
+    clave: str
+    nombre: str
+    ficha: str
+
+
+class PersonajesIn(BaseModel):
+    personajes: list[PersonajeIn]
+
+
 class RegenerarImagenIn(BaseModel):
     # True = otra imagen distinta; False = mismo seed, solo cambia si se editó
     # el prompt.
