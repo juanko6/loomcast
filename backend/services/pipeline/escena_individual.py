@@ -10,6 +10,7 @@ from ...config import PROYECTOS_DIR
 from ...db import get_session
 from ...repositories import escenas as escenas_repo
 from ...repositories import proyectos as proyectos_repo
+from .. import progreso
 from . import clips as clips_mod
 from . import i2v as i2v_mod
 
@@ -45,12 +46,17 @@ def generar_clips_mixto(proyecto_id: int) -> str:
         slug = p.slug
 
     clips_dir = PROYECTOS_DIR / slug / "clips"
-    hechas, cuenta = 0, {}
-    for orden, modo, clip_modo in escenas:
-        ya = (clips_dir / f"{orden:02d}.mp4").exists() and clip_modo == modo
-        if ya:
-            hechas += 1
-            continue
+    # Se resuelve antes qué hay que rehacer para poder contar el lote sobre el
+    # trabajo real: si el total fuese el de escenas, una tanda reanudada
+    # empezaría la barra a media altura.
+    pendientes = [
+        (orden, modo)
+        for orden, modo, clip_modo in escenas
+        if not ((clips_dir / f"{orden:02d}.mp4").exists() and clip_modo == modo)
+    ]
+    hechas, cuenta = len(escenas) - len(pendientes), {}
+    for i, (orden, modo) in enumerate(pendientes):
+        progreso.lote(i, len(pendientes), "clip")
         regenerar_clip(proyecto_id, orden, modo)
         cuenta[modo] = cuenta.get(modo, 0) + 1
 

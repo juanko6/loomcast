@@ -19,6 +19,7 @@ from ...repositories import metadatos as metadatos_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
 from ...schemas import EscenaLLM
+from .. import progreso
 
 
 def _segmentar(palabras: list[dict], duracion_escena_s: float) -> list[dict]:
@@ -73,7 +74,8 @@ def generar_escenas(proyecto_id: int) -> str:
 
     system = pl["prompts"]["escena"]
     escenas = []
-    for seg in segmentos:
+    for i, seg in enumerate(segmentos):
+        progreso.lote(i, len(segmentos), "escena")
         user = (
             f"Full video context:\n```markdown\n{titulo}\n{guion_texto}\n```\n\n"
             f"Current voice-over segment:\n```markdown\n{seg['texto']}\n```\n\n"

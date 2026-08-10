@@ -13,6 +13,7 @@ from ...db import get_session
 from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
 from ...repositories import proyectos as proyectos_repo
+from .. import progreso
 from ._ffmpeg import args_video
 
 FPS = 60
@@ -117,7 +118,8 @@ def generar_clips(proyecto_id: int, forzar: bool = False) -> str:
     if not pendientes:
         return f"Los {len(escenas)} clips Ken Burns ya estaban hechos"
 
-    for e in pendientes:
+    for i, e in enumerate(pendientes):
+        progreso.lote(i, len(pendientes), "clip")
         t0 = time.time()
         clip_ken_burns(up_dir / f"{e['orden']:02d}.png", e["orden"], e["dur"],
                        clips_dir / f"{e['orden']:02d}.mp4")

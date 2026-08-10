@@ -6,7 +6,7 @@ import traceback
 
 from ..db import get_session
 from ..repositories import jobs as jobs_repo
-from ..services import llm_runtime
+from ..services import llm_runtime, progreso
 from ..services.pipeline import (
     armado,
     armado_estatico,
@@ -105,6 +105,7 @@ def _procesar(job_id: int) -> None:
         s.commit()
         tipo, ref_id = job.tipo, job.ref_id
         params = json.loads(job.params or "{}")
+    progreso.iniciar(job_id, tipo)
     try:
         if tipo in JOBS_LLM:
             with llm_runtime.en_uso():
@@ -114,6 +115,8 @@ def _procesar(job_id: int) -> None:
             estado, log = "ok", HANDLERS[tipo](ref_id, **params)
     except Exception:
         estado, log = "error", traceback.format_exc(limit=5)
+    finally:
+        progreso.limpiar()
     with get_session() as s:
         jobs_repo.finalizar(s, jobs_repo.obtener(s, job_id), estado, log)
         s.commit()

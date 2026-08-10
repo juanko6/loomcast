@@ -10,6 +10,7 @@ from ...db import get_session
 from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
 from ...repositories import proyectos as proyectos_repo
+from .. import progreso
 
 
 def generar_upscale(proyecto_id: int) -> str:
@@ -42,7 +43,8 @@ def generar_upscale(proyecto_id: int) -> str:
             pendientes.append(o)
 
     try:
-        for o in pendientes:
+        for i, o in enumerate(pendientes):
+            progreso.lote(i, len(pendientes), "imagen")
             comfy.upscale_imagen(
                 origen_dir / f"{o:02d}.png", destino_dir / f"{o:02d}.png"
             )

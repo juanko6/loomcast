@@ -12,6 +12,7 @@ from ...db import get_session
 from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
 from ...repositories import proyectos as proyectos_repo
+from .. import progreso
 
 
 def ruta_imagen(slug: str, orden: int):
@@ -34,7 +35,8 @@ def generar_imagenes(proyecto_id: int) -> str:
 
     (PROYECTOS_DIR / slug / "imagenes").mkdir(parents=True, exist_ok=True)
     try:
-        for e in escenas:
+        for i, e in enumerate(escenas):
+            progreso.lote(i, len(escenas), "imagen")
             t0 = time.time()
             comfy.generar_imagen(e["prompt"], e["seed"], ruta_imagen(slug, e["orden"]))
             _anotar_tiempo(proyecto_id, e["orden"], time.time() - t0)

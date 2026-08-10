@@ -63,22 +63,37 @@ export async function refrescarJobs(): Promise<void> {
   }
 }
 
-let timers: ReturnType<typeof setInterval>[] = [];
+let timerSalud: ReturnType<typeof setInterval> | null = null;
+let timerJobs: ReturnType<typeof setTimeout> | null = null;
+// Cada arranque estrena número: un ciclo que estaba esperando su petición
+// cuando se paró el polling se encuentra el número cambiado y no reprograma,
+// así que rearrancar no deja dos cadenas consultando a la vez.
+let generacion = 0;
 
-// Arranca el polling de salud (15s) y cola (2.5s). Idempotente.
+// La cola se consulta encadenando timeouts en vez de con un intervalo fijo
+// para poder cambiar la cadencia: con trabajo en marcha hace falta ritmo para
+// que la barra de progreso avance de forma legible, pero en reposo eso serían
+// 3.600 peticiones por hora para no ver nada.
+async function cicloJobs(gen: number): Promise<void> {
+  await refrescarJobs();
+  if (gen !== generacion) return;
+  timerJobs = setTimeout(() => cicloJobs(gen), get(jobs).length ? 1000 : 2500);
+}
+
+// Arranca el polling de salud (15s) y de la cola (1s trabajando, 2.5s en
+// reposo). Idempotente.
 export function iniciarPolling(): void {
   detenerPolling();
   refrescarSalud();
-  refrescarJobs();
-  timers = [
-    setInterval(refrescarSalud, 15000),
-    setInterval(refrescarJobs, 2500),
-  ];
+  timerSalud = setInterval(refrescarSalud, 15000);
+  cicloJobs(generacion);
 }
 
 export function detenerPolling(): void {
-  timers.forEach(clearInterval);
-  timers = [];
+  generacion += 1;
+  if (timerSalud) clearInterval(timerSalud);
+  if (timerJobs) clearTimeout(timerJobs);
+  timerSalud = timerJobs = null;
 }
 
 export function hayCola(): boolean {

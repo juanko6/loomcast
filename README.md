@@ -126,7 +126,22 @@ cd web && pnpm dev
 
 ## Arquitectura del backend
 
-Capas (de HTTP hacia abajo): `routers/` (controllers: validación y JSON, cero lógica) → `services/` (reglas de negocio; `services/pipeline/` son las etapas de generación) → `repositories/` (consultas a SQLite y carga de plantillas) → `models.py` (ORM + máquina de estados). Transversales: `clients/` (adaptadores a llama-server y Qwen3-TTS), `workers/queue.py` (cola de jobs en un hilo, uno a la vez, con encadenado y recuperación), `schemas.py` (contratos Pydantic de la API).
+Capas (de HTTP hacia abajo): `routers/` (controllers: validación y JSON, cero lógica) → `services/` (reglas de negocio; `services/pipeline/` son las etapas de generación) → `repositories/` (consultas a SQLite y carga de plantillas) → `models.py` (ORM + máquina de estados). Transversales: `clients/` (adaptadores a llama-server y Qwen3-TTS), `workers/queue.py` (cola de jobs en un hilo, uno a la vez, con encadenado y recuperación), `services/progreso.py` (por dónde va el job en curso), `schemas.py` (contratos Pydantic de la API).
+
+### Progreso de la cola
+
+Las etapas que trabajan por lotes (una imagen o un clip por escena) tardan
+minutos, así que anotan por dónde van con `progreso.lote(hecho, total, unidad)`.
+El indicador de la cabecera lo lee de `/api/jobs` y se rellena a medida que
+avanza: *imagen 3 de 11 · ~6 min*. La estimación sale de lo que han tardado los
+elementos ya hechos del propio lote, o sea de esta máquina y este modelo, y no
+aparece hasta que termina el primero. Las etapas que no van por lotes (voz,
+guion, armado) enseñan el tiempo transcurrido, que al menos distingue "va lento"
+de "se colgó".
+
+El contador cuenta sobre el trabajo que ese job va a hacer de verdad: los bucles
+reanudables saltan lo que ya estaba hecho, y contar sobre el total del proyecto
+arrancaría la barra por la mitad.
 
 ## Flujo de creación (UI)
 

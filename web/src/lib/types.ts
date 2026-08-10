@@ -13,10 +13,24 @@ export interface ModeloLLM {
   nombre: string;
 }
 
+// Progreso del job que está corriendo (los demás lo traen a null). `pct` y
+// `eta_s` van vacíos en las etapas que no van por lotes y hasta que termina el
+// primer elemento, que es cuando hay algo medido con lo que estimar.
+export interface ProgresoJob {
+  job_id: number;
+  transcurrido_s: number;
+  fase: string;
+  hecho: number;
+  total: number;
+  pct: number | null;
+  eta_s: number | null;
+}
+
 export interface Job {
   id: number;
   tipo: string;
   estado: string;
+  progreso: ProgresoJob | null;
 }
 
 export interface TemaResumen {

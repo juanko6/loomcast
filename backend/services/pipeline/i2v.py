@@ -17,6 +17,7 @@ from ...db import get_session
 from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
 from ...repositories import proyectos as proyectos_repo
+from .. import progreso
 from ._ffmpeg import args_video, duracion
 from .clips import ALTO, ANCHO, pendientes_de_modo
 
@@ -97,7 +98,8 @@ def generar_i2v(proyecto_id: int, forzar: bool = False) -> str:
         return f"{len(escenas)} clips i2v ya estaban generados (nada que hacer)"
 
     try:
-        for e in pendientes:
+        for i, e in enumerate(pendientes):
+            progreso.lote(i, len(pendientes), "clip")
             t0 = time.time()
             clip_i2v(img_dir / f"{e['orden']:02d}.png", e["prompt"], e["seed"],
                      e["dur"], clips_dir / f"{e['orden']:02d}.mp4")
