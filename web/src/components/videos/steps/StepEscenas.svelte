@@ -2,6 +2,7 @@
   import Button from "../../primitives/Button.svelte";
   import Chip from "../../primitives/Chip.svelte";
   import { media } from "@/lib/api";
+  import { tiraH } from "@/lib/tira";
   import { NOMBRE_MODO, type Personaje, type ProyectoDetalle } from "@/lib/proyectos";
 
   let {
@@ -213,8 +214,9 @@
     </div>
 
     <!-- Tira de escenas: el vídeo entero de un vistazo, en orden y con scroll
-         horizontal para que las miniaturas no se aprieten cuando son muchas. -->
-    <div class="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2">
+         horizontal para que las miniaturas no se aprieten cuando son muchas.
+         `tiraH` añade arrastrar con el ratón y rueda→horizontal. -->
+    <div class="tira-h -mx-1 flex gap-2 overflow-x-auto px-1 pb-2" use:tiraH>
       {#each p.escenas as e (e.orden)}
         {@const av = aviso(e)}
         <button

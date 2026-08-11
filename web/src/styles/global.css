@@ -96,6 +96,37 @@ body {
   scrollbar-color: var(--color-surface-3) transparent;
 }
 
+/* ---------------------------------------------------------------------------
+   Tira horizontal desplazable (la de escenas). macOS esconde las barras del
+   sistema hasta que algo se mueve, así que una tira con más contenido del que
+   cabe no da ninguna pista de que se puede desplazar: aquí se dibuja una barra
+   propia, siempre visible. El arrastre con el ratón y la rueda los añade la
+   acción `tiraH` (lib/tira.ts) — no existen de forma nativa.
+   ------------------------------------------------------------------------- */
+.tira-h {
+  cursor: grab;
+  scrollbar-color: var(--color-line) transparent;
+}
+.tira-h:active {
+  cursor: grabbing;
+}
+.tira-h::-webkit-scrollbar {
+  height: 10px;
+}
+.tira-h::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tira-h::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+.tira-h::-webkit-scrollbar-thumb:hover {
+  background: var(--color-surface-3);
+  background-clip: content-box;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
