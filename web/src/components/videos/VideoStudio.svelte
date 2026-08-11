@@ -307,7 +307,7 @@
           </button>
           <span class="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
             <IconButton
-              name="x"
+              name="trash"
               label="Borrar tema"
               size={14}
               onclick={() => borrarTema(t.id, t.texto)}
@@ -337,7 +337,7 @@
           </button>
           <span class="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
             <IconButton
-              name="x"
+              name="trash"
               label="Borrar proyecto"
               size={14}
               onclick={() => borrarProyecto(pr.id, pr.titulo)}

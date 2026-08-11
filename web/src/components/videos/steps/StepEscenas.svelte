@@ -89,6 +89,35 @@
     onfijarmodos([{ orden, modo }]);
   }
 
+  // Escena abierta en el panel de detalle. La tira de arriba es para mirar el
+  // vídeo entero de un vistazo; los prompts y los botones solo se muestran de
+  // la que estés tocando, que si no son trece bloques de controles repetidos.
+  let seleccion = $state(0);
+  const escena = $derived(
+    p.escenas.find((e) => e.orden === seleccion) ?? p.escenas[0],
+  );
+
+  // Si se regeneran las escenas y ahora hay menos, la selección puede quedar
+  // apuntando a una que ya no existe.
+  $effect(() => {
+    if (p.escenas.length && !p.escenas.some((e) => e.orden === seleccion)) {
+      seleccion = p.escenas[0].orden;
+    }
+  });
+
+  function urlImagen(orden: number) {
+    return `${media(`/proyectos/${p.id}/imagenes/${orden}`)}?v=${bust}`;
+  }
+
+  // Estado de la escena para la tira: lo que hay que ver de un golpe es qué
+  // falta y qué se quedó viejo, sin leer trece chips de texto.
+  function aviso(e: (typeof p.escenas)[number]): string {
+    if (e.en_cola) return "en cola";
+    if (!e.imagen) return "sin imagen";
+    if (e.clip_viejo) return "clip viejo";
+    return "";
+  }
+
   function modoTodas(modo: string) {
     if (!modo) return;
     for (const e of p.escenas) modos[e.orden] = modo;
@@ -183,103 +212,146 @@
       </label>
     </div>
 
-    <div class="space-y-3">
+    <!-- Tira de escenas: el vídeo entero de un vistazo, en orden y con scroll
+         horizontal para que las miniaturas no se aprieten cuando son muchas. -->
+    <div class="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2">
       {#each p.escenas as e (e.orden)}
-        <article class="rounded-xl border border-line bg-surface-2 p-3">
-          <div class="mb-2 flex flex-wrap items-center gap-2">
-            <Chip tone="accent">#{e.orden + 1}</Chip>
-            <span class="text-xs tabular-nums text-muted">
-              {e.t_inicio.toFixed(1)}–{e.t_fin.toFixed(1)}s
+        {@const av = aviso(e)}
+        <button
+          type="button"
+          onclick={() => (seleccion = e.orden)}
+          title={`Escena ${e.orden + 1}: ${e.texto}`}
+          aria-current={seleccion === e.orden ? "true" : undefined}
+          class={`relative w-20 shrink-0 overflow-hidden rounded-lg border transition-colors
+            ${seleccion === e.orden
+              ? "border-accent ring-1 ring-accent"
+              : "border-line hover:border-surface-3"}`}
+        >
+          {#if e.imagen}
+            <img
+              src={urlImagen(e.orden)}
+              alt={`escena ${e.orden + 1}`}
+              class="w-full object-cover"
+              style="aspect-ratio:9/16"
+            />
+          {:else}
+            <div class="w-full bg-surface-3" style="aspect-ratio:9/16"></div>
+          {/if}
+          <span
+            class="absolute top-1 left-1 rounded bg-bg/70 px-1 text-[11px] tabular-nums text-text"
+          >
+            {e.orden + 1}
+          </span>
+          {#if av}
+            <span
+              class={`absolute right-1 bottom-1 rounded px-1 text-[10px]
+                ${av === "en cola" ? "bg-accent text-on-accent" : "bg-warn-soft text-warn"}`}
+            >
+              {av}
             </span>
-            <span class="min-w-0 flex-1 truncate text-xs text-dim">{e.texto}</span>
-            {#if e.en_cola}
-              <Chip tone="accent">⏳ {e.en_cola} en cola</Chip>
-            {/if}
-            {#if e.clip_viejo}
-              <Chip tone="warn">clip desactualizado</Chip>
-            {/if}
-          </div>
-
-          <div class="flex gap-3">
-            <!-- Miniatura de la escena -->
-            {#if e.imagen}
-              <button
-                type="button"
-                class="shrink-0 cursor-zoom-in"
-                onclick={() =>
-                  onver(
-                    `<img src="${media(`/proyectos/${p.id}/imagenes/${e.orden}`)}?v=${bust}" alt="escena ${e.orden + 1}">`,
-                    `Escena ${e.orden + 1} · imagen`,
-                  )}
-              >
-                <img
-                  src={`${media(`/proyectos/${p.id}/imagenes/${e.orden}`)}?v=${bust}`}
-                  alt={`escena ${e.orden + 1}`}
-                  class="w-14 rounded-md object-cover"
-                  style="aspect-ratio:9/16"
-                />
-              </button>
-            {:else}
-              <div
-                class="grid w-14 shrink-0 place-items-center rounded-md bg-surface-3 text-xs text-muted"
-                style="aspect-ratio:9/16"
-              >
-                {e.orden + 1}
-              </div>
-            {/if}
-
-            <div class="min-w-0 flex-1 space-y-2">
-              <textarea
-                class="control text-xs"
-                rows="2"
-                bind:value={prompts[e.orden]}
-                placeholder="Prompt visual (imagen)"
-              ></textarea>
-              <textarea
-                class="control text-xs"
-                rows="2"
-                bind:value={movs[e.orden]}
-                placeholder="Prompt de movimiento (solo modo i2v)"
-              ></textarea>
-
-              <div class="flex flex-wrap items-center gap-1.5">
-                <Button size="sm" variant="secondary" disabled={!!e.en_cola}
-                  onclick={() => onregenimagen(e.orden, true)}
-                  title="Genera otra imagen distinta (seed nuevo)">Otra imagen</Button>
-                <Button size="sm" variant="ghost" disabled={!!e.en_cola}
-                  onclick={() => onregenimagen(e.orden, false)}
-                  title="Rehace la imagen con el mismo seed: solo cambia si editaste el prompt">Mismo seed</Button>
-                <select
-                  class="control w-auto py-1 text-xs"
-                  value={modos[e.orden]}
-                  onchange={(ev) => cambiarModo(e.orden, (ev.currentTarget as HTMLSelectElement).value)}
-                >
-                  {#each MODOS as m (m)}
-                    <option value={m}>{NOMBRE_MODO[m]}</option>
-                  {/each}
-                </select>
-                <Button size="sm" variant="secondary" disabled={!!e.en_cola || !e.imagen}
-                  onclick={() => onregenclip(e.orden, modos[e.orden])}
-                  title={e.imagen ? "Regenera el clip de esta escena" : "Genera antes la imagen"}>Clip</Button>
-                {#if e.clip}
-                  <Button size="sm" variant="ghost"
-                    onclick={() =>
-                      onver(
-                        `<video src="${media(`/proyectos/${p.id}/clips/${e.orden}`)}?v=${bust}" controls autoplay loop muted playsinline></video>`,
-                        `Escena ${e.orden + 1} · clip ${NOMBRE_MODO[e.clip_modo ?? ""] ?? ""}`,
-                      )}>Ver clip</Button>
-                {/if}
-                <span class="text-[11px] text-muted">
-                  {#if e.imagen_s}img {e.imagen_s}s{/if}
-                  {#if e.clip}
-                    · clip {e.clip_modo ? NOMBRE_MODO[e.clip_modo] : "(modo sin registrar)"}{#if e.clip_s} · {e.clip_s}s{/if}
-                  {/if}
-                </span>
-              </div>
-            </div>
-          </div>
-        </article>
+          {/if}
+        </button>
       {/each}
     </div>
+
+    <!-- Detalle de la escena elegida: prompts, modo y acciones. -->
+    {#if escena}
+      {@const e = escena}
+      <article class="rounded-xl border border-line bg-surface-2 p-3">
+        <div class="mb-2 flex flex-wrap items-center gap-2">
+          <Chip tone="accent">#{e.orden + 1}</Chip>
+          <span class="text-xs tabular-nums text-muted">
+            {e.t_inicio.toFixed(1)}–{e.t_fin.toFixed(1)}s
+          </span>
+          {#if e.en_cola}
+            <Chip tone="accent">⏳ {e.en_cola} en cola</Chip>
+          {/if}
+          {#if e.clip_viejo}
+            <Chip tone="warn">clip desactualizado</Chip>
+          {/if}
+          <span class="ml-auto text-[11px] text-muted">
+            {#if e.imagen_s}img {e.imagen_s}s{/if}
+            {#if e.clip}
+              · clip {e.clip_modo ? NOMBRE_MODO[e.clip_modo] : "(modo sin registrar)"}{#if e.clip_s} · {e.clip_s}s{/if}
+            {/if}
+          </span>
+        </div>
+
+        <p class="mb-3 text-xs text-dim">{e.texto}</p>
+
+        <div class="flex gap-3">
+          {#if e.imagen}
+            <button
+              type="button"
+              class="shrink-0 cursor-zoom-in"
+              onclick={() =>
+                onver(
+                  `<img src="${urlImagen(e.orden)}" alt="escena ${e.orden + 1}">`,
+                  `Escena ${e.orden + 1} · imagen`,
+                )}
+            >
+              <img
+                src={urlImagen(e.orden)}
+                alt={`escena ${e.orden + 1}`}
+                class="w-28 rounded-md object-cover"
+                style="aspect-ratio:9/16"
+              />
+            </button>
+          {:else}
+            <div
+              class="grid w-28 shrink-0 place-items-center rounded-md bg-surface-3 text-xs text-muted"
+              style="aspect-ratio:9/16"
+            >
+              sin imagen
+            </div>
+          {/if}
+
+          <div class="min-w-0 flex-1 space-y-2">
+            <textarea
+              class="control text-xs"
+              rows="3"
+              bind:value={prompts[e.orden]}
+              placeholder="Prompt visual (imagen)"
+            ></textarea>
+            <textarea
+              class="control text-xs"
+              rows="2"
+              bind:value={movs[e.orden]}
+              placeholder="Prompt de movimiento (solo modo i2v)"
+            ></textarea>
+
+            <div class="flex flex-wrap items-center gap-1.5">
+              <Button size="sm" variant="secondary" disabled={!!e.en_cola}
+                onclick={() => onregenimagen(e.orden, true)}
+                title="Genera otra imagen distinta (seed nuevo)">Otra imagen</Button>
+              <Button size="sm" variant="ghost" disabled={!!e.en_cola}
+                onclick={() => onregenimagen(e.orden, false)}
+                title="Rehace la imagen con el mismo seed: solo cambia si editaste el prompt">Mismo seed</Button>
+              <select
+                class="control py-1 text-xs"
+                style="width: 7.5rem"
+                value={modos[e.orden]}
+                onchange={(ev) => cambiarModo(e.orden, (ev.currentTarget as HTMLSelectElement).value)}
+              >
+                {#each MODOS as m (m)}
+                  <option value={m}>{NOMBRE_MODO[m]}</option>
+                {/each}
+              </select>
+              <Button size="sm" variant="secondary" disabled={!!e.en_cola || !e.imagen}
+                onclick={() => onregenclip(e.orden, modos[e.orden])}
+                title={e.imagen ? "Regenera el clip de esta escena" : "Genera antes la imagen"}>Clip</Button>
+              {#if e.clip}
+                <Button size="sm" variant="ghost"
+                  onclick={() =>
+                    onver(
+                      `<video src="${media(`/proyectos/${p.id}/clips/${e.orden}`)}?v=${bust}" controls autoplay loop muted playsinline></video>`,
+                      `Escena ${e.orden + 1} · clip ${NOMBRE_MODO[e.clip_modo ?? ""] ?? ""}`,
+                    )}>Ver clip</Button>
+              {/if}
+            </div>
+          </div>
+        </div>
+      </article>
+    {/if}
   </div>
 {/if}
