@@ -7,7 +7,7 @@
   import Viewer from "../primitives/Viewer.svelte";
   import IdeasView from "./IdeasView.svelte";
   import ProjectView from "./ProjectView.svelte";
-  import { jobsDrenados, refrescarJobs, seleccionPendiente } from "@/lib/stores";
+  import { jobs, jobsDrenados, refrescarJobs, seleccionPendiente } from "@/lib/stores";
   import { currentTrack } from "@/lib/player";
   import * as API from "@/lib/proyectos";
   import type { Idea, ProyectoDetalle, Voz } from "@/lib/proyectos";
@@ -77,6 +77,25 @@
       await refrescarListas();
       irA("tema", tema_id);
       refrescarJobs();
+    } catch (e) {
+      fallo(e);
+    }
+  }
+
+  // Borrar un proyecto se puede desde su paso final y desde el listado, así que
+  // la confirmación (doble: se lleva la carpeta entera) vive aquí y no en el
+  // paso, que solo conoce el proyecto abierto.
+  async function borrarProyecto(id: number, titulo: string) {
+    if (!confirm(`¿Borrar el proyecto «${titulo}» POR COMPLETO?\n\nSe pierden guion, voz, subtítulos, imágenes, clips y vídeos.\nNo se puede deshacer.`))
+      return;
+    if (!confirm("Confirma otra vez: se borra la carpeta entera del proyecto.")) return;
+    try {
+      await API.borrarProyecto(id);
+      if (vista?.tipo === "proyecto" && vista.id === id) {
+        vista = null;
+        proyecto = null;
+      }
+      refrescarListas();
     } catch (e) {
       fallo(e);
     }
@@ -191,20 +210,8 @@
       if (!confirm(`¿Borrar la versión ${nombre}?\n\nNo se puede deshacer.`)) return;
       await tras(API.borrarVersion(pid(), nombre));
     },
-    borrarProyecto: async () => {
-      const t = proyecto?.idea?.titulo ?? proyecto?.slug ?? "";
-      if (!confirm(`¿Borrar el proyecto «${t}» POR COMPLETO?\n\nSe pierden guion, voz, subtítulos, imágenes, clips y vídeos.\nNo se puede deshacer.`))
-        return;
-      if (!confirm("Confirma otra vez: se borra la carpeta entera del proyecto.")) return;
-      try {
-        await API.borrarProyecto(pid());
-        vista = null;
-        proyecto = null;
-        refrescarListas();
-      } catch (e) {
-        fallo(e);
-      }
-    },
+    borrarProyecto: () =>
+      borrarProyecto(pid(), proyecto?.idea?.titulo ?? proyecto?.slug ?? ""),
   };
 
   function abrirVisor(html: string, pie: string) {
@@ -218,10 +225,28 @@
     const n = $jobsDrenados;
     if (n !== ultimoDrenaje) {
       ultimoDrenaje = n;
-      bust = n;
+      bust = Date.now();
       refrescarListas();
       cargarVista();
       API.listarVoces().then((v) => (voces = v)).catch(() => {});
+    }
+  });
+
+  // Y mientras el job corre: un lote de imágenes o clips las va dejando hechas
+  // de una en una, pero la señal de arriba solo salta cuando la cola se vacía,
+  // así que hasta ahora se veían once huecos vacíos durante varios minutos y
+  // luego todo de golpe. Cada vez que el contador de lote avanza, se recarga.
+  let ultimoAvance = -1;
+  $effect(() => {
+    const hecho = $jobs.find((j) => j.progreso)?.progreso?.hecho ?? -1;
+    if (hecho !== ultimoAvance) {
+      // El primer elemento aún no ha producido nada: recargar ahí solo gasta
+      // una petición para pintar lo mismo.
+      if (hecho > 0 && ultimoAvance >= 0) {
+        bust = Date.now();
+        cargarVista();
+      }
+      ultimoAvance = hecho;
     }
   });
 
@@ -298,15 +323,28 @@
     <div class="space-y-1 border-t border-line p-4">
       <p class="mb-2 text-xs font-medium tracking-wide text-muted">Proyectos</p>
       {#each proyectos as pr (pr.id)}
-        <button
-          type="button"
-          onclick={() => irA("proyecto", pr.id)}
-          class={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors
+        <div
+          class={`group flex items-center gap-2 rounded-lg px-2.5 py-2 transition-colors
             ${vista?.tipo === "proyecto" && vista.id === pr.id ? "bg-accent-soft" : "hover:bg-surface-2"}`}
         >
-          <span class="min-w-0 flex-1 truncate text-sm">{pr.titulo}</span>
-          <Chip>{pr.estado}</Chip>
-        </button>
+          <button
+            type="button"
+            onclick={() => irA("proyecto", pr.id)}
+            class="flex min-w-0 flex-1 items-center gap-2 text-left"
+          >
+            <span class="min-w-0 flex-1 truncate text-sm">{pr.titulo}</span>
+            <Chip>{pr.estado}</Chip>
+          </button>
+          <span class="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            <IconButton
+              name="x"
+              label="Borrar proyecto"
+              size={14}
+              onclick={() => borrarProyecto(pr.id, pr.titulo)}
+              class="hover:bg-danger-soft hover:text-danger"
+            />
+          </span>
+        </div>
       {:else}
         <p class="text-xs text-muted">Sin proyectos aún.</p>
       {/each}
