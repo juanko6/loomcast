@@ -13,6 +13,7 @@
     onguardar,
     ongenerarcasting,
     onguardarcasting,
+    ongenerarretrato,
     ongenerarimagenes,
     onregenimagen,
     onregenclip,
@@ -26,6 +27,7 @@
     onguardar: (e: { orden: number; prompt: string; prompt_movimiento: string | null }[]) => void;
     ongenerarcasting: () => void;
     onguardarcasting: (p: Personaje[]) => void;
+    ongenerarretrato: (clave: string, nuevoSeed: boolean) => void;
     ongenerarimagenes: (e: { orden: number; prompt: string; prompt_movimiento: string | null }[]) => void;
     onregenimagen: (orden: number, nuevoSeed: boolean) => void;
     onregenclip: (orden: number, modo: string) => void;
@@ -110,6 +112,10 @@
     return `${media(`/proyectos/${p.id}/imagenes/${orden}`)}?v=${bust}`;
   }
 
+  function urlRetrato(clave: string) {
+    return `${media(`/proyectos/${p.id}/personajes/${clave}/retrato`)}?v=${bust}`;
+  }
+
   // Estado de la escena para la tira: lo que hay que ver de un golpe es qué
   // falta y qué se quedó viejo, sin leer trece chips de texto.
   function aviso(e: (typeof p.escenas)[number]): string {
@@ -138,16 +144,64 @@
   {#if castingHecho}
     <div class="mt-3 space-y-3">
       {#each p.personajes as c (c.clave)}
-        <div>
-          <div class="mb-1 flex flex-wrap items-center gap-2">
-            <Chip tone="accent">{"{" + c.clave + "}"}</Chip>
-            <span class="text-xs text-muted">{c.nombre}</span>
+        <div class="flex gap-3">
+          <!-- Retrato: la cara oficial del personaje, con la que se generarán
+               sus escenas. Se hace una vez y se reutiliza. -->
+          <div class="shrink-0">
+            {#if c.retrato}
+              <button
+                type="button"
+                class="cursor-zoom-in"
+                onclick={() =>
+                  onver(
+                    `<img src="${urlRetrato(c.clave)}" alt="retrato de ${c.clave}">`,
+                    `${c.nombre || c.clave} · retrato de referencia`,
+                  )}
+              >
+                <img
+                  src={urlRetrato(c.clave)}
+                  alt={`retrato de ${c.clave}`}
+                  class="w-20 rounded-md object-cover"
+                  style="aspect-ratio:3/4"
+                />
+              </button>
+            {:else}
+              <div
+                class="grid w-20 place-items-center rounded-md bg-surface-3 px-1 text-center text-[11px] text-muted"
+                style="aspect-ratio:3/4"
+              >
+                sin retrato
+              </div>
+            {/if}
+            <div class="mt-1 flex flex-col gap-1">
+              <Button size="sm" variant="secondary" disabled={busy}
+                onclick={() => ongenerarretrato(c.clave, c.retrato)}
+                title={c.retrato
+                  ? "Genera otra cara distinta (seed nuevo)"
+                  : "Genera la cara de referencia a partir de la ficha"}>
+                {c.retrato ? "Otra cara" : "Retrato"}
+              </Button>
+              {#if c.retrato}
+                <Button size="sm" variant="ghost" disabled={busy}
+                  onclick={() => ongenerarretrato(c.clave, false)}
+                  title="Rehace el retrato con el mismo seed: solo cambia si editaste la ficha">
+                  Misma cara
+                </Button>
+              {/if}
+            </div>
           </div>
-          <textarea
-            class="control min-h-16 text-sm"
-            bind:value={fichas[c.clave]}
-            placeholder="Descripción física en inglés"
-          ></textarea>
+
+          <div class="min-w-0 flex-1">
+            <div class="mb-1 flex flex-wrap items-center gap-2">
+              <Chip tone="accent">{"{" + c.clave + "}"}</Chip>
+              <span class="text-xs text-muted">{c.nombre}</span>
+            </div>
+            <textarea
+              class="control min-h-24 text-sm"
+              bind:value={fichas[c.clave]}
+              placeholder="Descripción física en inglés"
+            ></textarea>
+          </div>
         </div>
       {/each}
     </div>

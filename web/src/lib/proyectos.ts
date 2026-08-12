@@ -36,6 +36,9 @@ export interface Personaje {
   clave: string;
   nombre: string;
   ficha: string;
+  // Si ya tiene retrato de referencia generado: es la cara con la que se
+  // generarán sus escenas.
+  retrato: boolean;
 }
 
 export interface Guion {
@@ -137,6 +140,12 @@ export const guardarCasting = (id: number, personajes: Personaje[]) =>
     body: { personajes },
   });
 
+export const generarRetrato = (id: number, clave: string, nuevo_seed: boolean) =>
+  api<{ job_id: number }>(`/proyectos/${id}/personajes/${clave}/retrato`, {
+    method: "POST",
+    body: { nuevo_seed },
+  });
+
 export const generarEscenas = (id: number) =>
   api<{ job_id: number }>(`/proyectos/${id}/escenas`, { method: "POST" });
 export const guardarEscenas = (
@@ -225,6 +234,7 @@ export const ETAPA_VIDEO: Record<string, string> = {
   generar_subtitulos: "Transcribiendo subtítulos…",
   generar_metadatos: "Escribiendo los metadatos…",
   generar_casting: "Fijando el reparto…",
+  generar_retrato: "Retratando al personaje…",
   generar_escenas: "Proponiendo las escenas…",
   generar_imagenes: "Generando las imágenes…",
   armar_estatico: "Armando vídeo estático…",

@@ -88,6 +88,34 @@ def editar_casting(pid: int, body: PersonajesIn):
         raise HTTPException(404, "Proyecto no existe")
 
 
+@router.post("/{pid}/personajes/{clave}/retrato")
+def generar_retrato(pid: int, clave: str, body: RegenerarImagenIn):
+    try:
+        proyectos_service.ruta_retrato(pid, clave)  # valida que el personaje existe
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+    except proyectos_service.PersonajeNoExiste:
+        raise HTTPException(404, "El proyecto no tiene ese personaje")
+    return {
+        "job_id": proyectos_service.encolar_etapa(
+            pid, "generar_retrato", clave=clave, nuevo_seed=body.nuevo_seed
+        )
+    }
+
+
+@router.get("/{pid}/personajes/{clave}/retrato")
+def retrato(pid: int, clave: str):
+    try:
+        ruta = proyectos_service.ruta_retrato(pid, clave)
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+    except proyectos_service.PersonajeNoExiste:
+        raise HTTPException(404, "El proyecto no tiene ese personaje")
+    if not ruta.exists():
+        raise HTTPException(404, "Retrato no generado")
+    return FileResponse(ruta, media_type="image/png")
+
+
 @router.post("/{pid}/escenas")
 def generar_escenas(pid: int):
     return {"job_id": proyectos_service.encolar_etapa(pid, "generar_escenas")}

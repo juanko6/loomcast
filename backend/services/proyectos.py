@@ -15,11 +15,12 @@ from ..repositories import personajes as personajes_repo
 from ..repositories import plantillas as plantillas_repo
 from ..repositories import proyectos as proyectos_repo
 from ..repositories import voces as voces_repo
+from ..services.pipeline import retratos
 from ..workers import queue
 
 TIPOS_JOB_PROYECTO = [
     "generar_guion", "generar_metadatos", "generar_voz", "generar_subtitulos",
-    "generar_casting",
+    "generar_casting", "generar_retrato",
     "generar_escenas", "generar_imagenes", "generar_upscale", "generar_clips",
     "generar_i2v", "armar_video", "armar_estatico",
     "regenerar_imagen", "regenerar_clip", "generar_clips_mixto",
@@ -34,6 +35,10 @@ class ProyectoNoExiste(LookupError):
 
 
 class VozNoDisponible(ValueError):
+    pass
+
+
+class PersonajeNoExiste(LookupError):
     pass
 
 
@@ -91,7 +96,12 @@ def detalle(pid: int) -> dict:
         escenas = [_escena_dict(e, base_dir, en_cola)
                    for e in escenas_repo.por_proyecto(s, pid)]
         personajes = [
-            {"clave": x.clave, "nombre": x.nombre, "ficha": x.ficha}
+            {
+                "clave": x.clave,
+                "nombre": x.nombre,
+                "ficha": x.ficha,
+                "retrato": retratos.ruta_retrato(p.slug, x.clave).exists(),
+            }
             for x in personajes_repo.por_proyecto(s, pid)
         ]
         todas_imagenes = bool(escenas) and all(e["imagen"] for e in escenas)
@@ -151,6 +161,21 @@ def seleccionar_voz(pid: int, voz_slug: str) -> None:
             raise VozNoDisponible(voz_slug)
         p.voz = voz_slug
         s.commit()
+
+
+def ruta_retrato(pid: int, clave: str):
+    """Ruta del retrato de un personaje, validando la clave contra el reparto.
+
+    La clave llega en la URL, así que no puede componer una ruta sin más: se
+    comprueba que sea uno de los personajes del proyecto.
+    """
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        if not any(x.clave == clave for x in personajes_repo.por_proyecto(s, pid)):
+            raise PersonajeNoExiste(clave)
+        return retratos.ruta_retrato(p.slug, clave)
 
 
 def editar_personajes(pid: int, cambios: dict[str, dict]) -> int:

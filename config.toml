@@ -196,6 +196,14 @@ height = 1344
 nombre = "Z-Image Turbo"
 generar = "workflows/z_image_turbo_api.json"
 
+[imagen.motores.zimage_retrato]
+# El mismo Z-Image, pero con 16 pasos en vez de 8. Es para los retratos de
+# personaje: se generan una vez y se reutilizan en todas las escenas de ese
+# personaje, así que ahí sí compensa pagar el doble de tiempo por más detalle
+# en la cara. Si no notas diferencia, apunta [personajes].motor a "zimage".
+nombre = "Z-Image (retrato)"
+generar = "workflows/z_image_retrato_api.json"
+
 [imagen.motores.qwen]
 # Qwen-Image-Edit 2509 GGUF: reutiliza el text encoder qwen2.5-vl en GGUF y
 # evita el fp8 que Metal no soporta. ~2 min por imagen.
@@ -208,6 +216,20 @@ editar = "workflows/qwen_edit_api.json"
 nombre = "FLUX.2 Klein 9B"
 generar = "workflows/flux2_klein_t2i_api.json"
 editar = "workflows/flux2_klein_edit_api.json"
+
+[personajes]
+# Retrato de referencia de cada personaje del reparto: la cara oficial con la
+# que luego se generan sus escenas, para que sea la misma persona en todas.
+#
+# `motor` es un id de [imagen.motores] que sepa generar. El retrato se hace una
+# sola vez por personaje y se reutiliza, así que su coste da igual y conviene
+# el motor que mejor cara dé, no el más rápido.
+motor = "zimage_retrato"
+# 3:4 en vez del 9:16 del vídeo: es un plano medio, y en vertical se
+# desperdiciaría ancho en el que no hay nada. El formato del retrato no
+# condiciona el de las escenas.
+width = 768
+height = 1024
 
 [musica]
 # Generación de música local con ACE-Step 1.5 XL Turbo (ACE Studio + StepFun):

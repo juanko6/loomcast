@@ -175,8 +175,24 @@ Un reparto vacío es una respuesta válida: en *curiosidades* es lo normal. En
 lo describa. Editar una ficha no reescribe los prompts ya generados: hay que
 regenerarlos.
 
-Esto fija ropa, pelo, edad y complexión. **No fija la cara**: con solo texto no
-se llega ahí, hace falta un retrato de referencia y generar por edición.
+Esto fija ropa, pelo, edad y complexión, pero **no la cara**: con solo texto el
+generador dibuja una persona nueva cada vez. Para eso está el retrato.
+
+### Retrato de referencia
+
+Cada personaje puede tener su cara oficial, generada desde su ficha con un
+encuadre fijo (plano medio, frontal, fondo neutro, luz plana) y guardada en
+`proyectos/<slug>/personajes/<CLAVE>.png`. Deliberadamente no lleva el estilo
+visual de la plantilla: no es una escena, es una ficha, y en drama la luz dura
+del estilo taparía justo lo que hay que ver.
+
+Se hace una vez por personaje y se reutiliza, así que ahí compensa el motor que
+mejor cara dé y no el más rápido: `[personajes].motor` en `config.toml` apunta
+por defecto a `zimage_retrato`, el mismo Z-Image con 16 pasos en vez de 8
+(~80 s en el M3 Max).
+
+De momento el retrato solo se genera y se revisa. Usarlo como referencia visual
+al generar las escenas —lo que de verdad fija los rasgos— es el paso siguiente.
 
 ## Ciclo de vida del LLM
 

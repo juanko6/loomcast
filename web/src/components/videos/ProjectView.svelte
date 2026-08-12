@@ -97,6 +97,7 @@
         onguardar={acciones.guardarEscenas}
         ongenerarcasting={acciones.generarCasting}
         onguardarcasting={acciones.guardarCasting}
+        ongenerarretrato={acciones.generarRetrato}
         ongenerarimagenes={acciones.generarImagenes}
         onregenimagen={acciones.regenerarImagen}
         onregenclip={acciones.regenerarClip}

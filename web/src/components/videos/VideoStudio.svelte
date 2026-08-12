@@ -180,6 +180,8 @@
     generarMetadatos: () => tras(API.generarMetadatos(pid())),
     generarCasting: () => tras(API.generarCasting(pid())),
     guardarCasting: (p: API.Personaje[]) => tras(API.guardarCasting(pid(), p)),
+    generarRetrato: (clave: string, nuevoSeed: boolean) =>
+      tras(API.generarRetrato(pid(), clave, nuevoSeed)),
     generarEscenas: () => tras(API.generarEscenas(pid())),
     guardarEscenas: (e: Parameters<typeof API.guardarEscenas>[1]) =>
       tras(API.guardarEscenas(pid(), e)),
