@@ -191,9 +191,24 @@ mejor cara dé y no el más rápido: `[personajes].motor` en `config.toml` apunt
 por defecto a `zimage_retrato`, el mismo Z-Image con 16 pasos en vez de 8
 (~80 s en el M3 Max).
 
-El cliente de ComfyUI ya sabe generar una imagen **a partir de esos retratos**:
-`comfy.editar_imagen()` acepta hasta tres referencias y un tamaño de salida
-propio. Falta engancharlo al pipeline de vídeo, que es el paso siguiente.
+### Cómo se usa el retrato
+
+En la etapa de imágenes cada escena va por uno de dos caminos, según lo que
+guardó el paso de escenas en su campo `personajes`:
+
+| la escena… | se genera |
+|---|---|
+| no lleva personajes | texto→imagen con `[imagen].motor_generar`, como siempre |
+| lleva personajes con retrato | **a partir de sus retratos**, con `[personajes].motor_escena` |
+| lleva personajes sin retrato | texto→imagen; la UI avisa de cuántas son |
+
+El paso 4 dice antes de lanzar cuántas escenas saldrán de las caras del
+reparto, y la tira marca cuáles llevan personaje.
+
+Si una escena tiene más personajes que referencias admite el motor, se recorta:
+con dos personas y un motor de una sola referencia, entrar con la primera sale
+mejor que renunciar a las dos caras — la segunda sigue descrita por su ficha en
+el texto.
 
 Dos detalles del camino, por si tocas los workflows de edición:
 

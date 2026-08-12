@@ -66,6 +66,9 @@ def _escena_dict(e, base_dir, en_cola=None) -> dict:
         "clip": tiene_clip,
         "modo": e.modo or "",
         "clip_modo": e.clip_modo or "",
+        # Quién sale en la escena: si tienen retrato, es la que se generará a
+        # partir de sus caras en vez de solo desde el texto.
+        "personajes": [c for c in (e.personajes or "").split(",") if c],
         "imagen_s": e.imagen_s or 0,
         "clip_s": e.clip_s or 0,
         # El clip se hizo con la imagen anterior si esta se regeneró después.

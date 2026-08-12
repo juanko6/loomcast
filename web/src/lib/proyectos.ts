@@ -27,6 +27,9 @@ export interface Escena {
   clip_viejo: boolean;
   modo: string | null;
   en_cola: string | null;
+  // Claves de los personajes que salen en la escena. Si tienen retrato, su
+  // imagen se genera a partir de esas caras y no solo del texto.
+  personajes: string[];
 }
 
 // Personaje recurrente del vídeo. La `ficha` es la descripción física en

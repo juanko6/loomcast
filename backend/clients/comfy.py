@@ -310,6 +310,18 @@ def generar_imagen(
 MAX_REFERENCIAS = 3
 
 
+def referencias_admitidas(motor: str | None = None) -> int:
+    """Cuántas imágenes de referencia acepta el workflow de edición del motor.
+
+    Lo decide el propio archivo: cuántos {IMAGEn} declara. Sirve para que quien
+    llama recorte antes de pedir más de las que caben — con dos personajes en
+    una escena y un motor de una sola referencia, es mejor entrar con uno que
+    quedarse sin imagen.
+    """
+    crudo = _workflow_motor(motor, "editar").read_text()
+    return sum(1 for i in range(MAX_REFERENCIAS) if "{IMAGE%d}" % (i + 1) in crudo)
+
+
 def editar_imagen(
     imagenes: Path | list[Path],
     prompt: str,
@@ -345,7 +357,7 @@ def editar_imagen(
     crudo = wf_path.read_text()
     # Un workflow que solo declara {IMAGE1} se tragaría las demás referencias
     # sin decir nada, y la escena saldría con un personaje de menos.
-    admite = sum(1 for i in range(MAX_REFERENCIAS) if "{IMAGE%d}" % (i + 1) in crudo)
+    admite = referencias_admitidas(motor)
     if len(refs) > admite:
         raise ComfyError(
             f"Se pasaron {len(refs)} referencias pero el workflow "

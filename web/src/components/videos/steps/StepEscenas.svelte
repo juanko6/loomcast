@@ -116,6 +116,21 @@
     return `${media(`/proyectos/${p.id}/personajes/${clave}/retrato`)}?v=${bust}`;
   }
 
+  // Escenas que se generarán a partir de las caras del reparto en vez de solo
+  // desde el texto: las que llevan un personaje que ya tiene retrato.
+  const conRetrato = $derived.by(() => {
+    const retratados = new Set(p.personajes.filter((c) => c.retrato).map((c) => c.clave));
+    return p.escenas.filter((e) => e.personajes.some((c) => retratados.has(c))).length;
+  });
+
+  // Las que llevan personaje pero se quedarán sin su cara por no tener retrato.
+  const sinRetrato = $derived.by(() => {
+    const retratados = new Set(p.personajes.filter((c) => c.retrato).map((c) => c.clave));
+    return p.escenas.filter(
+      (e) => e.personajes.length && !e.personajes.some((c) => retratados.has(c)),
+    ).length;
+  });
+
   // Estado de la escena para la tira: lo que hay que ver de un golpe es qué
   // falta y qué se quedó viejo, sin leer trece chips de texto.
   function aviso(e: (typeof p.escenas)[number]): string {
@@ -249,6 +264,16 @@
       <Button size="sm" disabled={busy} onclick={() => ongenerarimagenes(recogerPrompts())}>
         {p.imagenes_completas ? "Regenerar imágenes" : "Generar imágenes"}
       </Button>
+      {#if conRetrato || sinRetrato}
+        <span class="text-xs text-muted">
+          {#if conRetrato}
+            {conRetrato} de {p.escenas.length} saldrán de las caras del reparto
+          {/if}
+          {#if sinRetrato}
+            {conRetrato ? " · " : ""}{sinRetrato} con personaje pero sin retrato
+          {/if}
+        </span>
+      {/if}
       <label class="ml-auto flex items-center gap-2 text-xs text-muted">
         Modo de todas
         <select
@@ -298,6 +323,14 @@
           >
             {e.orden + 1}
           </span>
+          {#if e.personajes.length}
+            <span
+              class="absolute top-1 right-1 rounded bg-bg/70 px-1 text-[10px] text-accent"
+              title={`Sale ${e.personajes.join(", ")}`}
+            >
+              {e.personajes.length > 1 ? e.personajes.length : ""}◍
+            </span>
+          {/if}
           {#if av}
             <span
               class={`absolute right-1 bottom-1 rounded px-1 text-[10px]

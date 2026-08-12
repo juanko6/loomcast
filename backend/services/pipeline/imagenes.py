@@ -1,22 +1,82 @@
-"""Etapa 7 — IMAGENES: una imagen 9:16 por escena con Z-Image vía ComfyUI.
+"""Etapa 7 — IMAGENES: una imagen 9:16 por escena, vía ComfyUI.
+
+Cada escena va por uno de dos caminos:
+
+  - sin personajes (o sin retrato hecho) → texto→imagen con el motor de siempre;
+  - con personajes retratados → se generan **a partir de sus retratos**, que es
+    lo único que mantiene la misma cara de una escena a otra. Cuesta más o menos
+    lo mismo y es la razón de ser del reparto.
 
 Al terminar el lote se descargan los modelos de ComfyUI (POST /free) para
 devolver la memoria unificada al resto del pipeline.
 """
 import random
 import time
+from pathlib import Path
 
 from ...clients import comfy
-from ...config import PROYECTOS_DIR
+from ...config import (
+    IMAGEN_HEIGHT,
+    IMAGEN_WIDTH,
+    PERSONAJE_MOTOR_ESCENA,
+    PROYECTOS_DIR,
+)
 from ...db import get_session
 from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
+from ...repositories import personajes as personajes_repo
 from ...repositories import proyectos as proyectos_repo
 from .. import progreso
+from .retratos import ruta_retrato
+
+# Lo que se le antepone al prompt de la escena cuando entra por referencias. El
+# nodo numera las imágenes como "Picture 1", "Picture 2"…, así que se le puede
+# hablar de ellas; lo que hay que dejar claro es que la cara y la ropa vienen de
+# ahí y no de lo que diga el texto.
+PREFIJO_REFERENCIA = (
+    "The people shown in the reference pictures appear in this scene. Keep each "
+    "person's face, hair and clothing exactly as in their picture. Scene: "
+)
 
 
 def ruta_imagen(slug: str, orden: int):
     return PROYECTOS_DIR / slug / "imagenes" / f"{orden:02d}.png"
+
+
+def _retratos_de(escena_personajes: str, slug: str) -> list[Path]:
+    """Retratos disponibles de los personajes de una escena.
+
+    Se recorta a las referencias que admita el motor de escena: con dos
+    personajes y un motor de una sola, entrar con el primero da mejor resultado
+    que caer a texto y perder las dos caras. El tope se pregunta aquí, y no lo
+    pasa quien llama, para que no pueda descuadrarse con el motor que se acaba
+    usando.
+    """
+    claves = [c for c in (escena_personajes or "").split(",") if c]
+    if not claves:
+        return []
+    tope = comfy.referencias_admitidas(PERSONAJE_MOTOR_ESCENA)
+    existentes = [ruta_retrato(slug, c) for c in claves]
+    return [r for r in existentes if r.exists()][:tope]
+
+
+def _generar_una(escena: dict, slug: str) -> bool:
+    """Genera la imagen de una escena. Devuelve si usó retratos."""
+    destino = ruta_imagen(slug, escena["orden"])
+    refs = _retratos_de(escena["personajes"], slug)
+    if refs:
+        comfy.editar_imagen(
+            refs,
+            PREFIJO_REFERENCIA + escena["prompt"],
+            escena["seed"],
+            destino,
+            PERSONAJE_MOTOR_ESCENA,
+            IMAGEN_WIDTH,
+            IMAGEN_HEIGHT,
+        )
+        return True
+    comfy.generar_imagen(escena["prompt"], escena["seed"], destino)
+    return False
 
 
 def generar_imagenes(proyecto_id: int) -> str:
@@ -25,7 +85,8 @@ def generar_imagenes(proyecto_id: int) -> str:
         if p is None:
             raise ValueError(f"Proyecto {proyecto_id} no existe")
         escenas = [
-            {"orden": e.orden, "prompt": e.prompt, "seed": e.seed}
+            {"orden": e.orden, "prompt": e.prompt, "seed": e.seed,
+             "personajes": e.personajes}
             for e in escenas_repo.por_proyecto(s, proyecto_id)
         ]
         slug = p.slug
@@ -34,11 +95,12 @@ def generar_imagenes(proyecto_id: int) -> str:
         raise ValueError("El proyecto no tiene escenas; genera las escenas primero")
 
     (PROYECTOS_DIR / slug / "imagenes").mkdir(parents=True, exist_ok=True)
+    con_retrato = 0
     try:
         for i, e in enumerate(escenas):
             progreso.lote(i, len(escenas), "imagen")
             t0 = time.time()
-            comfy.generar_imagen(e["prompt"], e["seed"], ruta_imagen(slug, e["orden"]))
+            con_retrato += _generar_una(e, slug)
             _anotar_tiempo(proyecto_id, e["orden"], time.time() - t0)
     finally:
         comfy.liberar_memoria()
@@ -47,7 +109,12 @@ def generar_imagenes(proyecto_id: int) -> str:
         p = proyectos_repo.obtener(s, proyecto_id)
         avanzar_estado(p, "IMAGENES")
         s.commit()
-    return f"{len(escenas)} imágenes generadas"
+    if not con_retrato:
+        return f"{len(escenas)} imágenes generadas"
+    return (
+        f"{len(escenas)} imágenes generadas, {con_retrato} con el reparto "
+        f"({len(escenas) - con_retrato} sin personajes)"
+    )
 
 
 def _anotar_tiempo(proyecto_id: int, orden: int, segundos: float) -> None:
@@ -78,14 +145,20 @@ def regenerar_imagen(proyecto_id: int, orden: int, nuevo_seed: bool = True) -> s
         if nuevo_seed:
             escena.seed = random.randint(0, 2**31 - 1)
             s.commit()
-        prompt, seed, slug = escena.prompt, escena.seed, p.slug
+        datos = {"orden": orden, "prompt": escena.prompt, "seed": escena.seed,
+                 "personajes": escena.personajes}
+        slug, seed = p.slug, escena.seed
 
     (PROYECTOS_DIR / slug / "imagenes").mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     try:
-        comfy.generar_imagen(prompt, seed, ruta_imagen(slug, orden))
+        con_retrato = _generar_una(datos, slug)
     finally:
         comfy.liberar_memoria()
     tardo = time.time() - t0
     _anotar_tiempo(proyecto_id, orden, tardo)
-    return f"Imagen de la escena {orden + 1} regenerada en {tardo:.0f}s (seed {seed})"
+    con_que = " con el reparto" if con_retrato else ""
+    return (
+        f"Imagen de la escena {orden + 1} regenerada{con_que} en {tardo:.0f}s "
+        f"(seed {seed})"
+    )
