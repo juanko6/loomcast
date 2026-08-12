@@ -40,6 +40,11 @@ def _render(crudo: str, **valores) -> dict:
     el archivo** y se sustituyen incluyendo las comillas: así el workflow sigue
     siendo JSON válido y se puede abrir tal cual en ComfyUI, pero ComfyUI recibe
     el número o el booleano.
+
+    Un valor None marca un placeholder **opcional ausente**: en vez de
+    sustituirlo, se poda del grafo el nodo que lo usaba (ver `_podar`). Es lo
+    que permite que un mismo workflow de edición acepte una referencia o tres,
+    sin mantener tres archivos casi iguales.
     """
     # Los del workflow, no los que nos pasan: si el archivo trae un placeholder
     # que nadie rellena, se colaba tal cual hasta ComfyUI y el error salía allí
@@ -54,6 +59,16 @@ def _render(crudo: str, **valores) -> dict:
             "O sobran en el JSON, o falta pasarlos desde el cliente."
         )
 
+    ausentes = {c for c, v in valores.items() if v is None}
+    if ausentes:
+        # El workflow con placeholders sigue siendo JSON válido a propósito
+        # (los numéricos van entrecomillados), así que se puede parsear antes de
+        # sustituir para saber qué nodo usa cada placeholder ausente.
+        grafo = json.loads(crudo)
+        _podar(grafo, _nodos_de(grafo, ausentes))
+        crudo = json.dumps(grafo)
+        valores = {c: v for c, v in valores.items() if v is not None}
+
     for clave, valor in valores.items():
         marca = "{" + clave + "}"
         if isinstance(valor, str):
@@ -67,6 +82,46 @@ def _render(crudo: str, **valores) -> dict:
     if faltan:
         raise ComfyError(f"Placeholders sin sustituir en el workflow: {faltan}")
     return json.loads(crudo)
+
+
+def _nodos_de(grafo: dict, placeholders: set[str]) -> set[str]:
+    """Ids de los nodos que usan alguno de esos placeholders en sus inputs."""
+    marcas = {"{" + p + "}" for p in placeholders}
+    return {
+        nid
+        for nid, nodo in grafo.items()
+        if any(v in marcas for v in nodo.get("inputs", {}).values() if isinstance(v, str))
+    }
+
+
+def _podar(grafo: dict, muertos: set[str]) -> None:
+    """Quita del grafo esos nodos y lo que quede colgando de ellos.
+
+    Cuando una referencia opcional no viene, no basta con borrar su LoadImage:
+    hay que arrastrar lo que solo existía para procesarla (su escalado) y
+    quitar la entrada que la consumía en el nodo que la usaba. La regla es que
+    un consumidor se elimina si **todas** sus entradas enlazadas apuntaban a
+    nodos muertos —era solo para eso—, y si no, se le borra únicamente esa
+    entrada. Sin la poda, el nodo huérfano llegaría a ComfyUI apuntando a otro
+    que ya no existe y rechazaría el workflow entero.
+    """
+    pendientes = set(muertos)
+    while pendientes:
+        muerto = pendientes.pop()
+        grafo.pop(muerto, None)
+        for nid, nodo in list(grafo.items()):
+            entradas = nodo.get("inputs", {})
+            enlaces = {c: v for c, v in entradas.items()
+                       if isinstance(v, list) and v and isinstance(v[0], str)}
+            colgando = [c for c, v in enlaces.items() if v[0] == muerto]
+            if not colgando:
+                continue
+            if len(colgando) == len(enlaces):
+                # Solo existía para alimentar al que acabamos de quitar.
+                pendientes.add(nid)
+            else:
+                for c in colgando:
+                    del entradas[c]
 
 
 def _workflow_motor(motor_id: str | None, modo: str) -> Path:
@@ -252,23 +307,66 @@ def generar_imagen(
         _descargar_primera_imagen(c, entry, destino)
 
 
+MAX_REFERENCIAS = 3
+
+
 def editar_imagen(
-    imagen: Path,
+    imagenes: Path | list[Path],
     prompt: str,
     seed: int,
     destino: Path,
     motor: str | None = None,
+    width: int | None = None,
+    height: int | None = None,
 ) -> None:
-    """Edita una imagen con el motor instruct-edit indicado y guarda el
+    """Genera una imagen a partir de una o varias de referencia y guarda el
     resultado en `destino`.
 
+    `imagenes` puede ser una sola (retocar esa imagen) o varias (llevar a la
+    misma escena a personajes distintos, cada uno con su retrato). El workflow
+    las recibe como {IMAGE1}…{IMAGE3}: las que no se pasan se podan del grafo,
+    así que el mismo archivo sirve para una referencia o para tres.
+
+    `width`/`height` fijan el tamaño de salida. Importa cuando la referencia no
+    tiene la forma del resultado: sin esto, meter a un personaje de un retrato
+    3:4 en una escena la devolvería en 3:4 y no en el 9:16 del vídeo.
+
     `motor` es un id de [imagen.motores] de config.toml; None usa el de
-    [imagen].motor_editar. El workflow debe traer los placeholders {IMAGE},
-    {PROMPT} y {SEED}."""
+    [imagen].motor_editar."""
+    refs = [imagenes] if isinstance(imagenes, Path) else list(imagenes)
+    if not refs:
+        raise ComfyError("editar_imagen necesita al menos una imagen de referencia")
+    if len(refs) > MAX_REFERENCIAS:
+        raise ComfyError(
+            f"Demasiadas referencias ({len(refs)}): el workflow admite "
+            f"{MAX_REFERENCIAS} como mucho."
+        )
     wf_path = _workflow_motor(motor, "editar")
+    crudo = wf_path.read_text()
+    # Un workflow que solo declara {IMAGE1} se tragaría las demás referencias
+    # sin decir nada, y la escena saldría con un personaje de menos.
+    admite = sum(1 for i in range(MAX_REFERENCIAS) if "{IMAGE%d}" % (i + 1) in crudo)
+    if len(refs) > admite:
+        raise ComfyError(
+            f"Se pasaron {len(refs)} referencias pero el workflow "
+            f"{wf_path.name} solo declara {admite} ({{IMAGE1}}…). Añádele los "
+            "placeholders que falten o usa un motor que los traiga."
+        )
     with httpx.Client(timeout=30) as c:
-        nombre = _subir_imagen(c, imagen)
-        wf = _render(wf_path.read_text(), IMAGE=nombre, PROMPT=prompt, SEED=seed)
+        nombres = [_subir_imagen(c, r) for r in refs]
+        # Las que no vienen van a None: _render las poda del grafo.
+        huecos = {
+            f"IMAGE{i + 1}": nombres[i] if i < len(nombres) else None
+            for i in range(MAX_REFERENCIAS)
+        }
+        wf = _render(
+            crudo,
+            PROMPT=prompt,
+            SEED=seed,
+            WIDTH=width if width is not None else IMAGEN_WIDTH,
+            HEIGHT=height if height is not None else IMAGEN_HEIGHT,
+            **huecos,
+        )
         entry = _encolar_y_esperar(c, wf)
         _descargar_primera_imagen(c, entry, destino)
 

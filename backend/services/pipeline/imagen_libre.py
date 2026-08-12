@@ -37,6 +37,16 @@ def ruta_final(imagen_id: int):
     return carpeta(imagen_id) / "final.png"
 
 
+def _tamano(imagen) -> tuple[int, int]:
+    """Ancho y alto de la imagen subida, redondeados a múltiplo de 8 como
+    quieren los latentes."""
+    from PIL import Image
+
+    with Image.open(imagen) as im:
+        w, h = im.size
+    return max(8, w // 8 * 8), max(8, h // 8 * 8)
+
+
 def _sistema(tipo: str) -> str:
     nombre = "imagen_editar.md" if tipo == "editar" else "imagen_generar.md"
     return (PROMPTS_DIR / nombre).read_text()
@@ -78,8 +88,14 @@ def generar_previews(imagen_id: int) -> str:
             progreso.lote(i, N_PREVIEWS, "preview")
             destino = ruta_preview(imagen_id, i)
             if tipo == "editar":
+                # Editar aquí es retocar la imagen que subió el usuario, así que
+                # la salida conserva su tamaño. Antes lo heredaba del propio
+                # workflow; ahora el tamaño se pide explícito (lo necesita el
+                # pipeline de vídeo, donde la referencia no tiene la forma del
+                # resultado), y hay que decírselo.
+                w, h = _tamano(ruta_fuente(imagen_id))
                 comfy.editar_imagen(
-                    ruta_fuente(imagen_id), prompt, seed, destino, motor
+                    ruta_fuente(imagen_id), prompt, seed, destino, motor, w, h
                 )
             else:
                 comfy.generar_imagen(prompt, seed, destino, width, height, motor)

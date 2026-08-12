@@ -144,12 +144,18 @@ _personajes = _cfg.get("personajes", {})
 PERSONAJE_MOTOR: str = _personajes.get("motor", IMAGEN_MOTOR_GENERAR)
 PERSONAJE_WIDTH: int = int(_personajes.get("width", 768))
 PERSONAJE_HEIGHT: int = int(_personajes.get("height", 1024))
-_m = IMAGEN_MOTORES.get(PERSONAJE_MOTOR)
-if _m is None or "generar" not in _m.modos:
-    raise ValueError(
-        f"[personajes].motor = '{PERSONAJE_MOTOR}' no existe o no sabe generar. "
-        f"Motores que sí: {[m.id for m in IMAGEN_MOTORES.values() if 'generar' in m.modos]}"
-    )
+PERSONAJE_MOTOR_ESCENA: str = _personajes.get("motor_escena", IMAGEN_MOTOR_EDITAR)
+for _clave, _id, _modo in (
+    ("motor", PERSONAJE_MOTOR, "generar"),
+    ("motor_escena", PERSONAJE_MOTOR_ESCENA, "editar"),
+):
+    _m = IMAGEN_MOTORES.get(_id)
+    if _m is None or _modo not in _m.modos:
+        raise ValueError(
+            f"[personajes].{_clave} = '{_id}' no existe o no sabe {_modo}. "
+            f"Motores que sí: "
+            f"{[m.id for m in IMAGEN_MOTORES.values() if _modo in m.modos]}"
+        )
 
 # Generación de música (ACE-Step 1.5). Como en [i2v]/[edicion], apunta a un
 # workflow de ComfyUI en formato API con los placeholders {TAGS}, {LYRICS},

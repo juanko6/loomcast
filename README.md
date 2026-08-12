@@ -191,8 +191,27 @@ mejor cara dé y no el más rápido: `[personajes].motor` en `config.toml` apunt
 por defecto a `zimage_retrato`, el mismo Z-Image con 16 pasos en vez de 8
 (~80 s en el M3 Max).
 
-De momento el retrato solo se genera y se revisa. Usarlo como referencia visual
-al generar las escenas —lo que de verdad fija los rasgos— es el paso siguiente.
+El cliente de ComfyUI ya sabe generar una imagen **a partir de esos retratos**:
+`comfy.editar_imagen()` acepta hasta tres referencias y un tamaño de salida
+propio. Falta engancharlo al pipeline de vídeo, que es el paso siguiente.
+
+Dos detalles del camino, por si tocas los workflows de edición:
+
+- Las referencias van como `{IMAGE1}`…`{IMAGE3}`, y **las que no se pasan se
+  podan del grafo** (nodo, escalado y la entrada que lo consumía). Así un mismo
+  archivo sirve para una referencia o para tres, en vez de mantener tres casi
+  iguales.
+- El tamaño de salida es `{WIDTH}`/`{HEIGHT}` y ya no se hereda de la
+  referencia. Sin eso, meter a un personaje de un retrato 3:4 en una escena la
+  devolvía en 3:4 en vez del 9:16 del vídeo.
+
+**En Mac el motor para esto es FLUX.2 Klein, no Qwen-Image-Edit**, aunque Qwen
+sea el que está entrenado para llevar personas de una imagen a otra: su nodo
+escala las referencias con `interpolate(mode="area")`, que en Metal exige que el
+tamaño de entrada sea divisible por el de salida y revienta con *"Adaptive pool
+MPS: input sizes must be divisible by output sizes"*. Klein escala con lanczos y
+no pasa por ahí. Además tarda lo mismo que Z-Image generando de cero (~84 s
+medidos en el M3 Max), así que la consistencia sale casi gratis en tiempo.
 
 ## Ciclo de vida del LLM
 

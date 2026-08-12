@@ -207,6 +207,14 @@ generar = "workflows/z_image_retrato_api.json"
 [imagen.motores.qwen]
 # Qwen-Image-Edit 2509 GGUF: reutiliza el text encoder qwen2.5-vl en GGUF y
 # evita el fp8 que Metal no soporta. ~2 min por imagen.
+#
+# OJO en Mac: TextEncodeQwenImageEditPlus escala las imágenes de referencia con
+# interpolate(mode="area"), que en Metal solo funciona si el tamaño de entrada
+# es divisible por el de salida. Con un tamaño cualquiera revienta con
+# "Adaptive pool MPS: input sizes must be divisible by output sizes". Por eso
+# [personajes].motor_escena apunta a flux2klein, que escala con lanczos y no
+# pasa por ahí. Si un día quieres Qwen aquí, hará falta parchear torch como en
+# scripts/instalar_parche_mps.py.
 nombre = "Qwen-Image-Edit 2509"
 editar = "workflows/qwen_edit_api.json"
 
@@ -230,6 +238,16 @@ motor = "zimage_retrato"
 # condiciona el de las escenas.
 width = 768
 height = 1024
+#
+# Motor con el que se generan las escenas donde sale un personaje: en vez de
+# texto→imagen, toma su retrato como referencia visual y lo lleva a la escena.
+# Tiene que declarar `editar`.
+#
+# flux2klein y no qwen a pesar de que Qwen-Image-Edit está entrenado justo para
+# esto: su nodo de referencias no funciona en Metal (ver el comentario de
+# [imagen.motores.qwen]). Klein tarda lo mismo que Z-Image generando de cero
+# (~84 s medidos), así que la consistencia sale casi gratis.
+motor_escena = "flux2klein"
 
 [musica]
 # Generación de música local con ACE-Step 1.5 XL Turbo (ACE Studio + StepFun):
