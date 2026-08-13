@@ -44,5 +44,7 @@ def actualizar_prompts(s: Session, proyecto_id: int, prompts: dict[int, dict]) -
             e.prompt = campos["prompt"]
         if "prompt_movimiento" in campos:
             e.prompt_movimiento = campos["prompt_movimiento"]
+        if "personajes" in campos:
+            e.personajes = campos["personajes"]
         n += 1
     return n

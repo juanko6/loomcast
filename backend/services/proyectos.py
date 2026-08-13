@@ -15,6 +15,7 @@ from ..repositories import personajes as personajes_repo
 from ..repositories import plantillas as plantillas_repo
 from ..repositories import proyectos as proyectos_repo
 from ..repositories import voces as voces_repo
+from ..services.pipeline import escenas as escenas_pipeline
 from ..services.pipeline import retratos
 from ..workers import queue
 
@@ -196,6 +197,16 @@ def editar_prompts_escenas(pid: int, prompts: dict[int, dict]) -> int:
         p = proyectos_repo.obtener(s, pid)
         if p is None:
             raise ProyectoNoExiste(pid)
+        # Quién sale en cada escena se relee del prompt guardado: si lo editas
+        # para meter o quitar a alguien, lo que decidió el LLM al generarlo deja
+        # de valer, y de esto depende que la escena use la cara del personaje.
+        fichas = personajes_repo.fichas(s, pid)
+        if fichas:
+            for campos in prompts.values():
+                if "prompt" in campos:
+                    campos["personajes"] = ",".join(
+                        escenas_pipeline.detectar_personajes(campos["prompt"], fichas)
+                    )
         n = escenas_repo.actualizar_prompts(s, pid, prompts)
         s.commit()
         return n

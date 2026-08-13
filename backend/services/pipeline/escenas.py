@@ -79,14 +79,43 @@ def _aplicar_casting(prompt: str, fichas: dict[str, str],
     """
     usados = []
     for clave, ficha in fichas.items():
+        texto = _breve(ficha) if breve else ficha
         marca = "{" + clave + "}"
         if marca in prompt:
-            prompt = prompt.replace(marca, _breve(ficha) if breve else ficha)
+            prompt = prompt.replace(marca, texto)
             usados.append(clave)
+        # El modelo a veces escribe la clave pelada ("MADRASTRA stands alone…"):
+        # quería referenciarla y se dejó las llaves. Sin esto la escena no se
+        # marca, se genera sin su cara, y al generador de imagen le llega la
+        # palabra MADRASTRA, que no significa nada. Las claves van en mayúsculas
+        # y en español, así que confundirlas con una palabra del prompt (en
+        # inglés y en minúscula) no pasa.
+        suelta = re.compile(r"\b" + re.escape(clave) + r"\b")
+        if suelta.search(prompt):
+            prompt = suelta.sub(texto, prompt)
+            if clave not in usados:
+                usados.append(clave)
     # Un marcador huérfano llegaría tal cual al generador de imagen, que lo
     # dibujaría como texto o lo tomaría por un dynamic prompt de ComfyUI. Se le
     # quitan las llaves y se deja dentro lo que hubiera.
     return _MARCADOR.sub(r"\1", prompt), usados
+
+
+def detectar_personajes(prompt: str, fichas: dict[str, str]) -> list[str]:
+    """Qué personajes del reparto salen en un prompt ya escrito.
+
+    Los prompts se guardan con la ficha sustituida, así que quién sale se puede
+    leer del propio texto. Hace falta al guardar prompts editados a mano: si
+    metes a alguien en una escena (o lo quitas), lo que decidió el LLM al
+    generarla deja de valer, y sin esto la escena seguiría generándose sin su
+    cara. Se acepta también la forma abreviada, que es la que va en el prompt de
+    movimiento.
+    """
+    return [
+        clave
+        for clave, ficha in fichas.items()
+        if ficha and (ficha in prompt or _breve(ficha) in prompt)
+    ]
 
 
 def _bloque_casting(fichas: dict[str, str]) -> str:
