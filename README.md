@@ -175,6 +175,28 @@ Un reparto vacío es una respuesta válida: en *curiosidades* es lo normal. En
 lo describa. Editar una ficha no reescribe los prompts ya generados: hay que
 regenerarlos.
 
+El reparto también se edita a mano: se pueden **añadir y quitar** personajes. Hace
+falta porque el casting se deja gente — alguien que sale en varias escenas sin
+nombre ni diálogo ("el escritor del sótano") puede no entrar, y entonces cada
+escena se lo inventa distinto. Tras añadirlo hay que regenerar los prompts, o
+pegar su ficha en las escenas donde salga: **quién sale se relee del prompt cada
+vez que se guarda**, no solo al generarlo.
+
+Dos tolerancias del sustituidor, por si ves algo raro:
+
+- Si el modelo escribe la clave sin llaves (`MADRASTRA stands alone…`, que pasa)
+  se reconoce igual. Las claves van en mayúsculas y en español, así que no se
+  confunden con el prompt, que es inglés en minúscula.
+- Un marcador que no corresponda a nadie pierde las llaves y se queda como
+  texto, en vez de llegar al generador como `{ALGUIEN}`.
+
+Y un aviso sobre las fichas: se pegan literales en un prompt en inglés, así que
+**escríbelas en inglés y en positivo**. Añadir "no rasgos asiáticos" no funciona
+por partida doble — está en otro idioma y es una negación, y estos modelos
+generan con CFG 1, sin condicionamiento negativo real, así que el concepto entra
+igual. Si quieres unos rasgos concretos, dilos afirmando: *"pale Northern
+European features"*.
+
 Esto fija ropa, pelo, edad y complexión, pero **no la cara**: con solo texto el
 generador dibuja una persona nueva cada vez. Para eso está el retrato.
 

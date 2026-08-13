@@ -5,6 +5,7 @@ from ..schemas import (
     EscenasIn,
     GuionIn,
     ModosEscenasIn,
+    PersonajeNuevoIn,
     PersonajesIn,
     RegenerarClipIn,
     RegenerarImagenIn,
@@ -86,6 +87,32 @@ def editar_casting(pid: int, body: PersonajesIn):
         return {"actualizados": proyectos_service.editar_personajes(pid, cambios)}
     except proyectos_service.ProyectoNoExiste:
         raise HTTPException(404, "Proyecto no existe")
+
+
+@router.post("/{pid}/personajes")
+def anadir_personaje(pid: int, body: PersonajeNuevoIn):
+    try:
+        clave = proyectos_service.anadir_personaje(
+            pid, body.clave, body.nombre, body.ficha
+        )
+        return {"clave": clave}
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+    except proyectos_service.PersonajeRepetido:
+        raise HTTPException(409, "Ya hay un personaje con esa clave")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.delete("/{pid}/personajes/{clave}")
+def borrar_personaje(pid: int, clave: str):
+    try:
+        proyectos_service.borrar_personaje(pid, clave)
+        return {"borrado": clave}
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+    except proyectos_service.PersonajeNoExiste:
+        raise HTTPException(404, "El proyecto no tiene ese personaje")
 
 
 @router.post("/{pid}/personajes/{clave}/retrato")

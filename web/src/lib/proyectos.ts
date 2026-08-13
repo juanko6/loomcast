@@ -143,6 +143,14 @@ export const guardarCasting = (id: number, personajes: Personaje[]) =>
     body: { personajes },
   });
 
+export const anadirPersonaje = (id: number, clave: string, nombre: string, ficha: string) =>
+  api<{ clave: string }>(`/proyectos/${id}/personajes`, {
+    method: "POST",
+    body: { clave, nombre, ficha },
+  });
+export const borrarPersonaje = (id: number, clave: string) =>
+  api<{ borrado: string }>(`/proyectos/${id}/personajes/${clave}`, { method: "DELETE" });
+
 export const generarRetrato = (id: number, clave: string, nuevo_seed: boolean) =>
   api<{ job_id: number }>(`/proyectos/${id}/personajes/${clave}/retrato`, {
     method: "POST",

@@ -182,6 +182,13 @@
     guardarCasting: (p: API.Personaje[]) => tras(API.guardarCasting(pid(), p)),
     generarRetrato: (clave: string, nuevoSeed: boolean) =>
       tras(API.generarRetrato(pid(), clave, nuevoSeed)),
+    anadirPersonaje: (clave: string, nombre: string, ficha: string) =>
+      tras(API.anadirPersonaje(pid(), clave, nombre, ficha)),
+    borrarPersonaje: async (clave: string) => {
+      if (!confirm(`¿Sacar a «${clave}» del reparto?\n\nSe borra también su retrato.`))
+        return;
+      await tras(API.borrarPersonaje(pid(), clave));
+    },
     generarEscenas: () => tras(API.generarEscenas(pid())),
     guardarEscenas: (e: Parameters<typeof API.guardarEscenas>[1]) =>
       tras(API.guardarEscenas(pid(), e)),

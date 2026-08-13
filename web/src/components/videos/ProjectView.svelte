@@ -98,6 +98,8 @@
         ongenerarcasting={acciones.generarCasting}
         onguardarcasting={acciones.guardarCasting}
         ongenerarretrato={acciones.generarRetrato}
+        onanadirpersonaje={acciones.anadirPersonaje}
+        onborrarpersonaje={acciones.borrarPersonaje}
         ongenerarimagenes={acciones.generarImagenes}
         onregenimagen={acciones.regenerarImagen}
         onregenclip={acciones.regenerarClip}

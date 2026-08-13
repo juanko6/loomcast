@@ -1,5 +1,5 @@
 """Contratos de la API HTTP (entrada de los routers)."""
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TemaIn(BaseModel):
@@ -60,6 +60,14 @@ class PersonajeIn(BaseModel):
 
 class PersonajesIn(BaseModel):
     personajes: list[PersonajeIn]
+
+
+class PersonajeNuevoIn(BaseModel):
+    # La clave se normaliza en el servicio (mayúsculas, sin espacios); aquí solo
+    # se exige que venga algo.
+    clave: str = Field(min_length=1, max_length=24)
+    nombre: str = ""
+    ficha: str = ""
 
 
 class RegenerarImagenIn(BaseModel):

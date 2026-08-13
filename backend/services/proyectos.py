@@ -1,5 +1,6 @@
 """Lógica de negocio de proyectos: detalle, edición de guion, estados."""
 import json
+import random
 import shutil
 from datetime import datetime
 
@@ -180,6 +181,59 @@ def ruta_retrato(pid: int, clave: str):
         if not any(x.clave == clave for x in personajes_repo.por_proyecto(s, pid)):
             raise PersonajeNoExiste(clave)
         return retratos.ruta_retrato(p.slug, clave)
+
+
+class PersonajeRepetido(ValueError):
+    pass
+
+
+def anadir_personaje(pid: int, clave: str, nombre: str, ficha: str) -> str:
+    """Mete un personaje al reparto a mano.
+
+    Hace falta porque el casting se deja gente: alguien que sale en varias
+    escenas sin nombre ni diálogo ("el escritor del sótano") puede no entrar, y
+    entonces cada escena se lo inventa distinto. Ojo: los prompts ya escritos no
+    lo mencionan, así que después hay que regenerarlos o editarlos.
+    """
+    clave = personajes_repo.normalizar_clave(clave)
+    if not clave:
+        raise ValueError(
+            "La clave solo admite letras, dígitos y guion bajo, y no puede "
+            "quedar vacía: es el marcador con el que se le nombra en los prompts."
+        )
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        if personajes_repo.existe(s, pid, clave):
+            raise PersonajeRepetido(clave)
+        personajes_repo.crear(
+            s, pid, clave, nombre.strip(), ficha.strip(),
+            random.randint(0, 2**31 - 1),
+        )
+        s.commit()
+    return clave
+
+
+def borrar_personaje(pid: int, clave: str) -> None:
+    """Saca a alguien del reparto y se lleva su retrato.
+
+    Las escenas que lo tuvieran marcado se quedan con una clave que ya no
+    existe; como quién sale se resuelve contra el reparto vivo, esas escenas
+    pasan a generarse desde el texto sin más.
+    """
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        if not personajes_repo.existe(s, pid, clave):
+            raise PersonajeNoExiste(clave)
+        slug = p.slug
+        personajes_repo.borrar(s, pid, clave)
+        s.commit()
+    retrato = retratos.ruta_retrato(slug, clave)
+    if retrato.exists():
+        retrato.unlink()
 
 
 def editar_personajes(pid: int, cambios: dict[str, dict]) -> int:

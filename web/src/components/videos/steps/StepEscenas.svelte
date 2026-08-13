@@ -1,6 +1,7 @@
 <script lang="ts">
   import Button from "../../primitives/Button.svelte";
   import Chip from "../../primitives/Chip.svelte";
+  import IconButton from "../../primitives/IconButton.svelte";
   import { media } from "@/lib/api";
   import { tiraH } from "@/lib/tira";
   import { NOMBRE_MODO, type Personaje, type ProyectoDetalle } from "@/lib/proyectos";
@@ -14,6 +15,8 @@
     ongenerarcasting,
     onguardarcasting,
     ongenerarretrato,
+    onanadirpersonaje,
+    onborrarpersonaje,
     ongenerarimagenes,
     onregenimagen,
     onregenclip,
@@ -28,6 +31,8 @@
     ongenerarcasting: () => void;
     onguardarcasting: (p: Personaje[]) => void;
     ongenerarretrato: (clave: string, nuevoSeed: boolean) => void;
+    onanadirpersonaje: (clave: string, nombre: string, ficha: string) => void;
+    onborrarpersonaje: (clave: string) => void;
     ongenerarimagenes: (e: { orden: number; prompt: string; prompt_movimiento: string | null }[]) => void;
     onregenimagen: (orden: number, nuevoSeed: boolean) => void;
     onregenclip: (orden: number, modo: string) => void;
@@ -68,6 +73,20 @@
   // tiene personajes recurrentes), pero es indistinguible de "aún no generado".
   // Se resuelve mirando si ya hay escenas: si las hay, el casting ya se resolvió.
   const castingHecho = $derived(p.personajes.length > 0);
+
+  // Alta manual: el casting se deja gente que sale en varias escenas sin
+  // nombre ni diálogo, y sin ficha cada escena se la inventa distinta.
+  let nuevaClave = $state("");
+  let nuevoNombre = $state("");
+  let nuevaFicha = $state("");
+  let anadiendo = $state(false);
+
+  function anadir() {
+    if (!nuevaClave.trim() || !nuevaFicha.trim()) return;
+    onanadirpersonaje(nuevaClave.trim(), nuevoNombre.trim(), nuevaFicha.trim());
+    nuevaClave = nuevoNombre = nuevaFicha = "";
+    anadiendo = false;
+  }
 
   function guardarFichas() {
     onguardarcasting(
@@ -210,6 +229,15 @@
             <div class="mb-1 flex flex-wrap items-center gap-2">
               <Chip tone="accent">{"{" + c.clave + "}"}</Chip>
               <span class="text-xs text-muted">{c.nombre}</span>
+              <span class="ml-auto">
+                <IconButton
+                  name="trash"
+                  label={`Sacar a ${c.clave} del reparto`}
+                  size={14}
+                  onclick={() => onborrarpersonaje(c.clave)}
+                  class="hover:bg-danger-soft hover:text-danger"
+                />
+              </span>
             </div>
             <textarea
               class="control min-h-24 text-sm"
@@ -225,6 +253,9 @@
       <Button variant="secondary" size="sm" disabled={busy} onclick={ongenerarcasting}>
         Regenerar reparto
       </Button>
+      <Button variant="ghost" size="sm" onclick={() => (anadiendo = !anadiendo)}>
+        {anadiendo ? "Cancelar" : "Añadir personaje"}
+      </Button>
       {#if p.escenas.length}
         <span class="text-xs text-muted">
           Los prompts ya escritos no cambian solos: regenéralos para aplicar el reparto nuevo.
@@ -236,12 +267,53 @@
       <Button variant="secondary" size="sm" disabled={busy} onclick={ongenerarcasting}>
         {p.escenas.length ? "Buscar reparto en el guion" : "Generar reparto"}
       </Button>
+      <Button variant="ghost" size="sm" onclick={() => (anadiendo = !anadiendo)}>
+        {anadiendo ? "Cancelar" : "Añadir personaje"}
+      </Button>
       {#if p.escenas.length}
         <span class="text-xs text-muted">
           Este vídeo no tiene reparto fijado. Si sus escenas llevan personas, generarlo y
           regenerar los prompts hará que se parezcan entre sí.
         </span>
       {/if}
+    </div>
+  {/if}
+
+  <!-- Alta a mano: el casting se deja gente que sale en varias escenas sin
+       nombre ni diálogo, y esa es justo la que sale distinta cada vez. -->
+  {#if anadiendo}
+    <div class="mt-3 space-y-2 rounded-lg border border-line bg-surface p-3">
+      <div class="flex flex-wrap gap-2">
+        <input
+          class="control"
+          style="width: 10rem"
+          bind:value={nuevaClave}
+          placeholder="ESCRITOR"
+        />
+        <input
+          class="control min-w-40 flex-1"
+          bind:value={nuevoNombre}
+          placeholder="cómo lo llama el guion"
+        />
+      </div>
+      <textarea
+        class="control min-h-20 text-sm"
+        bind:value={nuevaFicha}
+        placeholder="Descripción física en inglés, como las de arriba: a gaunt man in his forties with…"
+      ></textarea>
+      <div class="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          disabled={!nuevaClave.trim() || !nuevaFicha.trim()}
+          onclick={anadir}
+        >
+          Añadir al reparto
+        </Button>
+        <span class="text-xs text-muted">
+          La clave va en mayúsculas y sin espacios: es el marcador con el que se le nombra en
+          los prompts. Después hay que regenerarlos para que salga en las escenas.
+        </span>
+      </div>
     </div>
   {/if}
 </section>

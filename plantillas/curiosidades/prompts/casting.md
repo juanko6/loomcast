@@ -13,6 +13,7 @@ This template is about facts, places, phenomena and objects, not about character
 WHEN TO INCLUDE A SUBJECT
 - It appears in more than one beat of the story, and
 - it would be visibly wrong if it looked different between shots (the same explorer, the same dog, the same specific machine).
+A subject counts even if it is never named and is only referred to by its role ("el buzo", "la sonda", "el animal"): if the story keeps coming back to it, it will be drawn again and again, and each time differently unless it is in this list.
 A generic backdrop that merely repeats (forest, ocean, night sky) is not a cast member: the template visual style already keeps those coherent.
 
 MANDATORY CHARACTERISTICS OF EACH FIELD

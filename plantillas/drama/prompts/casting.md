@@ -10,6 +10,7 @@ Return the cast of the story: every person who appears in more than one moment, 
 MANDATORY CHARACTERISTICS OF A GOOD CAST
 - Always include the narrator when the story is told in the first person ("yo", "mi", "me"). They are on screen in most shots even though the script never describes them: decide what they look like and lock it, or every scene will invent a different protagonist. This is the single most important entry.
 - Recurring only: apart from the narrator, include someone only if they show up in more than one beat of the story. A person mentioned once in passing needs no locked description.
+- A person counts even if they are never named, never speak, and are only referred to by their role or by a pronoun: "el bibliotecario", "el hombre del sótano", "su jefa", "el que escribía". If the story keeps coming back to them, they will be drawn again and again, and each time differently unless they are in this list. Being anonymous is a reason to lock their look, not to skip them.
 - At most 3 characters. If the story has more, keep the ones the narration actually follows.
 - No real identities: anonymous, generic people only. Never real, named, or recognizable public figures, celebrities, or brands.
 - Do not invent people the script does not imply. Inventing what an implied person looks like is not only allowed, it is the point.

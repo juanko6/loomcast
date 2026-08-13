@@ -11,7 +11,9 @@ _LIMPIA = re.compile(r"[^A-Z0-9_]")
 
 def normalizar_clave(clave: str) -> str:
     """A mayúsculas y sin caracteres que puedan romper el marcador {CLAVE}."""
-    return _LIMPIA.sub("", clave.strip().upper().replace(" ", "_"))
+    limpia = _LIMPIA.sub("", clave.strip().upper().replace(" ", "_"))
+    # "el escritor  raro" no debe quedar en ESCRITOR__RARO.
+    return re.sub(r"_+", "_", limpia).strip("_")
 
 
 def reemplazar_todos(s: Session, proyecto_id: int,
@@ -22,6 +24,28 @@ def reemplazar_todos(s: Session, proyecto_id: int,
     filas = [Personaje(proyecto_id=proyecto_id, **p) for p in personajes]
     s.add_all(filas)
     return filas
+
+
+def crear(s: Session, proyecto_id: int, clave: str, nombre: str,
+          ficha: str, seed: int) -> Personaje:
+    """Añade un personaje al reparto, detrás de los que ya hay."""
+    orden = 1 + max((p.orden for p in por_proyecto(s, proyecto_id)), default=-1)
+    fila = Personaje(proyecto_id=proyecto_id, orden=orden, clave=clave,
+                     nombre=nombre, ficha=ficha, seed=seed)
+    s.add(fila)
+    return fila
+
+
+def borrar(s: Session, proyecto_id: int, clave: str) -> int:
+    return (
+        s.query(Personaje)
+        .filter(Personaje.proyecto_id == proyecto_id, Personaje.clave == clave)
+        .delete()
+    )
+
+
+def existe(s: Session, proyecto_id: int, clave: str) -> bool:
+    return any(p.clave == clave for p in por_proyecto(s, proyecto_id))
 
 
 def por_proyecto(s: Session, proyecto_id: int) -> list[Personaje]:
