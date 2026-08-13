@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 470" width="760" height="470" font-family="Inter, system-ui, -apple-system, sans-serif">
+  <defs>
+    <!-- Tres pistas entran, cruzan los dos aros y salen hechas una sola. -->
+    <path id="entrada" fill="none" d="
+      M-94,-6 H-63.5 M-43.5,-6 H0.5 M20.5,-6 H68
+      M-94,0  H-63.5 M-43.5,0  H0.5 M20.5,0  H68
+      M-94,6  H-63.5 M-43.5,6  H0.5 M20.5,6  H68"/>
+    <path id="salida" fill="none" d="
+      M68,-6 C82,-6 84,0 96,0
+      M68,6  C82,6  84,0 96,0
+      M68,0  H112"/>
+    <g id="aros">
+      <circle cx="-32" cy="0" r="28"/><circle cx="-32" cy="0" r="22"/><circle cx="-32" cy="0" r="16"/>
+      <circle cx="32" cy="0" r="28"/><circle cx="32" cy="0" r="22"/><circle cx="32" cy="0" r="16"/>
+    </g>
+
+    <!-- Reducción: los dos aros y el hilo que sale. Caja de 64×64. -->
+    <g id="icono">
+      <circle cx="-14" r="13" fill="none" stroke="#e7e9f0" stroke-width="4.5"/>
+      <circle cx="14" r="13" fill="none" stroke="#e7e9f0" stroke-width="4.5"/>
+      <path fill="none" stroke="#e7e9f0" stroke-width="4.5" stroke-linecap="round" d="M-8,0 H32"/>
+    </g>
+
+    <style>
+      .halo { fill: none; stroke: #0d0f14; stroke-width: 6; }
+      .ln   { fill: none; stroke: #e7e9f0; stroke-width: 2; stroke-linecap: round; }
+      .sub  { fill: #9aa2b4; font-size: 13px; }
+      .cen  { text-anchor: middle; }
+      .num  { fill: #6d5efc; font-size: 11px; font-weight: 700; letter-spacing: .12em; }
+    </style>
+  </defs>
+
+  <rect width="760" height="470" fill="#0d0f14"/>
+
+  <!-- ===================== marca recomendada ===================== -->
+  <text class="num" x="60" y="56">02 · REFINADA</text>
+  <g transform="translate(366,160) scale(1.5)">
+    <use href="#aros" class="ln"/>
+    <use href="#entrada" class="halo"/><use href="#entrada" class="ln"/>
+    <use href="#salida" class="halo"/><use href="#salida" class="ln"/>
+  </g>
+  <text class="sub cen" x="380" y="268">Tres pistas entran —voz, imagen, música—, cruzan el telar</text>
+  <text class="sub cen" x="380" y="288">y salen convertidas en una sola pieza.</text>
+
+  <path d="M60,330 H700" stroke="#262c39" stroke-width="1"/>
+
+  <!-- ===================== reducción ===================== -->
+  <g transform="translate(150,390)"><use href="#icono"/></g>
+  <g transform="translate(250,390) scale(0.5)"><use href="#icono"/></g>
+  <g transform="translate(310,390) scale(0.25)"><use href="#icono"/></g>
+  <text class="sub cen" x="150" y="436" font-size="11">64 px</text>
+  <text class="sub cen" x="250" y="436" font-size="11">32 px</text>
+  <text class="sub cen" x="310" y="436" font-size="11">16 px</text>
+  <text class="sub" x="380" y="386">A tamaño de favicon se cae todo menos lo esencial:</text>
+  <text class="sub" x="380" y="406">los dos aros y el hilo que sale.</text>
+</svg>

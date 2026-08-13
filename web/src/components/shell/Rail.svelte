@@ -3,6 +3,7 @@
   // + estado del sistema al pie. Es el nivel superior de navegación (IA nueva:
   // Loomcast pasa de "app de storytelling" a "estudio multimedia").
   import SystemStatus from "./SystemStatus.svelte";
+  import Logotipo from "./Logotipo.svelte";
   import { modo } from "@/lib/stores";
   import type { StudioMode } from "@/lib/types";
 
@@ -29,14 +30,8 @@
   aria-label="Navegación del estudio"
 >
   <!-- Marca -->
-  <div class="flex items-center gap-2.5 px-2 pb-5">
-    <span class="grid size-8 place-items-center rounded-lg bg-accent-soft text-accent">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-           stroke-linecap="round" stroke-linejoin="round" class="size-5">
-        <path d={paths.clapper} />
-      </svg>
-    </span>
-    <span class="text-[17px] font-semibold tracking-tight">Loomcast</span>
+  <div class="px-2 pt-1 pb-6">
+    <Logotipo alto="h-[22px]" />
   </div>
 
   <!-- Modos principales -->

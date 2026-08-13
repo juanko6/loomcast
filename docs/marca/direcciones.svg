@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 640" width="760" height="640" font-family="Inter, system-ui, -apple-system, sans-serif">
+  <defs>
+    <!-- 01 · el aro derecho se dibuja con huecos donde pasa por debajo del izquierdo -->
+    <path id="arcosD" fill="none" d="
+      M-8.17,12.72 A30,30   0 1 1 4.73,26.39
+      M-6.20,10.75 A27.4,27.4 0 1 1 6.70,24.48
+      M-4.43,8.11  A24.8,24.8 0 1 1 8.48,22.46
+      M-2.84,4.01  A22.2,22.2 0 1 1 10.09,20.33"/>
+    <g id="aroI">
+      <circle cx="-19" cy="0" r="30"/><circle cx="-19" cy="0" r="27.4"/>
+      <circle cx="-19" cy="0" r="24.8"/><circle cx="-19" cy="0" r="22.2"/>
+    </g>
+
+    <!-- 02 · la trama se corta al entrar en cada aro y vuelve a salir por encima -->
+    <path id="hilos" fill="none" d="
+      M-88,-6 H-63.5 M-43.5,-6 H0.5 M20.5,-6 H88
+      M-88,0  H-63.5 M-43.5,0  H0.5 M20.5,0  H88
+      M-88,6  H-63.5 M-43.5,6  H0.5 M20.5,6  H88"/>
+    <g id="aros">
+      <circle cx="-32" cy="0" r="28"/><circle cx="-32" cy="0" r="22"/><circle cx="-32" cy="0" r="16"/>
+      <circle cx="32" cy="0" r="28"/><circle cx="32" cy="0" r="22"/><circle cx="32" cy="0" r="16"/>
+    </g>
+
+    <style>
+      .halo { fill: none; stroke: #0d0f14; stroke-width: 6; }
+      .ln   { fill: none; stroke: #e7e9f0; stroke-width: 2; stroke-linecap: round; }
+      .fina { stroke-width: 1.8; }
+      .ac   { fill: none; stroke: #6d5efc; stroke-width: 2; stroke-linecap: round; }
+      .tit  { fill: #e7e9f0; font-size: 15px; font-weight: 600; text-anchor: middle; letter-spacing: .02em; }
+      .sub  { fill: #9aa2b4; font-size: 12.5px; text-anchor: middle; }
+      .num  { fill: #6d5efc; font-size: 11px; font-weight: 700; text-anchor: middle; letter-spacing: .12em; }
+    </style>
+  </defs>
+
+  <rect width="760" height="640" fill="#0d0f14"/>
+
+  <!-- ============================ 1 · TRENZA ============================ -->
+  <g transform="translate(190,150)">
+    <use href="#aroI" class="ln fina"/>
+    <use href="#arcosD" class="halo"/><use href="#arcosD" class="ln fina"/>
+    <text class="num" y="-88">01</text>
+    <text class="tit" y="82">Trenza — tu referencia</text>
+    <text class="sub" y="103">Dos hilos que se entrelazan. Artesanía, unión.</text>
+  </g>
+
+  <!-- ======================== 2 · URDIMBRE Y TRAMA ======================= -->
+  <g transform="translate(570,150)">
+    <use href="#aros" class="ln"/>
+    <use href="#hilos" class="halo"/><use href="#hilos" class="ln"/>
+    <path class="ac" d="M-88,0 H-74 M74,0 H88"/>
+    <text class="num" y="-88">02</text>
+    <text class="tit" y="82">Urdimbre y trama</text>
+    <text class="sub" y="103">El telar literal: la trama entra y sale del aro.</text>
+  </g>
+
+  <!-- =========================== 3 · EMISIÓN ============================ -->
+  <g transform="translate(190,450)">
+    <circle class="ln" cx="-30" cy="0" r="30"/>
+    <circle class="ln" cx="-30" cy="0" r="24.5"/>
+    <circle class="ln" cx="-30" cy="0" r="19"/>
+    <circle fill="#6d5efc" cx="-30" cy="0" r="4.5"/>
+    <g transform="translate(30,0)">
+      <path class="ln" d="M25.98,-15 A30,30 0 1 0 25.98,15"/>
+      <path class="ln" d="M21.22,-12.25 A24.5,24.5 0 1 0 21.22,12.25"/>
+      <circle class="ln" cx="0" cy="0" r="19"/>
+      <path class="ac" d="M23.1,-27.6 A36,36 0 0 1 23.1,27.6"/>
+      <path class="ac" d="M27,-32.2 A42,42 0 0 1 27,32.2"/>
+    </g>
+    <text class="num" y="-88">03</text>
+    <text class="tit" y="82">Señal que se emite</text>
+    <text class="sub" y="103">El «cast»: una o guarda, la otra difunde.</text>
+  </g>
+
+  <!-- =========================== 4 · OBTURADOR ========================== -->
+  <g transform="translate(570,450)">
+    <g transform="translate(-33,0)">
+      <circle class="ln" cx="0" cy="0" r="30"/>
+      <circle class="ln" cx="0" cy="0" r="25"/>
+      <path class="ln" d="M25,0 A19.2,19.2 0 0 0 0,25
+                          M12.5,21.65 A19.2,19.2 0 0 0 -21.65,12.5
+                          M-12.5,21.65 A19.2,19.2 0 0 0 -21.65,-12.5
+                          M-25,0 A19.2,19.2 0 0 0 0,-25
+                          M-12.5,-21.65 A19.2,19.2 0 0 0 21.65,-12.5
+                          M12.5,-21.65 A19.2,19.2 0 0 0 21.65,12.5"/>
+    </g>
+    <g transform="translate(33,0)">
+      <circle class="ln" cx="0" cy="0" r="30"/>
+      <circle class="ln" cx="0" cy="0" r="25"/>
+      <path class="ac" d="M25,0 A44.3,44.3 0 0 0 0,25
+                          M12.5,21.65 A44.3,44.3 0 0 0 -21.65,12.5
+                          M-12.5,21.65 A44.3,44.3 0 0 0 -21.65,-12.5
+                          M-25,0 A44.3,44.3 0 0 0 0,-25
+                          M-12.5,-21.65 A44.3,44.3 0 0 0 21.65,-12.5
+                          M12.5,-21.65 A44.3,44.3 0 0 0 21.65,12.5"/>
+    </g>
+    <text class="num" y="-88">04</text>
+    <text class="tit" y="82">Obturador</text>
+    <text class="sub" y="103">Cerrado y abierto: lo que entra y lo que sale.</text>
+  </g>
+</svg>
