@@ -8,6 +8,12 @@
       "port": 8700
     },
     {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "/Users/juanko.dev/Documents/loomcast/web", "dev"],
+      "port": 4321
+    },
+    {
       "name": "comfyui",
       "runtimeExecutable": "/Users/juanko.dev/Documents/ComfyUI/venv/bin/python",
       "runtimeArgs": ["/Users/juanko.dev/Documents/ComfyUI/ComfyUI/main.py", "--port", "8188"],
