@@ -1,4 +1,4 @@
-"""Etapa 5 — SUBTITULOS: mlx-whisper con timestamps por palabra → SRT.
+"""Etapa 5 — SUBTITULOS: Whisper con timestamps por palabra → SRT.
 
 Genera palabras.json (timestamps crudos, insumo de la etapa de escenas) y
 subtitulos.srt con bloques cortos estilo shorts (máx N palabras, cortando
@@ -6,13 +6,13 @@ en puntuación fuerte o pausas largas).
 """
 import json
 
+from ...clients import stt
 from ...config import PROYECTOS_DIR
 from ...db import get_session
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
 from ...models import avanzar_estado
 
-MODELO_WHISPER = "mlx-community/whisper-large-v3-turbo"
 PAUSA_CORTE_S = 0.5
 FIN_FUERTE = ".?!…"
 
@@ -54,8 +54,6 @@ def _bloques(palabras: list[dict], max_palabras: int) -> list[dict]:
 
 
 def generar_subtitulos(proyecto_id: int) -> str:
-    import mlx_whisper
-
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)
         if p is None:
@@ -67,17 +65,7 @@ def generar_subtitulos(proyecto_id: int) -> str:
     if not voz.exists():
         raise ValueError("No hay voz.wav; genera la voz primero")
 
-    resultado = mlx_whisper.transcribe(
-        str(voz),
-        path_or_hf_repo=MODELO_WHISPER,
-        language="es",
-        word_timestamps=True,
-    )
-    palabras = [
-        {"word": w["word"], "start": float(w["start"]), "end": float(w["end"])}
-        for seg in resultado["segments"]
-        for w in seg.get("words", [])
-    ]
+    palabras = stt.transcribir(voz, palabras=True)["palabras"]
     if not palabras:
         raise ValueError("Whisper no devolvió palabras")
 

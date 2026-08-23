@@ -4,14 +4,11 @@ import subprocess
 
 import numpy as np
 
-from ...clients import tts
+from ...clients import stt, tts
 from ...config import VOCES_DIR
 from ...db import get_session
 from ...repositories import voces as voces_repo
 
-# Mismo Whisper que la etapa de subtítulos: transcribe el clip para obtener el
-# ref_text que el clonado ICL necesita alineado con el audio de referencia.
-MODELO_WHISPER = "mlx-community/whisper-large-v3-turbo"
 # El clon va mejor con una referencia corta y limpia; los refs de VoiceDesign
 # rondan los 8 s a 24 kHz mono. Recortamos los clips largos a este máximo.
 MAX_REF_S = 15
@@ -53,8 +50,6 @@ def clonar_voz(voz_id: int, inicio: float = 0.0, fin: float | None = None) -> st
     recorta el fragmento elegido [inicio, fin] (o los primeros MAX_REF_S s si no
     se indica), lo convierte a wav 24 kHz mono y lo transcribe para el ref_text.
     Sin VoiceDesign; la voz sale del propio audio."""
-    import mlx_whisper
-
     with get_session() as s:
         voz = voces_repo.obtener(s, voz_id)
         if voz is None:
@@ -78,10 +73,7 @@ def clonar_voz(voz_id: int, inicio: float = 0.0, fin: float | None = None) -> st
              "-ac", "1", "-ar", str(REF_SR), str(ref)],
             check=True,
         )
-        r = mlx_whisper.transcribe(
-            str(ref), path_or_hf_repo=MODELO_WHISPER, language="es"
-        )
-        ref_text = (r.get("text") or "").strip()
+        ref_text = stt.transcribir(ref)["texto"]
         if not ref_text:
             raise ValueError("La transcripción del clip quedó vacía")
     except Exception:

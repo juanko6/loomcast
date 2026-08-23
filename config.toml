@@ -137,6 +137,19 @@ url = "http://127.0.0.1:8188"
 # pero si el equipo se suspende o se ralentiza conviene margen de sobra.
 timeout_s = 1800
 
+[stt]
+# Transcripción (subtítulos y el ref_text del clonado de voz), con
+# faster-whisper. A diferencia del mlx-whisper de antes, esto corre igual en
+# Mac y en Linux: en Mac va por CPU (CTranslate2 no tiene Metal), y para clips
+# de 30-60 s dentro de un pipeline de minutos el coste es irrelevante.
+modelo = "turbo"
+# "auto" elige cuda si la hay y cpu si no. Fíjalo a mano solo si quieres forzar.
+dispositivo = "auto"
+# int8 es lo razonable en CPU. Con GPU NVIDIA, "float16".
+compute_type = "int8"
+# Idioma del audio. Vacío ("") = que lo detecte Whisper.
+idioma = "es"
+
 [video]
 # Codificador para los clips y el armado final.
 #  "hardware" → h264_videotoolbox: usa el motor de medios de Apple, muy poca

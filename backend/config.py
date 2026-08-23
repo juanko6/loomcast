@@ -70,6 +70,13 @@ LLM_LOGS_DIR: Path = ROOT / "logs"
 COMFY_URL: str = _cfg["comfy"]["url"].rstrip("/")
 COMFY_TIMEOUT_S: float = _cfg["comfy"].get("timeout_s", 1800)
 
+_stt = _cfg.get("stt", {})
+STT_MODELO: str = _stt.get("modelo", "turbo")
+STT_DISPOSITIVO: str = _stt.get("dispositivo", "auto")
+STT_COMPUTE_TYPE: str = _stt.get("compute_type", "int8")
+# "" → sin idioma fijo: que lo detecte Whisper.
+STT_IDIOMA: str | None = _stt.get("idioma", "es") or None
+
 _video = _cfg.get("video", {})
 VIDEO_ENCODER: str = _video.get("encoder", "hardware")
 VIDEO_BITRATE_MBPS: int = _video.get("bitrate_mbps", 12)
