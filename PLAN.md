@@ -2,7 +2,7 @@
 
 Generador automatizado de videos cortos (30–60 s, formato vertical 9:16) para YouTube Shorts y TikTok, **100% con IA local**.
 
-> Estado: **Fase 4 completada** (2026-07-21) — video con movimiento de punta a punta: ESRGAN x4 por imagen → Ken Burns nativo 60fps por escena → armado con subtítulos superpuestos (`overlay` de ffmpeg, sin libass) y voz. Banco de 6 voces, flujo por pasos con revisión humana, LLM agnóstico al modelo (config apunta solo a la conexión). RIFE reservado para el i2v de la Fase 5. Siguiente: Fase 5 (i2v opcional + RIFE, plantillas nuevas, empaquetado).
+> Estado: **Fase 4 completada** (2026-07-21) — video con movimiento de punta a punta: ESRGAN x4 por imagen → Ken Burns nativo 60fps por escena → armado con subtítulos superpuestos (`overlay` de ffmpeg, sin libass) y voz. Banco de 6 voces, flujo por pasos con revisión humana, LLM agnóstico al modelo (config apunta solo a la conexión). **Fase 5 adelantada** (2026-07-22): i2v operativo con HunyuanVideo 1.5, interpolación RIFE y regeneración por escena; el reparto empezó en agosto 2026 (caras de referencia, escenas desde retrato, personaje que no muta entre escenas). El plan se extendió hasta la Fase 10 (§6): reparto completo, música en el video, series, autopiloto y empaquetado.
 
 ## 1. Decisiones tomadas
 
@@ -122,16 +122,21 @@ proyectos/<slug>/
 | STT / subtítulos | mlx-whisper large-v3 | Muy rápido en Apple Silicon, timestamps por palabra |
 | Upscale | Real-ESRGAN x4 (general) | |
 | Interpolación | RIFE (rife-ncnn-vulkan corre en macOS vía MoltenVK) | |
-| i2v opcional | WAN 2.2 5B (ti2v) | Experimental en MPS; solo escenas clave |
+| i2v opcional | HunyuanVideo 1.5 (validado 2026-07-22) | Tercer modo de vídeo; el workflow es configurable (`[i2v]` en config.toml), WAN 2.2 5B como alternativa experimental |
 
 ## 6. Fases de desarrollo
 
 1. ~~**Fase 0 — Validación del entorno**~~ ✅ **Completada** (2026-07-18): todo el stack validado, mediciones y cambios de diseño en [fase0/RESULTADOS.md](fase0/RESULTADOS.md). La memoria se gestiona descargando Z-Image entre etapas con `POST /free` de ComfyUI (~20 GB liberados); TTS (~5 GB) + Whisper (~2 GB) + LLM conviven sin problema.
 2. ~~**Fase 1 — Núcleo texto**~~ ✅ **Completada** (2026-07-18): FastAPI + SQLite + worker en hilo, etapas 0–3 con UI de revisión/edición y plantilla `curiosidades`. Nota clave: las peticiones al LLM mandan `chat_template_kwargs: {enable_thinking: false}` — con el modo razonamiento activo, generar 8 ideas tardaba 6+ min; sin él, segundos.
 3. ~~**Fase 2 — Audio**~~ ✅ **Completada** (2026-07-20): etapas 4–5. VoiceDesign genera la referencia según la plantilla → el modelo Base la clona y sintetiza todas las frases en lote → concatenación con pausas de 0.3 s + atempo 1.05 → `voz.wav/mp3`. Whisper corre encadenado y produce `palabras.json` (insumo de escenas) + `subtitulos.srt`. La UI tiene reproductor y vista del SRT.
-4. **Fase 3 — Visual**: etapas 6–8 (escenas, imágenes vía Comfy, clips Ken Burns).
-5. **Fase 4 — Acabado**: etapas 9–11 (ESRGAN, RIFE, armado final con marca de agua opcional).
-6. **Fase 5 — Pulido**: cola robusta, reintentos, i2v opcional, plantilla `historia` y luego `drama-chisme`, empaquetado Tauri si se decide.
+4. ~~**Fase 3 — Visual**~~ ✅ **Completada** (2026-07-21): etapas 6–8 (escenas, imágenes vía Comfy, clips Ken Burns).
+5. ~~**Fase 4 — Acabado**~~ ✅ **Completada** (2026-07-21): etapas 9–11 (ESRGAN, RIFE, armado final con marca de agua opcional).
+6. **Fase 5 — Pulido y movimiento**: ✅ i2v opcional (HunyuanVideo 1.5, en lugar del WAN 2.2 planificado; tercer modo en la UI, regeneración por escena — 2026-07-22) y RIFE 24→60 fps ✅. **Pendiente:** cola robusta (reintentos, reanudación tras fallo) y la plantilla `historia` (la de drama-chisme ya existe: `plantillas/drama`).
+7. **Fase 6 — Reparto completo**: arranca sobre el trabajo de agosto 2026 (cara de referencia por personaje, escenas generadas desde el retrato, reparto editable a mano, personaje que no muta entre escenas). Faltan: voz por personaje (clone TTS ligada a cada cara, en vez del banco de 6 voces por video), QA de consistencia con embeddings ArcFace entre escenas del mismo personaje (marcar y regenerar automáticamente las que desentonan) y cast persistente reutilizable entre videos.
+8. **Fase 7 — Música en el video**: el proyecto elige una pista (de la biblioteca de Música o generada bajo demanda con ACE-Step) y el armado la mezcla con ducking bajo la voz (sidechain de ffmpeg) y fades de entrada/salida. El plan original excluyó música de fondo; ahora que el área de Música está completa, se integra como etapa opcional del armado final. Alcance acotado: se toca `armado.py`, no el resto del pipeline.
+9. **Fase 8 — Series**: objeto "serie" que agrupa proyectos con continuidad: el LLM recibe el resumen del episodio anterior y el cast recurrente; marcas de episodio en thumbnail/overlay. Lo que mejor funciona en Shorts: episodios con personajes recurrentes.
+10. **Fase 9 — Autopiloto y lotes**: tema → video final en un clic, con las aprobaciones humanas configurables por paso; lotes de N ideas → N videos en cola con prioridad. Pasa de herramienta a línea de producción.
+11. **Fase 10 — Export y empaquetado**: app de escritorio con Tauri, export multi-formato (9:16, 1:1, 16:9), thumbnail automático desde el mejor frame, variantes A/B de títulos, y upload opcional (yt-dlp) por decidir (el plan original decía sin subida automática).
 
 ## 7. Referencias
 
