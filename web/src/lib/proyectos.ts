@@ -74,6 +74,8 @@ export interface ProyectoDetalle {
   guion_version: number;
   metadatos: Metadatos | null;
   voz_disponible: boolean;
+  // mtime del voz.mp3: bust del player de narración tras cada regeneración.
+  voz_version: number;
   subtitulos: string | null;
   escenas: Escena[];
   personajes: Personaje[];

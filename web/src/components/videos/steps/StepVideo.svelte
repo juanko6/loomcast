@@ -78,7 +78,7 @@
           Ver en grande
         </Button>
         <a
-          href={media(`/proyectos/${p.id}/video`)}
+          href={`${media(`/proyectos/${p.id}/video`)}?v=${bust}`}
           download={`${p.slug}.mp4`}
           class="inline-flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs text-text transition hover:border-accent"
         >

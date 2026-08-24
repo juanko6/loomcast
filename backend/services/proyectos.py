@@ -110,6 +110,7 @@ def detalle(pid: int) -> dict:
             for x in personajes_repo.por_proyecto(s, pid)
         ]
         todas_imagenes = bool(escenas) and all(e["imagen"] for e in escenas)
+        voz_mp3 = base_dir / "voz.mp3"
         guion_dict = json.loads(guion.contenido) if guion else None
         # Instruct por defecto del modo expresivo: el que sugirió el guion para
         # esta historia y, si no lo hay, el de la plantilla.
@@ -127,7 +128,12 @@ def detalle(pid: int) -> dict:
             "guion": guion_dict,
             "guion_version": guion.version if guion else 0,
             "metadatos": json.loads(meta.contenido) if meta else None,
-            "voz_disponible": (base_dir / "voz.mp3").exists(),
+            "voz_disponible": voz_mp3.exists(),
+            # mtime del mp3: version real del archivo para que el player de la
+            # UI re-descargue tras cada regeneración (el bust por guion_version
+            # no cambiaba al regenerar solo la voz y el navegador se quedaba
+            # con la narración antigua en caché).
+            "voz_version": int(voz_mp3.stat().st_mtime) if voz_mp3.exists() else 0,
             "subtitulos": srt.read_text() if srt.exists() else None,
             "escenas": escenas,
             "personajes": personajes,

@@ -125,7 +125,7 @@
 
   {#if p.voz_disponible}
     <Field label="Narración generada">
-      <audio controls src={`${media(`/proyectos/${p.id}/audio`)}?v=${p.guion_version}`}></audio>
+      <audio controls src={`${media(`/proyectos/${p.id}/audio`)}?v=${p.voz_version}`}></audio>
     </Field>
   {/if}
 
