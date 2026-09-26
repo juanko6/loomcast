@@ -218,18 +218,19 @@ nombre = "Z-Image (retrato)"
 generar = "workflows/z_image_retrato_api.json"
 
 [imagen.motores.qwen]
-# Qwen-Image-Edit 2509 GGUF: reutiliza el text encoder qwen2.5-vl en GGUF y
-# evita el fp8 que Metal no soporta. ~2 min por imagen.
+# Qwen-Image-Edit 2511 GGUF Q4_K_M + Lightning de 4 pasos, con el text encoder
+# qwen2.5-vl en GGUF para esquivar el fp8 que Metal no soporta. Admite tres
+# referencias, y es el motor de las escenas con personaje: es el que mejor
+# conserva la cara y la ropa del retrato. ~2 min por imagen con una referencia
+# y ~3:20 con dos, medidos en el M3 Max.
 #
-# OJO en Mac: TextEncodeQwenImageEditPlus escala las imágenes de referencia con
-# interpolate(mode="area"), que en Metal solo funciona si el tamaño de entrada
-# es divisible por el de salida. Con un tamaño cualquiera revienta con
-# "Adaptive pool MPS: input sizes must be divisible by output sizes". Por eso
-# [personajes].motor_escena apunta a flux2klein, que escala con lanczos y no
-# pasa por ahí. Si un día quieres Qwen aquí, hará falta parchear torch como en
-# scripts/instalar_parche_mps.py.
-nombre = "Qwen-Image-Edit 2509"
-editar = "workflows/qwen_edit_api.json"
+# Necesita el parche de MPS (`python scripts/instalar_parche_mps.py`): sus nodos
+# escalan las referencias con interpolate(mode="area"), que en Metal solo
+# funciona si el tamaño de entrada es divisible por el de salida, y con una
+# referencia cualquiera revienta con "Adaptive pool MPS: input sizes must be
+# divisible by output sizes".
+nombre = "Qwen-Image-Edit 2511"
+editar = "workflows/qwen_edit_2511_api.json"
 
 [imagen.motores.flux2klein]
 # FLUX.2 Klein 9B (GGUF Q8_0 + encoder qwen_3_8b_fp4mixed): genera y edita con
@@ -256,11 +257,15 @@ height = 1024
 # texto→imagen, toma su retrato como referencia visual y lo lleva a la escena.
 # Tiene que declarar `editar`.
 #
-# flux2klein y no qwen a pesar de que Qwen-Image-Edit está entrenado justo para
-# esto: su nodo de referencias no funciona en Metal (ver el comentario de
-# [imagen.motores.qwen]). Klein tarda lo mismo que Z-Image generando de cero
-# (~84 s medidos), así que la consistencia sale casi gratis.
-motor_escena = "flux2klein"
+# qwen (Qwen-Image-Edit 2511), que es el que está entrenado para llevar a una
+# persona de una imagen a otra y se nota: conserva los rasgos y la ropa del
+# retrato donde Klein deja la cara en sombra y sin parecido. Además admite tres
+# referencias y Klein solo una, así que una escena con dos personajes ya no
+# tiene que renunciar a una cara.
+#
+# Cuesta unos 30 s más por escena que Klein (~132 s frente a ~102 s con una
+# referencia). Si prefieres el tiempo al parecido, pon "flux2klein".
+motor_escena = "qwen"
 
 [musica]
 # Generación de música local con ACE-Step 1.5 XL Turbo (ACE Studio + StepFun):

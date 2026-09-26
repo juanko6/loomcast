@@ -26,7 +26,7 @@ Ver [PLAN.md](PLAN.md) para la arquitectura completa y [fase0/RESULTADOS.md](fas
 - Node 20+ y pnpm (solo para compilar el frontend)
 - [llama.cpp](https://github.com/ggml-org/llama.cpp) (`llama-server`) con un modelo instruct en español
 - [ComfyUI](https://github.com/comfyanonymous/ComfyUI), con los modelos de lo que vayas a usar:
-  - **imágenes**: Z-Image-Turbo (bf16) + VAE `ae.safetensors` + text encoder `qwen_3_4b`; opcionalmente Qwen-Image-Edit 2509 y FLUX.2 Klein (ver "Imágenes")
+  - **imágenes**: Z-Image-Turbo (bf16) + VAE `ae.safetensors` + text encoder `qwen_3_4b`; opcionalmente Qwen-Image-Edit 2511 y FLUX.2 Klein (ver "Imágenes")
   - **música**: ACE-Step 1.5 XL Turbo (ver "Música")
 - ffmpeg
 
@@ -242,13 +242,21 @@ Dos detalles del camino, por si tocas los workflows de edición:
   referencia. Sin eso, meter a un personaje de un retrato 3:4 en una escena la
   devolvía en 3:4 en vez del 9:16 del vídeo.
 
-**En Mac el motor para esto es FLUX.2 Klein, no Qwen-Image-Edit**, aunque Qwen
-sea el que está entrenado para llevar personas de una imagen a otra: su nodo
-escala las referencias con `interpolate(mode="area")`, que en Metal exige que el
-tamaño de entrada sea divisible por el de salida y revienta con *"Adaptive pool
-MPS: input sizes must be divisible by output sizes"*. Klein escala con lanczos y
-no pasa por ahí. Además tarda lo mismo que Z-Image generando de cero (~84 s
-medidos en el M3 Max), así que la consistencia sale casi gratis en tiempo.
+**El motor para esto es Qwen-Image-Edit 2511**, que es el que está entrenado
+para llevar a una persona de una imagen a otra. Medido en el M3 Max con los
+mismos retratos, prompt y semilla:
+
+| motor | 1 referencia | 2 referencias | qué sale |
+|---|---|---|---|
+| **Qwen-Image-Edit 2511** | 132 s | 200 s | los rasgos y la ropa del retrato se reconocen |
+| Qwen-Image-Edit 2509 | 137 s | 205 s | compone bien pero deriva: otra camiseta, otro pantalón, caras genéricas |
+| FLUX.2 Klein 9B | 102 s | — | el más rápido y con buena atmósfera, pero deja la cara en sombra, y solo admite una referencia |
+
+Qwen necesita el parche de MPS (`python scripts/instalar_parche_mps.py`): sus
+nodos escalan las referencias con `interpolate(mode="area")`, que en Metal exige
+que el tamaño de entrada sea divisible por el de salida y si no revienta con
+*"Adaptive pool MPS: input sizes must be divisible by output sizes"*. Sin el
+parche no hay edición con referencias en Mac, con 2511 ni con 2509.
 
 ## Ciclo de vida del LLM
 
@@ -309,8 +317,18 @@ un workflow de ComfyUI en formato API según los modos que sepa hacer:
 | motor | genera | edita | notas |
 |---|---|---|---|
 | **Z-Image Turbo** | ✅ | — | el rápido, y el que usa el pipeline de vídeo para las escenas |
-| **Qwen-Image-Edit 2509** | — | ✅ | GGUF + text encoder qwen2.5-vl, para esquivar el fp8 que Metal no soporta. ~2 min por imagen |
+| **Qwen-Image-Edit 2511** | — | ✅ | GGUF + text encoder qwen2.5-vl, para esquivar el fp8 que Metal no soporta. Hasta 3 referencias, y el que usa el pipeline para las escenas con personaje. ~2 min por imagen |
 | **FLUX.2 Klein 9B** | ✅ | ✅ | GGUF Q8 + encoder fp4mixed. ~50 s generando, ~76 s editando |
+
+Qwen-Image-Edit 2511 son cuatro ficheros en `ComfyUI/models/` (Apache 2.0):
+
+    diffusion_models/  qwen-image-edit-2511-Q4_K_M.gguf                        (13,24 GB, unsloth/Qwen-Image-Edit-2511-GGUF)
+    loras/             Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors  (0,85 GB, lightx2v/Qwen-Image-Edit-2511-Lightning)
+    text_encoders/     qwen2.5-vl-7b-test-q4_0.gguf
+    vae/               qwen_image_vae.safetensors
+
+El Lightning es lo que deja la edición en 4 pasos en vez de 40; sin él, el
+workflow tarda diez veces más.
 
 `motor_generar` y `motor_editar` fijan cuál se preselecciona; en la galería se
 puede cambiar por imagen. Añadir un motor nuevo es declarar su bloque y poner su

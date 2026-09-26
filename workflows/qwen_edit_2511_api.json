@@ -2,7 +2,7 @@
   "unet": {
     "class_type": "UnetLoaderGGUF",
     "inputs": {
-      "unet_name": "Qwen-Image-Edit-2509-Q4_K_M.gguf"
+      "unet_name": "qwen-image-edit-2511-Q4_K_M.gguf"
     }
   },
   "lora": {
@@ -12,7 +12,7 @@
         "unet",
         0
       ],
-      "lora_name": "Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
+      "lora_name": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
       "strength_model": 1.0
     }
   },
