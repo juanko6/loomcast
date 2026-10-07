@@ -61,7 +61,7 @@ def test_modelo_inexistente(instalacion, monkeypatch, tmp_path):
 ])
 def test_cuadros_de_salida(instalacion, tmp_path, monkeypatch, fps_origen, fps_final, frames, esperado):
     p = Procesos(cuadros_entrada=4)
-    monkeypatch.setattr(rife.subprocess, "run", p)
+    monkeypatch.setattr(subprocess, "run", p)
     rife.interpolar(tmp_path / "a.mp4", tmp_path / "b.mp4", fps_origen, fps_final, frames)
     assert _n_rife(p) == esperado
     assert (tmp_path / "b.mp4").read_bytes() == b"video"
@@ -69,13 +69,13 @@ def test_cuadros_de_salida(instalacion, tmp_path, monkeypatch, fps_origen, fps_f
 
 
 def test_ffmpeg_sin_cuadros(instalacion, tmp_path, monkeypatch):
-    monkeypatch.setattr(rife.subprocess, "run", Procesos(cuadros_entrada=0))
+    monkeypatch.setattr(subprocess, "run", Procesos(cuadros_entrada=0))
     with pytest.raises(rife.RifeError, match="no extrajo cuadros"):
         rife.interpolar(tmp_path / "a.mp4", tmp_path / "b.mp4", 12, 60)
 
 
 def test_rife_falla(instalacion, tmp_path, monkeypatch):
-    monkeypatch.setattr(rife.subprocess, "run", Procesos(rife_rc=1))
+    monkeypatch.setattr(subprocess, "run", Procesos(rife_rc=1))
     with pytest.raises(rife.RifeError, match="fallo de vulkan"):
         rife.interpolar(tmp_path / "a.mp4", tmp_path / "b.mp4", 12, 60)
     assert not (tmp_path / "b.mp4").exists()

@@ -301,6 +301,6 @@ def test_clip_que_excede_el_tiempo_se_cancela(tmp_path, monkeypatch):
         assert kw["timeout"] == clips.TIMEOUT_CLIP_S
         raise subprocess.TimeoutExpired(cmd, kw["timeout"])
 
-    monkeypatch.setattr(clips.subprocess, "run", colgado)
+    monkeypatch.setattr(subprocess, "run", colgado)
     with pytest.raises(RuntimeError, match="no terminó"):
         clips.clip_estatico(img, 0.2, tmp_path / "c.mp4")

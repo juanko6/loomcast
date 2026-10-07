@@ -6,11 +6,11 @@ segmento de voz, generando los cuadros que esa duración pide a fps_final.
 Escribe en clips/, de modo que el armado con movimiento (concat + subtítulos +
 voz) funcione igual que en el modo Ken Burns.
 """
-import subprocess
 import time
 import tempfile
 from pathlib import Path
 
+from ... import procesos
 from ...clients import comfy, rife
 from ...config import I2V_FPS_FINAL, I2V_FPS_ORIGEN, PROYECTOS_DIR
 from ...db import get_session
@@ -47,11 +47,11 @@ def clip_i2v(imagen: Path, prompt: str, seed: int, dur: float, salida: Path) -> 
             f"scale={ANCHO}:{ALTO}:force_original_aspect_ratio=increase"
             f":flags=lanczos,crop={ANCHO}:{ALTO}"
         )
-        subprocess.run(
+        procesos.ejecutar(
             ["ffmpeg", "-loglevel", "error", "-y", "-i", str(suave),
              "-vf", f"setpts={factor:.5f}*PTS,fps=60,{escalar}",
              "-an", *args_video(), str(salida)],
-            check=True,
+            timeout=procesos.CLIP_S, que="ffmpeg (clip i2v)", check=True,
         )
 
 

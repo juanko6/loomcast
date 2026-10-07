@@ -4,13 +4,13 @@ Cada imagen reescalada se convierte en un clip 1080x1920 con un zoom/paneo
 lento renderizado directamente a 60fps (suave, sin interpolación). Se alterna
 zoom-in / zoom-out por escena para dar variedad al montaje.
 """
-import subprocess
 import time
 from pathlib import Path
 
 from ...config import PROYECTOS_DIR
 from ...db import get_session
 from ...models import avanzar_estado
+from ... import procesos
 from ...repositories import escenas as escenas_repo
 from ...repositories import proyectos as proyectos_repo
 from .. import progreso
@@ -24,10 +24,10 @@ INCR = 0.0006      # velocidad del zoom por cuadro
 ZOOM_MAX = 1.15
 
 
-# Tope de un clip. Con `-loop 1` ffmpeg no termina nunca si no consigue decodificar
-# la imagen (un PNG corrupto o a medio escribir): reintenta eternamente y el job
-# se queda corriendo. Se valida la imagen antes y, por si acaso, se corta aquí.
-TIMEOUT_CLIP_S = 900
+# Con `-loop 1` ffmpeg no termina nunca si no consigue decodificar la imagen (un
+# PNG corrupto o a medio escribir): reintenta eternamente y el job se queda
+# corriendo. Se valida la imagen antes y, por si acaso, se corta por tiempo.
+TIMEOUT_CLIP_S = procesos.CLIP_S
 
 
 def _ffmpeg_clip(cmd: list[str], imagen: Path, que: str) -> None:
@@ -38,13 +38,8 @@ def _ffmpeg_clip(cmd: list[str], imagen: Path, que: str) -> None:
             im.load()
     except (OSError, UnidentifiedImageError) as e:
         raise RuntimeError(f"ffmpeg {que} no puede leer la imagen {imagen.name}: {e}")
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT_CLIP_S)
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(
-            f"ffmpeg {que} no terminó en {TIMEOUT_CLIP_S} s con {imagen.name}; "
-            "se cancela para no dejar el job colgado"
-        )
+    r = procesos.ejecutar(cmd, timeout=TIMEOUT_CLIP_S, que=f"ffmpeg {que} ({imagen.name})",
+                          capture_output=True, text=True)
     if r.returncode != 0:
         raise RuntimeError(f"ffmpeg {que} falló: {r.stderr[-500:]}")
 

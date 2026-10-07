@@ -4,8 +4,8 @@ Concatena los clips (60fps), superpone los subtítulos rasterizados a PNG
 transparentes (Pillow) con el filtro `overlay` de ffmpeg (cada uno activo en
 su ventana de tiempo) y añade la narración.
 """
-import subprocess
 
+from ... import procesos
 from ...config import PROYECTOS_DIR, VIDEO_COLA_FINAL_S
 from ...db import get_session
 from ...models import avanzar_estado
@@ -94,7 +94,8 @@ def armar_video(proyecto_id: int) -> str:
             "-af", "apad", "-t", f"{objetivo:.3f}", "final.mp4"]
 
     archivada = archivar_final(base)
-    r = subprocess.run(cmd, cwd=base, capture_output=True, text=True)
+    r = procesos.ejecutar(cmd, timeout=procesos.MONTAJE_S, que="ffmpeg (montaje)",
+                          cwd=base, capture_output=True, text=True)
     if r.returncode != 0:
         raise RuntimeError(f"ffmpeg falló: {r.stderr[-800:]}")
 

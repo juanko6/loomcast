@@ -19,9 +19,9 @@ No toca la mezcla: no separa instrumentos ni reequilibra nada. Si un arreglo
 suena embarullado, eso viene del modelo y se arregla en el prompt.
 """
 import json
-import subprocess
 from pathlib import Path
 
+from ... import procesos
 from ...config import MUSICA_LUFS, MUSICA_TRUE_PEAK
 
 
@@ -29,13 +29,22 @@ class MasterizarError(RuntimeError):
     pass
 
 
+def _correr(cmd: list[str]):
+    """ffmpeg con tope; un cuelgue se reporta como MasterizarError para que la
+    pista se entregue sin masterizar en vez de dejar el job colgado."""
+    try:
+        return procesos.ejecutar(cmd, timeout=procesos.MASTERIZADO_S,
+                                 que="ffmpeg (masterizado)", capture_output=True, text=True)
+    except procesos.ProcesoTimeout as e:
+        raise MasterizarError(str(e)) from e
+
+
 def _medir(origen: Path) -> dict:
     """Primera pasada: loudnorm mide y escupe las medidas en JSON por stderr."""
-    r = subprocess.run(
+    r = _correr(
         ["ffmpeg", "-hide_banner", "-nostats", "-i", str(origen),
          "-af", f"loudnorm=I={MUSICA_LUFS}:TP={MUSICA_TRUE_PEAK}:LRA=11:print_format=json",
          "-f", "null", "-"],
-        capture_output=True, text=True,
     )
     # El JSON va al final de stderr, entre el log de ffmpeg y la línea de
     # resumen que ffmpeg imprime después: hay que acotarlo por los dos lados.
@@ -57,7 +66,7 @@ def masterizar(origen: Path, destino: Path) -> dict:
         f"measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}:"
         f"offset={m['target_offset']}"
     )
-    r = subprocess.run(
+    r = _correr(
         ["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", str(origen),
          "-af", f"loudnorm=I={MUSICA_LUFS}:TP={MUSICA_TRUE_PEAK}:LRA=11:{medido}:linear=true",
          # loudnorm trabaja por dentro a 192 kHz y en coma flotante. Sin estos
@@ -65,7 +74,6 @@ def masterizar(origen: Path, destino: Path) -> dict:
          # ventaja para una pista que acabará mezclada y recodificada. ffmpeg
          # aplica dither al bajar de bits.
          "-ar", "48000", "-sample_fmt", "s16", str(destino)],
-        capture_output=True, text=True,
     )
     if r.returncode != 0 or not destino.exists():
         raise MasterizarError(f"ffmpeg falló masterizando: {r.stderr[-300:]}")

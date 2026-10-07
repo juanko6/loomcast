@@ -5,8 +5,8 @@ la línea de tiempo en cada frontera de escena o de subtítulo, estampa el texto
 sobre la imagen activa (1080x1920) y concatena los stills con sus duraciones.
 Ideal para iterar guion/voz/prompts sin esperar el render con movimiento.
 """
-import subprocess
 
+from ... import procesos
 from ...config import PROYECTOS_DIR, VIDEO_COLA_FINAL_S
 from ...db import get_session
 from ...models import avanzar_estado
@@ -105,13 +105,14 @@ def armar_estatico(proyecto_id: int) -> str:
     # la última palabra.
     objetivo = dur_audio + VIDEO_COLA_FINAL_S
     archivada = archivar_final(base)
-    r = subprocess.run(
+    r = procesos.ejecutar(
         ["ffmpeg", "-loglevel", "error", "-y",
          "-f", "concat", "-safe", "0", "-i", "estatico_concat.txt",
          "-i", "voz.wav", "-vf", "fps=30",
          *args_video(),
          "-c:a", "aac", "-b:a", "192k",
          "-af", "apad", "-t", f"{objetivo:.3f}", "final.mp4"],
+        timeout=procesos.MONTAJE_S, que="ffmpeg (montaje estático)",
         cwd=base, capture_output=True, text=True,
     )
     if r.returncode != 0:

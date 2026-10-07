@@ -1,9 +1,9 @@
 """Jobs del banco de voces: genera el clip de referencia con VoiceDesign
 (voz descrita) o lo clona de un audio real que aporta el usuario."""
-import subprocess
 
 import numpy as np
 
+from ... import procesos
 from ...clients import stt, tts
 from ...config import VOCES_DIR
 from ...db import get_session
@@ -67,11 +67,11 @@ def clonar_voz(voz_id: int, inicio: float = 0.0, fin: float | None = None) -> st
 
     try:
         ref = voces_repo.ruta_ref(slug)
-        subprocess.run(
+        procesos.ejecutar(
             ["ffmpeg", "-loglevel", "error", "-y", "-ss", f"{inicio}",
              "-i", str(origenes[0]), "-t", f"{dur}",
              "-ac", "1", "-ar", str(REF_SR), str(ref)],
-            check=True,
+            timeout=procesos.CORTO_S, que="ffmpeg (recorte de la referencia)", check=True,
         )
         ref_text = stt.transcribir(ref)["texto"]
         if not ref_text:

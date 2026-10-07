@@ -12,10 +12,10 @@ puntuación; después atempo → voz.wav / voz.mp3):
   estable entre vídeos).
 """
 import json
-import subprocess
 
 import numpy as np
 
+from ... import procesos
 from ...clients import tts
 from ...config import PROYECTOS_DIR
 from ...db import get_session
@@ -90,15 +90,15 @@ def generar_voz(proyecto_id: int, modo: str = "clon", instruct: str | None = Non
     sf.write(base_dir / "voz_raw.wav", np.asarray(wavs[0], dtype=np.float32), sr)
 
     atempo = ritmo.get("atempo", 1.0)
-    subprocess.run(
+    procesos.ejecutar(
         ["ffmpeg", "-loglevel", "error", "-y", "-i", str(base_dir / "voz_raw.wav"),
          "-filter:a", f"atempo={atempo}", str(base_dir / "voz.wav")],
-        check=True,
+        timeout=procesos.CORTO_S, que="ffmpeg (atempo)", check=True,
     )
-    subprocess.run(
+    procesos.ejecutar(
         ["ffmpeg", "-loglevel", "error", "-y", "-i", str(base_dir / "voz.wav"),
          "-b:a", "192k", str(base_dir / "voz.mp3")],
-        check=True,
+        timeout=procesos.CORTO_S, que="ffmpeg (mp3)", check=True,
     )
 
     dur = sf.info(base_dir / "voz.wav").duration
