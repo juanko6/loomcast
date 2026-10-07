@@ -3,6 +3,7 @@
   import Icon from "../primitives/Icon.svelte";
   import { currentTrack, isPlaying, playTrack } from "@/lib/player";
   import type { LibItem } from "@/lib/biblioteca";
+  import { escaparHtml as esc } from "@/lib/html";
   import type { TipoMusica } from "@/lib/types";
 
   let {
@@ -38,9 +39,9 @@
         src: item.src,
       });
     } else if (item.kind === "video" && item.src) {
-      onview(`<video src="${item.src}" controls autoplay playsinline></video>`, item.titulo);
+      onview(`<video src="${esc(item.src)}" controls autoplay playsinline></video>`, item.titulo);
     } else if (item.kind === "imagen" && item.src) {
-      onview(`<img src="${item.src}" alt="${item.titulo}">`, item.titulo);
+      onview(`<img src="${esc(item.src)}" alt="${esc(item.titulo)}">`, item.titulo);
     } else {
       onopen();
     }

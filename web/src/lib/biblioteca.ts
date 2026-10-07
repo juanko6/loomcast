@@ -50,7 +50,7 @@ export async function cargarBiblioteca(): Promise<LibItem[]> {
       subtipo: null,
       // La escena 0 sirve de portada; si aún no existe, la <img> se oculta.
       thumb: media(`/proyectos/${p.id}/imagenes/0`),
-      src: p.estado === "final" ? media(`/proyectos/${p.id}/video`) : null,
+      src: p.estado === "FINAL" ? media(`/proyectos/${p.id}/video`) : null,
       destino: "videos",
     })),
     ...imagenes.map((g): LibItem => ({

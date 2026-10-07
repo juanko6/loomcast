@@ -35,3 +35,4 @@ web/.astro/
 # Tests
 .coverage
 .pytest_cache/
+web/coverage/

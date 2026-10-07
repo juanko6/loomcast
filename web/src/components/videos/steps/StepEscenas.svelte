@@ -433,7 +433,7 @@
           <span class="ml-auto text-[11px] text-muted">
             {#if e.imagen_s}img {e.imagen_s}s{/if}
             {#if e.clip}
-              · clip {e.clip_modo ? NOMBRE_MODO[e.clip_modo] : "(modo sin registrar)"}{#if e.clip_s} · {e.clip_s}s{/if}
+              · clip {e.clip_modo ? NOMBRE_MODO[e.clip_modo] : "(modo sin registrar)"}{#if e.clip_s}{" · "}{e.clip_s}s{/if}
             {/if}
           </span>
         </div>

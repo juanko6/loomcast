@@ -34,7 +34,7 @@
       <img {src} {alt} class="size-full object-cover" />
     {:else}
       <span class="grid size-full place-items-center text-muted">
-        <Icon {icon} size={Math.round(size * 0.42)} />
+        <Icon name={icon} size={Math.round(size * 0.42)} />
       </span>
     {/if}
     <!-- Overlay de play/pause: siempre visible si suena, al hover si no -->
@@ -53,7 +53,7 @@
     {#if src}
       <img {src} {alt} class="size-full object-cover" />
     {:else}
-      <Icon {icon} size={Math.round(size * 0.42)} />
+      <Icon name={icon} size={Math.round(size * 0.42)} />
     {/if}
   </span>
 {/if}
