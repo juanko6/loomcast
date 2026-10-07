@@ -42,6 +42,15 @@ def armar_video(proyecto_id: int) -> str:
         raise ValueError(f"Faltan clips de las escenas {faltantes}")
     if not (base / "voz.wav").exists() or not (base / "subtitulos.srt").exists():
         raise ValueError("Faltan voz.wav o subtitulos.srt")
+    # ffmpeg sale con código 0 aunque el concat no consiga abrir un clip (corrupto
+    # o a medio escribir): lo salta y entrega un video al que le falta esa escena.
+    # Se comprueba antes que cada clip tenga duración legible.
+    ilegibles = [o for o in ordenes if not duracion(base / "clips" / f"{o:02d}.mp4")]
+    if ilegibles:
+        raise ValueError(
+            f"Los clips de las escenas {ilegibles} están corruptos o incompletos; "
+            "regéneralos antes de armar el video"
+        )
 
     (base / "clips_concat.txt").write_text(
         "\n".join(f"file 'clips/{o:02d}.mp4'" for o in ordenes) + "\n"

@@ -3,7 +3,7 @@ source = backend
 omit = backend/__pycache__/*
 
 [report]
-# Suelo para no retroceder, no una meta: la cobertura al crear la suite era 87 %.
-fail_under = 85
+# Suelo para no retroceder, no una meta: la cobertura al crear la suite era 87 %; ahora ronda el 93 %.
+fail_under = 90
 show_missing = True
 skip_covered = True
