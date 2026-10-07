@@ -111,7 +111,7 @@ describe("ImageConfig", () => {
   it("editar: exige idea Y imagen, muestra la vista previa y envía ambas", async () => {
     const { p, container } = await montar();
     await userEvent.click(screen.getByRole("tab", { name: "Editar" }));
-    const crear = screen.getByRole("button", { name: "Subir y mejorar prompt" });
+    const crear = screen.getByRole("button", { name: "Subir imagen" });
     expect(crear).toBeDisabled();
 
     await userEvent.type(screen.getByRole("textbox"), "  ponle gafas ");

@@ -95,7 +95,7 @@
       : "Ej: un faro solitario en un acantilado bajo una tormenta eléctrica",
   );
   const ctaLabel = $derived(
-    tipo === "quitarfondo" ? "Quitar fondo" : tipo === "editar" ? "Subir y mejorar prompt" : "Crear",
+    tipo === "quitarfondo" ? "Quitar fondo" : tipo === "editar" ? "Subir imagen" : "Crear",
   );
 </script>
 
