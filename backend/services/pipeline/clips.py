@@ -24,6 +24,31 @@ INCR = 0.0006      # velocidad del zoom por cuadro
 ZOOM_MAX = 1.15
 
 
+# Tope de un clip. Con `-loop 1` ffmpeg no termina nunca si no consigue decodificar
+# la imagen (un PNG corrupto o a medio escribir): reintenta eternamente y el job
+# se queda corriendo. Se valida la imagen antes y, por si acaso, se corta aquí.
+TIMEOUT_CLIP_S = 900
+
+
+def _ffmpeg_clip(cmd: list[str], imagen: Path, que: str) -> None:
+    from PIL import Image, UnidentifiedImageError
+
+    try:
+        with Image.open(imagen) as im:
+            im.load()
+    except (OSError, UnidentifiedImageError) as e:
+        raise RuntimeError(f"ffmpeg {que} no puede leer la imagen {imagen.name}: {e}")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT_CLIP_S)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(
+            f"ffmpeg {que} no terminó en {TIMEOUT_CLIP_S} s con {imagen.name}; "
+            "se cancela para no dejar el job colgado"
+        )
+    if r.returncode != 0:
+        raise RuntimeError(f"ffmpeg {que} falló: {r.stderr[-500:]}")
+
+
 def _ken_burns_vf(orden: int, frames: int) -> str:
     if orden % 2 == 0:
         z = f"min(zoom+{INCR},{ZOOM_MAX})"                       # zoom in
@@ -58,33 +83,29 @@ def pendientes_de_modo(clips_dir: Path, escenas: list[dict], modo: str,
 def clip_ken_burns(imagen: Path, orden: int, dur: float, salida: Path) -> None:
     """Un clip con zoom/paneo lento sobre `imagen`, de `dur` segundos."""
     frames = max(1, round(dur * FPS))
-    r = subprocess.run(
+    _ffmpeg_clip(
         ["ffmpeg", "-loglevel", "error", "-y",
          "-loop", "1", "-i", str(imagen),
          "-vf", _ken_burns_vf(orden, frames),
          "-frames:v", str(frames),
          *args_video(), str(salida)],
-        capture_output=True, text=True,
+        imagen, f"(escena {orden})",
     )
-    if r.returncode != 0:
-        raise RuntimeError(f"ffmpeg (escena {orden}) falló: {r.stderr[-500:]}")
 
 
 def clip_estatico(imagen: Path, dur: float, salida: Path) -> None:
     """Un clip de imagen fija, del mismo tamaño y fps que los demás modos, para
     que el armado pueda concatenarlo junto a clips con movimiento."""
     frames = max(1, round(dur * FPS))
-    r = subprocess.run(
+    _ffmpeg_clip(
         ["ffmpeg", "-loglevel", "error", "-y",
          "-loop", "1", "-i", str(imagen),
          "-vf", (f"scale={ANCHO}:{ALTO}:force_original_aspect_ratio=increase"
                  f":flags=lanczos,crop={ANCHO}:{ALTO},fps={FPS}"),
          "-frames:v", str(frames),
          *args_video(), str(salida)],
-        capture_output=True, text=True,
+        imagen, "estático",
     )
-    if r.returncode != 0:
-        raise RuntimeError(f"ffmpeg estático falló: {r.stderr[-500:]}")
 
 
 def generar_clips(proyecto_id: int, forzar: bool = False) -> str:

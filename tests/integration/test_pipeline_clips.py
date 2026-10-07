@@ -276,7 +276,31 @@ def test_clip_estatico_real_produce_un_video_1080x1920(tmp_path, monkeypatch):
 
 
 @requiere_ffmpeg
-def test_clip_estatico_con_imagen_inexistente_lanza_runtimeerror(tmp_path):
-    # (Con un archivo corrupto ffmpeg se queda esperando por `-loop 1`: no se prueba.)
-    with pytest.raises(RuntimeError, match="ffmpeg estático falló"):
-        clips.clip_estatico(tmp_path / "no_existe.png", 0.2, tmp_path / "c.mp4")
+@pytest.mark.parametrize("contenido", [None, b"no es imagen", b"\x89PNG\r\n\x1a\n truncado"])
+@pytest.mark.parametrize("clip", ["estatico", "kenburns"])
+def test_clip_con_imagen_ilegible_falla_rapido_en_vez_de_colgarse(tmp_path, clip, contenido):
+    """Regresión: con `-loop 1` ffmpeg no terminaba si la imagen no se decodificaba."""
+    img = tmp_path / "i.png"
+    if contenido is not None:
+        img.write_bytes(contenido)
+    with pytest.raises(RuntimeError, match="no puede leer la imagen"):
+        if clip == "estatico":
+            clips.clip_estatico(img, 0.2, tmp_path / "c.mp4")
+        else:
+            clips.clip_ken_burns(img, 0, 0.2, tmp_path / "c.mp4")
+    assert not (tmp_path / "c.mp4").exists()
+
+
+def test_clip_que_excede_el_tiempo_se_cancela(tmp_path, monkeypatch):
+    from PIL import Image
+
+    img = tmp_path / "i.png"
+    Image.new("RGB", (8, 8)).save(img)
+
+    def colgado(cmd, **kw):
+        assert kw["timeout"] == clips.TIMEOUT_CLIP_S
+        raise subprocess.TimeoutExpired(cmd, kw["timeout"])
+
+    monkeypatch.setattr(clips.subprocess, "run", colgado)
+    with pytest.raises(RuntimeError, match="no terminó"):
+        clips.clip_estatico(img, 0.2, tmp_path / "c.mp4")
