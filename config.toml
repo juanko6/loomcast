@@ -168,14 +168,34 @@ cola_final_s = 1.5
 [i2v]
 # Modo image-to-video (movimiento generado por IA). Agnóstico al motor: apunta
 # a un workflow de ComfyUI en formato API que TÚ exportas y ajustas (LTX-Video,
-# WAN, etc.). El workflow debe incluir los placeholders {IMAGE}, {PROMPT} y
-# {SEED}, y un nodo que guarde el video (VHS_VideoCombine / SaveVideo).
-workflow = "workflows/i2v_api.json"
+# HunyuanVideo, WAN, etc.). El workflow debe incluir los placeholders {IMAGE},
+# {PROMPT}, {SEED} y {FRAMES}, y un nodo que guarde el video
+# (VHS_VideoCombine / SaveVideo).
+#
+# El motor es LTX-2.5 (22B destilado, GGUF Q4_0). Sustituyó a HunyuanVideo 1.5
+# el 2026-10-12 tras medir los dos en el M3 Max con la misma imagen, prompt y
+# semilla, en caliente y a 8 pasos:
+#
+#   HunyuanVideo 1.5   480x848, 21 cuadros ..... 303 s
+#   LTX-2.5            480x864, 25 cuadros ......  90 s
+#   LTX-2.5            768x1376, 25 cuadros ..... 213 s
+#
+# O sea que LTX genera a la resolución de las imágenes de escena por menos
+# tiempo del que Hunyuan tardaba a 480, lo que además recorta el estirado que
+# hace el armado para llegar a 1080x1920. Ninguna de las resoluciones paginó.
+#
+# Necesita el parche del GGUF (`python scripts/instalar_parches.py`): el fichero
+# de molbal trae `keyframes_abs_pos_embedding` cuantizado siendo un parámetro
+# suelto, y sin dequantizarlo ComfyUI no carga el modelo.
+#
+# LTX genera también una pista de audio (es un modelo audio-vídeo). Loomcast no
+# la usa: el ffmpeg que escala el clip ya pasa -an, y la banda sonora sale de la
+# voz y de [musica].
+workflow = "workflows/i2v_ltx25_api.json"
 # Cuadros que genera el modelo i2v por escena (placeholder {FRAMES} del
 # workflow). Más cuadros = más recorrido de movimiento y menos estiramiento de
-# RIFE, pero el coste sube lineal (~12 s por cuadro en M3 Max). HunyuanVideo
-# exige la forma 4n+1: 13, 17, 21, 25…
-frames = 21
+# RIFE. LTX-2.5 los quiere de la forma 4n+1: 21, 25, 29…
+frames = 25
 # fps que produce tu modelo i2v (para saber cuánto interpola RIFE).
 fps_origen = 24
 # fps de los clips i2v tras la interpolación. Déjalo en 60: es el ritmo al que
@@ -224,7 +244,7 @@ generar = "workflows/z_image_retrato_api.json"
 # conserva la cara y la ropa del retrato. ~2 min por imagen con una referencia
 # y ~3:20 con dos, medidos en el M3 Max.
 #
-# Necesita el parche de MPS (`python scripts/instalar_parche_mps.py`): sus nodos
+# Necesita el parche de MPS (`python scripts/instalar_parches.py`): sus nodos
 # escalan las referencias con interpolate(mode="area"), que en Metal solo
 # funciona si el tamaño de entrada es divisible por el de salida, y con una
 # referencia cualquiera revienta con "Adaptive pool MPS: input sizes must be
@@ -303,7 +323,7 @@ lm_temperature = 0.85
 # Dónde corre el LM planificador: "default" (la GPU) o "cpu".
 #
 # EN GPU **SOLO** SI EL PARCHE ESTÁ INSTALADO:
-#     python scripts/instalar_parche_mps.py
+#     python scripts/instalar_parches.py
 #
 # Sin él, torch.multinomial en Metal devuelve a veces índices con probabilidad
 # CERO. Lo dispara la presencia de entradas a cero (aquí, los ~153k tokens que

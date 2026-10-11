@@ -174,7 +174,7 @@ MUSICA_AUDIO_CODES: bool = _musica.get("audio_codes", True)
 # Temperatura del LM planificador: a 0 (argmax) las pistas salen monótonas.
 MUSICA_LM_TEMPERATURE: float = float(_musica.get("lm_temperature", 0.85))
 # Dónde corre el LM. "default" (GPU) exige el parche de
-# scripts/instalar_parche_mps.py, que esquiva el bug de torch.multinomial en
+# scripts/instalar_parches.py, que esquiva el bug de torch.multinomial en
 # Metal; "cpu" no depende de nada pero es ~7× más lento. Ver [musica] en
 # config.toml.
 MUSICA_LM_DEVICE: str = _musica.get("lm_device", "default")

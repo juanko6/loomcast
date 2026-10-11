@@ -44,10 +44,12 @@ de `web/` (uvicorn sirve el build estático de `web/dist/`):
 cd web && pnpm install && pnpm build && cd ..
 ```
 
-Y el parche que la música necesita en Mac (ver "Música"):
+Y los parches que ComfyUI necesita aquí: los dos de Metal (la música y la
+edición con referencias) y el del GGUF de LTX-2.5. Cada uno está explicado
+en su sección, y el script los enlaza todos:
 
 ```bash
-./.venv/bin/python scripts/instalar_parche_mps.py
+./.venv/bin/python scripts/instalar_parches.py
 ```
 
 ## Arranque diario
@@ -252,7 +254,7 @@ mismos retratos, prompt y semilla:
 | Qwen-Image-Edit 2509 | 137 s | 205 s | compone bien pero deriva: otra camiseta, otro pantalón, caras genéricas |
 | FLUX.2 Klein 9B | 102 s | — | el más rápido y con buena atmósfera, pero deja la cara en sombra, y solo admite una referencia |
 
-Qwen necesita el parche de MPS (`python scripts/instalar_parche_mps.py`): sus
+Qwen necesita el parche de MPS (`python scripts/instalar_parches.py`): sus
 nodos escalan las referencias con `interpolate(mode="area")`, que en Metal exige
 que el tamaño de entrada sea divisible por el de salida y si no revienta con
 *"Adaptive pool MPS: input sizes must be divisible by output sizes"*. Sin el
@@ -410,7 +412,7 @@ nada. Eso viene del modelo y se ataca desde el prompt y el guion de secciones.
 ### El parche de `torch.multinomial` es obligatorio
 
 ```bash
-python scripts/instalar_parche_mps.py
+python scripts/instalar_parches.py
 ```
 
 Sin él, el muestreo del LM planificador devuelve tokens corruptos y la
@@ -444,9 +446,42 @@ pero es ~7× más lento (90 s de pista en ~410 s frente a 60 s).
 
 ## Modo i2v (image-to-video)
 
-Agnóstico al motor: apuntas `config.toml [i2v].workflow` a un workflow de ComfyUI **en formato API** que tú exportas y ajustas (LTX-Video, WAN, etc.). Requisitos del workflow:
+Agnóstico al motor: apuntas `config.toml [i2v].workflow` a un workflow de ComfyUI **en formato API** que tú exportas y ajustas (LTX, HunyuanVideo, WAN, etc.). Requisitos del workflow:
 
-- Incluir los placeholders `{IMAGE}` (nombre del archivo subido), `{PROMPT}` (prompt de la escena) y `{SEED}` en los valores de texto de sus nodos.
+- Incluir los placeholders `{IMAGE}` (nombre del archivo subido), `{PROMPT}` (prompt de la escena), `{SEED}` y `{FRAMES}` en los valores de sus nodos.
 - Terminar en un nodo que guarde video (`VHS_VideoCombine` o `SaveVideo`).
+
+El motor por defecto es **LTX-2.5** (22B destilado en GGUF Q4_0), que el
+2026-10-12 sustituyó a HunyuanVideo 1.5. Medido en el M3 Max con la misma
+imagen, prompt y semilla, en caliente y a 8 pasos:
+
+| motor | resolución | cuadros | tiempo |
+|---|---|---|---|
+| **LTX-2.5** | 480×864 | 25 | **90 s** |
+| **LTX-2.5** | 768×1376 | 25 | **213 s** |
+| HunyuanVideo 1.5 | 480×848 | 21 | 303 s |
+
+Se usa a 768×1376, que es la resolución de las imágenes de escena: cuesta menos
+que lo que tardaba Hunyuan a 480 y el armado tiene que estirar mucho menos para
+llegar a 1080×1920. Ninguna resolución, hasta 1 MP, llegó a paginar.
+
+Los ficheros van a `ComfyUI/models/`:
+
+    diffusion_models/  ltx-2.5-22b-distilled-transformer-Q4_0.gguf                 (12,51 GB, molbal/LTX-2.5-GGUF)
+    text_encoders/     gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors (15,37 GB, Lightricks/LTX-2.5)
+    vae/               ltx-2.5-video-vae-bf16.safetensors                          ( 1,47 GB, Lightricks/LTX-2.5)
+    vae/               ltx-2.5-audio-vae-bf16.safetensors                          ( 0,36 GB, Lightricks/LTX-2.5)
+
+El repo de Lightricks es *gated*: hay que aceptar la licencia con una cuenta de
+Hugging Face y hacer `hf auth login` antes de descargar. El text encoder es un
+**Gemma 4 12B**, más grande que el propio transformer.
+
+**Necesita el parche del GGUF** (`python scripts/instalar_parches.py`): el
+fichero de molbal trae `keyframes_abs_pos_embedding` cuantizado siendo un
+parámetro suelto, y sin dequantizarlo ComfyUI no carga el modelo.
+
+LTX genera también una pista de audio, porque es un modelo audio-vídeo. Loomcast
+no la usa: el ffmpeg que escala el clip ya pasa `-an` y la banda sonora sale de
+la voz y de `[musica]`.
 
 Por cada escena, Loomcast sube la imagen, ejecuta el workflow, interpola el clip con **RIFE** (`config.toml [i2v].fps_origen`→`fps_final`) y lo ajusta a la duración del segmento de voz. Luego el armado con movimiento superpone subtítulos y voz. RIFE usa `rife-ncnn-vulkan` (Fase 0) por GPU; ajusta su ruta en `config.toml [rife]`.
