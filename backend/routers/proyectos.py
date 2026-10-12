@@ -23,6 +23,15 @@ def listar():
     return proyectos_service.listar()
 
 
+@router.get("/motores-i2v")
+def motores_i2v():
+    # Declarada antes que /{pid} a propósito: si no, FastAPI casaría
+    # "motores-i2v" con el id del proyecto y respondería 422.
+    """Motores de image-to-video disponibles ([i2v.motores] de config.toml).
+    Alimenta el selector del paso de vídeo."""
+    return proyectos_service.motores_i2v()
+
+
 @router.get("/{pid}")
 def detalle(pid: int):
     try:
@@ -198,7 +207,7 @@ def generar_video(pid: int, body: VideoIn):
     """Genera el video en el modo pedido: 'estatico' (rápido) o 'kenburns'
     (con movimiento: cadena upscale → clips → armado)."""
     try:
-        return {"job_id": proyectos_service.generar_video(pid, body.modo)}
+        return {"job_id": proyectos_service.generar_video(pid, body.modo, body.motor)}
     except proyectos_service.ModoVideoInvalido:
         raise HTTPException(400, "Modo de video inválido")
 

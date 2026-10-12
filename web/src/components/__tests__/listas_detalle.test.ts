@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GaleriaDetalle } from "@/lib/galeria";
 import type { MusicaDetalle } from "@/lib/musica";
 import { currentTrack, isPlaying, registerAudio } from "@/lib/player";
+import * as proyectosApi from "@/lib/proyectos";
 import type { ProyectoDetalle } from "@/lib/proyectos";
 import ImageDetail from "../imagenes/ImageDetail.svelte";
 import ImageRow from "../imagenes/ImageRow.svelte";
@@ -279,7 +280,7 @@ describe("StepVideo", () => {
     render(StepVideo, { p: proy(), ...a });
     expect(screen.getByRole("radio", { name: /Ken Burns/ })).toBeChecked();
     await userEvent.click(screen.getByRole("button", { name: "Generar vídeo" }));
-    expect(a.ongenerar).toHaveBeenCalledWith("kenburns");
+    expect(a.ongenerar).toHaveBeenCalledWith("kenburns", "");
   });
 
   it("se puede cambiar de modo antes de generar", async () => {
@@ -287,7 +288,37 @@ describe("StepVideo", () => {
     render(StepVideo, { p: proy(), ...a });
     await userEvent.click(screen.getByRole("radio", { name: /Estático/ }));
     await userEvent.click(screen.getByRole("button", { name: "Generar vídeo" }));
-    expect(a.ongenerar).toHaveBeenCalledWith("estatico");
+    expect(a.ongenerar).toHaveBeenCalledWith("estatico", "");
+  });
+
+  it("en i2v aparece el selector de motor y se genera con el elegido", async () => {
+    const motores = [
+      { id: "ltx25", nombre: "LTX-2.5", frames: 25, fps_origen: 24, defecto: true },
+      { id: "hunyuan", nombre: "HunyuanVideo 1.5", frames: 21, fps_origen: 24, defecto: false },
+    ];
+    vi.spyOn(proyectosApi, "listarMotoresI2V").mockResolvedValue(motores);
+    const a = acciones();
+    render(StepVideo, { p: proy(), ...a });
+    await vi.waitFor(() => expect(proyectosApi.listarMotoresI2V).toHaveBeenCalled());
+
+    // Con un modo que no anima por IA el selector no pinta nada.
+    expect(screen.queryByRole("combobox")).toBeNull();
+
+    await userEvent.click(screen.getByRole("radio", { name: /Image-to-video/ }));
+    const selector = screen.getByRole("combobox");
+    await userEvent.selectOptions(selector, "hunyuan");
+    await userEvent.click(screen.getByRole("button", { name: "Generar vídeo" }));
+    expect(a.ongenerar).toHaveBeenCalledWith("i2v", "hunyuan");
+  });
+
+  it("si los motores no llegan, el paso sigue generando sin motor", async () => {
+    vi.spyOn(proyectosApi, "listarMotoresI2V").mockRejectedValue(new Error("sin backend"));
+    const a = acciones();
+    render(StepVideo, { p: proy(), ...a });
+    await userEvent.click(screen.getByRole("radio", { name: /Image-to-video/ }));
+    expect(screen.queryByRole("combobox")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Generar vídeo" }));
+    expect(a.ongenerar).toHaveBeenCalledWith("i2v", "");
   });
 
   it("ofrece los cuatro modos", () => {

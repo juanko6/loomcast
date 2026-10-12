@@ -21,12 +21,13 @@ def por_proyecto(s: Session, proyecto_id: int) -> list[Escena]:
 
 
 def anotar_clip(s: Session, proyecto_id: int, orden: int, modo: str,
-                segundos: float) -> None:
-    """Deja constancia de con qué modo y en cuánto tiempo se hizo un clip, para
-    que la UI pueda decir qué se está mirando cuando el video mezcla modos."""
+                segundos: float, motor: str = "") -> None:
+    """Deja constancia de con qué modo, con qué motor y en cuánto tiempo se hizo
+    un clip, para que la UI pueda decir qué se está mirando cuando el video
+    mezcla modos o motores. `motor` solo lo rellena el modo i2v."""
     for e in por_proyecto(s, proyecto_id):
         if e.orden == orden:
-            e.clip_modo, e.clip_s = modo, round(segundos, 1)
+            e.clip_modo, e.clip_s, e.clip_motor = modo, round(segundos, 1), motor
 
 
 def actualizar_prompts(s: Session, proyecto_id: int, prompts: dict[int, dict]) -> int:

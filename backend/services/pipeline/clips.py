@@ -58,13 +58,18 @@ def _ken_burns_vf(orden: int, frames: int) -> str:
 
 
 def pendientes_de_modo(clips_dir: Path, escenas: list[dict], modo: str,
-                       forzar: bool = False) -> list[dict]:
+                       forzar: bool = False, motor: str | None = None) -> list[dict]:
     """Escenas cuyo clip hay que (re)generar para el modo pedido.
 
     Hace falta si no existe el archivo o si el que hay se hizo con otro modo:
     así una tanda cortada a medias se reanuda, pero cambiar de modo nunca deja
     el video armado con clips del modo anterior. Los clips anteriores al
     registro de `clip_modo` cuentan como desconocidos y se rehacen.
+
+    Con `motor` (solo i2v) se aplica el mismo criterio al motor que hizo el
+    clip: cambiar de LTX a Hunyuan rehace la escena, y volver a pedir el mismo
+    motor la respeta. Los clips de antes de que se registrara el motor también
+    cuentan como desconocidos.
     """
     if forzar:
         return list(escenas)
@@ -72,6 +77,7 @@ def pendientes_de_modo(clips_dir: Path, escenas: list[dict], modo: str,
         e for e in escenas
         if not (clips_dir / f"{e['orden']:02d}.mp4").exists()
         or e.get("clip_modo") != modo
+        or (motor is not None and e.get("clip_motor") != motor)
     ]
 
 

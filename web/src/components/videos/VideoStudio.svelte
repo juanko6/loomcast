@@ -206,7 +206,8 @@
       tras(API.regenerarImagen(pid(), orden, nuevoSeed)),
     regenerarClip: (orden: number, modo: string) => tras(API.regenerarClip(pid(), orden, modo)),
     fijarModos: (e: { orden: number; modo: string }[]) => tras(API.fijarModos(pid(), e)),
-    generarVideo: (modo: string) => tras(API.generarVideo(pid(), modo)),
+    generarVideo: (modo: string, motor = "") =>
+      tras(API.generarVideo(pid(), modo, motor)),
     borrarVideo: async () => {
       const conVersiones = confirm(
         "¿Borrar el vídeo final?\n\nAceptar: borra también los montajes anteriores.\n" +

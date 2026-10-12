@@ -10,8 +10,7 @@ import httpx
 from ..config import (
     COMFY_TIMEOUT_S,
     COMFY_URL,
-    I2V_FRAMES,
-    I2V_WORKFLOW,
+    motor_i2v,
     IMAGEN_HEIGHT,
     IMAGEN_MOTOR_EDITAR,
     IMAGEN_MOTOR_GENERAR,
@@ -393,20 +392,27 @@ def upscale_imagen(origen: Path, destino: Path) -> None:
         _descargar_primera_imagen(c, entry, destino)
 
 
-def generar_video_i2v(imagen: Path, prompt: str, seed: int, destino: Path) -> None:
-    """Anima una imagen con el workflow i2v configurable (LTX, WAN, etc.).
+def generar_video_i2v(
+    imagen: Path, prompt: str, seed: int, destino: Path, motor: str | None = None
+) -> None:
+    """Anima una imagen con un motor i2v de [i2v.motores] y guarda el clip.
 
-    El workflow (config: [i2v].workflow) debe traer los placeholders {IMAGE},
-    {PROMPT}, {SEED} y {FRAMES} en cualquier valor de sus nodos. Los numéricos
-    ({SEED}, {FRAMES}) van entrecomillados en el JSON; ver `_render`.
+    El workflow del motor (LTX, HunyuanVideo, WAN…) debe traer los placeholders
+    {IMAGE}, {PROMPT}, {SEED} y {FRAMES}. Los numéricos ({SEED}, {FRAMES}) van
+    entrecomillados en el JSON; ver `_render`.
+
+    `motor` es un id de [i2v.motores] de config.toml; None usa [i2v].motor. Los
+    cuadros no son un parámetro: los pone el motor, porque cada modelo admite su
+    forma (4n+1 en Hunyuan y LTX) y pedirle los de otro sale caro o falla.
     """
-    wf_path = ROOT / I2V_WORKFLOW
+    m = motor_i2v(motor)
+    wf_path = ROOT / m.workflow
     if not wf_path.exists():
         raise ComfyError(
-            f"No existe el workflow i2v en {wf_path}. Exporta tu workflow de "
-            "ComfyUI en formato API con los placeholders {IMAGE}, {PROMPT}, "
-            "{SEED} y {FRAMES}, y ponlo en esa ruta (o ajusta config.toml "
-            "[i2v].workflow)."
+            f"No existe el workflow del motor i2v '{m.id}' en {wf_path}. "
+            "Exporta tu workflow de ComfyUI en formato API con los "
+            "placeholders {IMAGE}, {PROMPT}, {SEED} y {FRAMES}, y ponlo en esa "
+            "ruta (o ajusta config.toml [i2v.motores.*].workflow)."
         )
     with httpx.Client(timeout=30) as c:
         nombre = _subir_imagen(c, imagen)
@@ -415,7 +421,7 @@ def generar_video_i2v(imagen: Path, prompt: str, seed: int, destino: Path) -> No
             IMAGE=nombre,
             PROMPT=prompt,
             SEED=seed,
-            FRAMES=I2V_FRAMES,
+            FRAMES=m.frames,
         )
         entry = _encolar_y_esperar(c, wf)
         _descargar_primer_video(c, entry, destino)

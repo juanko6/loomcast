@@ -2,7 +2,14 @@
   import Button from "../../primitives/Button.svelte";
   import Icon from "../../primitives/Icon.svelte";
   import { media } from "@/lib/api";
-  import { MODOS_VIDEO, ETAPA_VIDEO, type ProyectoDetalle } from "@/lib/proyectos";
+  import { onMount } from "svelte";
+  import {
+    MODOS_VIDEO,
+    ETAPA_VIDEO,
+    listarMotoresI2V,
+    type MotorI2V,
+    type ProyectoDetalle,
+  } from "@/lib/proyectos";
 
   let {
     p,
@@ -17,7 +24,7 @@
     p: ProyectoDetalle;
     busy?: boolean;
     bust?: number;
-    ongenerar: (modo: string) => void;
+    ongenerar: (modo: string, motor: string) => void;
     onborrarvideo: () => void;
     onborrarversion: (nombre: string) => void;
     onborrarproyecto: () => void;
@@ -25,6 +32,22 @@
   } = $props();
 
   let modo = $state("kenburns");
+  // Motores i2v de config.toml. Solo se piden una vez y solo importan cuando el
+  // modo elegido anima con i2v.
+  let motores = $state<MotorI2V[]>([]);
+  let motor = $state("");
+  const conI2V = $derived(modo === "i2v" || modo === "mixto");
+
+  onMount(async () => {
+    // Si la lista no llega, el selector no aparece y se genera con el motor de
+    // config.toml: quedarse sin elegir motor no puede tumbar el paso entero.
+    try {
+      motores = await listarMotoresI2V();
+      motor = motores.find((m) => m.defecto)?.id ?? motores[0]?.id ?? "";
+    } catch {
+      motores = [];
+    }
+  });
   const etapa = $derived(p.job_activo ? ETAPA_VIDEO[p.job_activo] : null);
   const totalMb = $derived(p.versiones.reduce((a, v) => a + v.mb, 0).toFixed(0));
 </script>
@@ -46,8 +69,22 @@
     {/each}
   </fieldset>
 
+  {#if conI2V && motores.length > 1}
+    <label class="block space-y-1">
+      <span class="text-xs font-medium tracking-wide text-dim">Motor de movimiento</span>
+      <select class="control" bind:value={motor}>
+        {#each motores as m (m.id)}
+          <option value={m.id}>{m.nombre} · {m.frames} cuadros</option>
+        {/each}
+      </select>
+      <span class="block text-xs text-dim">
+        Las escenas que ya tengan clip hecho con otro motor se vuelven a generar.
+      </span>
+    </label>
+  {/if}
+
   <div class="flex flex-wrap items-center gap-3">
-    <Button disabled={busy} onclick={() => ongenerar(modo)}>
+    <Button disabled={busy} onclick={() => ongenerar(modo, conI2V ? motor : "")}>
       {p.video_disponible ? "Rehacer vídeo" : "Generar vídeo"}
     </Button>
     {#if etapa}

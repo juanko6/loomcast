@@ -6,7 +6,7 @@ cada uno y un mismo video puede mezclarlos.
 """
 import time
 
-from ...config import PROYECTOS_DIR
+from ...config import PROYECTOS_DIR, motor_i2v
 from ...db import get_session
 from ...repositories import escenas as escenas_repo
 from ...repositories import proyectos as proyectos_repo
@@ -30,18 +30,21 @@ def _imagen_para(base, orden: int, preferir_upscale: bool):
     return img
 
 
-def generar_clips_mixto(proyecto_id: int) -> str:
+def generar_clips_mixto(proyecto_id: int, motor: str = "") -> str:
     """Genera todos los clips respetando el modo elegido en cada escena.
 
     Es el 'generar todo' cuando el video mezcla modos: las escenas sin modo
     propio caen a Ken Burns. Reanudable como el resto: salta las que ya tienen
     su clip hecho con el modo que les toca.
+
+    `motor` es el motor i2v para las escenas que vayan en ese modo; las demás lo
+    ignoran.
     """
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)
         if p is None:
             raise ValueError(f"Proyecto {proyecto_id} no existe")
-        escenas = [(e.orden, e.modo or "kenburns", e.clip_modo)
+        escenas = [(e.orden, e.modo or "kenburns", e.clip_modo, e.clip_motor)
                    for e in escenas_repo.por_proyecto(s, proyecto_id)]
         slug = p.slug
 
@@ -49,15 +52,19 @@ def generar_clips_mixto(proyecto_id: int) -> str:
     # Se resuelve antes qué hay que rehacer para poder contar el lote sobre el
     # trabajo real: si el total fuese el de escenas, una tanda reanudada
     # empezaría la barra a media altura.
+    # Una escena i2v también se rehace si se pide con otro motor que el que
+    # tiene su clip, igual que si se cambiara de modo.
+    quiere = motor_i2v(motor or None).id
     pendientes = [
         (orden, modo)
-        for orden, modo, clip_modo in escenas
-        if not ((clips_dir / f"{orden:02d}.mp4").exists() and clip_modo == modo)
+        for orden, modo, clip_modo, clip_motor in escenas
+        if not ((clips_dir / f"{orden:02d}.mp4").exists() and clip_modo == modo
+                and (modo != "i2v" or clip_motor == quiere))
     ]
     hechas, cuenta = len(escenas) - len(pendientes), {}
     for i, (orden, modo) in enumerate(pendientes):
         progreso.lote(i, len(pendientes), "clip")
-        regenerar_clip(proyecto_id, orden, modo)
+        regenerar_clip(proyecto_id, orden, modo, motor=motor)
         cuenta[modo] = cuenta.get(modo, 0) + 1
 
     if not cuenta:
@@ -67,7 +74,8 @@ def generar_clips_mixto(proyecto_id: int) -> str:
     return f"Clips generados: {detalle}{saltadas}"
 
 
-def regenerar_clip(proyecto_id: int, orden: int, modo: str = "") -> str:
+def regenerar_clip(proyecto_id: int, orden: int, modo: str = "",
+                   motor: str = "") -> str:
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)
         if p is None:
@@ -92,10 +100,15 @@ def regenerar_clip(proyecto_id: int, orden: int, modo: str = "") -> str:
     salida = clips_dir / f"{orden:02d}.mp4"
 
     t0 = time.time()
+    # El motor solo tiene sentido en i2v; en los otros modos queda vacío para no
+    # dejar en la escena el rastro de un motor que no se ha usado.
+    motor_usado = ""
     if modo == "i2v":
+        motor_usado = motor_i2v(motor or None).id
         try:
             i2v_mod.clip_i2v(_imagen_para(base, orden, False), datos["prompt"],
-                             datos["seed"], datos["dur"], salida)
+                             datos["seed"], datos["dur"], salida,
+                             motor=motor_usado)
         finally:
             from ...clients import comfy
             comfy.liberar_memoria()
@@ -110,5 +123,8 @@ def regenerar_clip(proyecto_id: int, orden: int, modo: str = "") -> str:
         for x in escenas_repo.por_proyecto(s, proyecto_id):
             if x.orden == orden:
                 x.clip_modo, x.clip_s, x.modo = modo, round(tardo, 1), modo
+                x.clip_motor = motor_usado
         s.commit()
-    return f"Clip de la escena {orden + 1} regenerado en modo {modo} ({tardo:.0f}s)"
+    con = f" con {motor_i2v(motor_usado).nombre}" if motor_usado else ""
+    return (f"Clip de la escena {orden + 1} regenerado en modo {modo}"
+            f"{con} ({tardo:.0f}s)")

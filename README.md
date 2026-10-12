@@ -446,14 +446,27 @@ pero es ~7× más lento (90 s de pista en ~410 s frente a 60 s).
 
 ## Modo i2v (image-to-video)
 
-Agnóstico al motor: apuntas `config.toml [i2v].workflow` a un workflow de ComfyUI **en formato API** que tú exportas y ajustas (LTX, HunyuanVideo, WAN, etc.). Requisitos del workflow:
+Agnóstico al motor: cada uno se declara en `config.toml [i2v.motores.*]`
+apuntando a un workflow de ComfyUI **en formato API** que tú exportas y ajustas
+(LTX, HunyuanVideo, WAN, etc.). Requisitos del workflow:
 
 - Incluir los placeholders `{IMAGE}` (nombre del archivo subido), `{PROMPT}` (prompt de la escena), `{SEED}` y `{FRAMES}` en los valores de sus nodos.
 - Terminar en un nodo que guarde video (`VHS_VideoCombine` o `SaveVideo`).
 
-El motor por defecto es **LTX-2.5** (22B destilado en GGUF Q4_0), que el
-2026-10-12 sustituyó a HunyuanVideo 1.5. Medido en el M3 Max con la misma
-imagen, prompt y semilla, en caliente y a 8 pasos:
+`frames` y `fps_origen` van **en cada motor**, no en `[i2v]`: son propiedad del
+modelo. Pedirle a Hunyuan los 25 cuadros de LTX le costaría ~360 s por escena en
+vez de 303, y un modelo que entregue a 16 fps cambiaría lo que interpola RIFE.
+
+**El motor se elige en el paso de vídeo**, junto al modo; `[i2v].motor` fija cuál
+viene preseleccionado. Cada escena guarda en qué motor se hizo su clip, así que
+cambiar de motor rehace las escenas afectadas y volver al anterior las respeta,
+igual que ya pasaba al cambiar de modo. Los clips anteriores a que se registrara
+el motor cuentan como desconocidos y se rehacen.
+
+Vienen declarados dos. El preseleccionado es **LTX-2.5** (22B destilado en GGUF
+Q4_0), que el 2026-10-12 sustituyó a HunyuanVideo 1.5 como motor por defecto.
+Medido en el M3 Max con la misma imagen, prompt y semilla, en caliente y a 8
+pasos:
 
 | motor | resolución | cuadros | tiempo |
 |---|---|---|---|
@@ -461,9 +474,15 @@ imagen, prompt y semilla, en caliente y a 8 pasos:
 | **LTX-2.5** | 768×1376 | 25 | **213 s** |
 | HunyuanVideo 1.5 | 480×848 | 21 | 303 s |
 
-Se usa a 768×1376, que es la resolución de las imágenes de escena: cuesta menos
-que lo que tardaba Hunyuan a 480 y el armado tiene que estirar mucho menos para
-llegar a 1080×1920. Ninguna resolución, hasta 1 MP, llegó a paginar.
+LTX se usa a 768×1376, que es la resolución de las imágenes de escena: cuesta
+menos que lo que tardaba Hunyuan a 480 y el armado tiene que estirar mucho menos
+para llegar a 1080×1920. Ninguna resolución, hasta 1 MP, llegó a paginar. Para
+cambiarla, el nodo `ResolutionSelector` del workflow.
+
+**Hunyuan sigue disponible** como segundo motor: es más rápido a resoluciones
+bajas, y tenerlo permite comparar movimiento escena a escena sin tocar ficheros.
+Su text encoder tiene que ser el fp16, no el fp8_scaled: Metal no implementa
+`Float8_e4m3fn`.
 
 Los ficheros van a `ComfyUI/models/`:
 

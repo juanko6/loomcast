@@ -4,7 +4,7 @@ import random
 import shutil
 from datetime import datetime
 
-from ..config import PROYECTOS_DIR
+from ..config import I2V_MOTOR, I2V_MOTORES, PROYECTOS_DIR
 from ..db import get_session
 from ..models import avanzar_estado
 from ..repositories import escenas as escenas_repo
@@ -421,7 +421,20 @@ class ModoVideoInvalido(ValueError):
     pass
 
 
-def generar_video(pid: int, modo: str) -> int:
+def generar_video(pid: int, modo: str, motor: str = "") -> int:
     if modo not in MODOS_VIDEO:
         raise ModoVideoInvalido(modo)
-    return queue.encolar(MODOS_VIDEO[modo], pid)
+    # El motor solo llega a los modos que animan con i2v; a los demás les
+    # sobraría como kwarg y el handler lo rechazaría.
+    extra = {"motor": motor} if motor and modo in ("i2v", "mixto") else {}
+    return queue.encolar(MODOS_VIDEO[modo], pid, **extra)
+
+
+def motores_i2v() -> list[dict]:
+    """Motores de [i2v.motores] para el selector de la UI, con el que viene
+    preseleccionado marcado."""
+    return [
+        {"id": m.id, "nombre": m.nombre, "frames": m.frames,
+         "fps_origen": m.fps_origen, "defecto": m.id == I2V_MOTOR}
+        for m in I2V_MOTORES.values()
+    ]

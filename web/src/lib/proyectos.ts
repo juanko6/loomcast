@@ -181,8 +181,25 @@ export const regenerarClip = (id: number, orden: number, modo: string) =>
     body: { modo },
   });
 
-export const generarVideo = (id: number, modo: string) =>
-  api<{ job_id: number }>(`/proyectos/${id}/video`, { method: "POST", body: { modo } });
+// `motor` solo lo miran los modos que animan con i2v; vacío = el de
+// [i2v].motor en config.toml.
+export const generarVideo = (id: number, modo: string, motor = "") =>
+  api<{ job_id: number }>(`/proyectos/${id}/video`, {
+    method: "POST",
+    body: { modo, motor },
+  });
+
+// Un motor de [i2v.motores] de config.toml.
+export type MotorI2V = {
+  id: string;
+  nombre: string;
+  frames: number;
+  fps_origen: number;
+  defecto: boolean;
+};
+
+export const listarMotoresI2V = () =>
+  api<MotorI2V[]>("/proyectos/motores-i2v");
 export const borrarVideo = (id: number, conVersiones: boolean) =>
   api<{ final: number; versiones: number }>(
     `/proyectos/${id}/video?con_versiones=${conVersiones}`,
@@ -225,7 +242,7 @@ export const MODOS_VIDEO = [
   {
     id: "i2v",
     nombre: "Image-to-video (movimiento IA)",
-    desc: "Anima cada escena con el workflow i2v de ComfyUI + RIFE a 60fps. Lo más vistoso y lo más lento.",
+    desc: "Anima cada escena con el motor i2v elegido + RIFE a 60fps. Lo más vistoso y lo más lento.",
   },
   {
     id: "mixto",

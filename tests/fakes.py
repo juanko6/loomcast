@@ -89,8 +89,9 @@ class FakeComfy:
         self._reg("upscale_imagen", origen=origen, destino=destino)
         _png(Path(destino), (32, 32))
 
-    def generar_video_i2v(self, imagen, prompt, seed, destino):
+    def generar_video_i2v(self, imagen, prompt, seed, destino, motor=None):
         self._reg("generar_video_i2v", imagen=imagen, prompt=prompt, seed=seed,
+                  motor=motor,
                   destino=destino)
         _bytes(Path(destino), b"fake-mp4")
 

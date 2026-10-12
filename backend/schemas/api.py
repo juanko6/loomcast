@@ -91,7 +91,10 @@ class ModosEscenasIn(BaseModel):
 
 
 class VideoIn(BaseModel):
-    modo: str = "kenburns"  # estatico | kenburns
+    modo: str = "kenburns"  # estatico | kenburns | i2v | mixto
+    # Motor i2v ([i2v.motores] de config.toml). Vacío = el de [i2v].motor. Solo
+    # lo miran los modos que generan i2v.
+    motor: str = ""
 
 
 class GaleriaGenerarIn(BaseModel):

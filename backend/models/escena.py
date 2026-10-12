@@ -32,6 +32,10 @@ class Escena(Base):
     # Modo con el que se generó el clip que hay ahora en clips/, para saber qué
     # se está mirando cuando el video mezcla modos.
     clip_modo: Mapped[str] = mapped_column(default="")
+    # Motor i2v con el que se generó ese clip (id de [i2v.motores]). Solo tiene
+    # valor en clips de modo i2v; sirve para rehacer la escena si se cambia de
+    # motor y para saber cuál se está viendo cuando se comparan.
+    clip_motor: Mapped[str] = mapped_column(default="")
     # Duración del último render, en segundos (0 = nunca medido).
     imagen_s: Mapped[float] = mapped_column(default=0.0)
     clip_s: Mapped[float] = mapped_column(default=0.0)

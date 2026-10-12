@@ -83,11 +83,55 @@ VIDEO_BITRATE_MBPS: int = _video.get("bitrate_mbps", 12)
 VIDEO_CRF: int = _video.get("crf", 18)
 VIDEO_COLA_FINAL_S: float = _video.get("cola_final_s", 1.5)
 
+@dataclass(frozen=True)
+class MotorI2V:
+    """Un motor de image-to-video declarado en [i2v.motores.*] de config.toml.
+
+    `frames` y `fps_origen` viajan con el motor y no en [i2v] porque son
+    propiedad del modelo: cada uno admite una forma de cuadros (HunyuanVideo y
+    LTX quieren 4n+1) y entrega a su cadencia, que es la que determina cuánto
+    tiene que interpolar RIFE.
+    """
+
+    id: str
+    nombre: str
+    workflow: str
+    frames: int
+    fps_origen: int
+
+
 _i2v = _cfg.get("i2v", {})
-I2V_WORKFLOW: str = _i2v.get("workflow", "workflows/i2v_api.json")
-I2V_FRAMES: int = _i2v.get("frames", 21)
-I2V_FPS_ORIGEN: int = _i2v.get("fps_origen", 24)
+I2V_MOTORES: dict[str, MotorI2V] = {
+    id_: MotorI2V(
+        id=id_,
+        nombre=bruto.get("nombre", id_),
+        workflow=bruto["workflow"],
+        frames=int(bruto.get("frames", 21)),
+        fps_origen=int(bruto.get("fps_origen", 24)),
+    )
+    for id_, bruto in _i2v.get("motores", {}).items()
+}
+if not I2V_MOTORES:
+    raise ValueError("config.toml no declara ningún [i2v.motores.*]")
+
+I2V_MOTOR: str = _i2v.get("motor", next(iter(I2V_MOTORES)))
+if I2V_MOTOR not in I2V_MOTORES:
+    raise ValueError(
+        f"[i2v].motor = '{I2V_MOTOR}' no existe. "
+        f"Motores declarados: {sorted(I2V_MOTORES)}"
+    )
+
 I2V_FPS_FINAL: int = _i2v.get("fps_final", 48)
+
+
+def motor_i2v(id_: str | None = None) -> MotorI2V:
+    """El motor i2v pedido, o el de [i2v].motor si no se pide ninguno."""
+    motor = I2V_MOTORES.get(id_ or I2V_MOTOR)
+    if motor is None:
+        raise ValueError(
+            f"No existe el motor i2v '{id_}'. Declarados: {sorted(I2V_MOTORES)}"
+        )
+    return motor
 
 _rife = _cfg.get("rife", {})
 RIFE_BIN: str = _rife.get("bin", "tools/rife-ncnn-vulkan-20221029-macos/rife-ncnn-vulkan")

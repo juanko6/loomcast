@@ -171,7 +171,15 @@ describe("proyectos", () => {
 
   it("vídeo y versiones", async () => {
     await p.generarVideo(1, "estatico");
-    expect(ultima()).toEqual(["/proyectos/1/video", { method: "POST", body: { modo: "estatico" } }]);
+    expect(ultima()).toEqual([
+      "/proyectos/1/video",
+      { method: "POST", body: { modo: "estatico", motor: "" } },
+    ]);
+    await p.generarVideo(1, "i2v", "hunyuan");
+    expect(ultima()).toEqual([
+      "/proyectos/1/video",
+      { method: "POST", body: { modo: "i2v", motor: "hunyuan" } },
+    ]);
     await p.borrarVideo(1, true);
     expect(ultima()).toEqual(["/proyectos/1/video?con_versiones=true", { method: "DELETE" }]);
     await p.borrarVideo(1, false);

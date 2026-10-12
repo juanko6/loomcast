@@ -166,42 +166,63 @@ crf = 18
 cola_final_s = 1.5
 
 [i2v]
-# Modo image-to-video (movimiento generado por IA). Agnóstico al motor: apunta
-# a un workflow de ComfyUI en formato API que TÚ exportas y ajustas (LTX-Video,
-# HunyuanVideo, WAN, etc.). El workflow debe incluir los placeholders {IMAGE},
-# {PROMPT}, {SEED} y {FRAMES}, y un nodo que guarde el video
+# Modo image-to-video (movimiento generado por IA). Agnóstico al motor: cada uno
+# se declara en [i2v.motores.*] apuntando a un workflow de ComfyUI en formato
+# API que TÚ exportas y ajustas. El workflow debe incluir los placeholders
+# {IMAGE}, {PROMPT}, {SEED} y {FRAMES}, y un nodo que guarde el video
 # (VHS_VideoCombine / SaveVideo).
 #
-# El motor es LTX-2.5 (22B destilado, GGUF Q4_0). Sustituyó a HunyuanVideo 1.5
-# el 2026-10-12 tras medir los dos en el M3 Max con la misma imagen, prompt y
+# `frames` y `fps_origen` van en cada motor, no aquí: son propiedad del modelo.
+# Pedirle a Hunyuan los 25 cuadros de LTX le costaría ~360 s por escena en vez
+# de 303, y un modelo que entregue a 16 fps cambiaría lo que interpola RIFE.
+#
+# Motor que se preselecciona en el paso de vídeo; en la UI se puede cambiar
+# antes de generar, y cada escena guarda con cuál se hizo su clip.
+motor = "ltx25"
+# fps de los clips i2v tras la interpolación. Este sí es global: es el ritmo al
+# que el armado concatena los clips, así que cualquier otro valor obliga a
+# ffmpeg a duplicar cuadros al final. RIFE genera los que hagan falta sin coste.
+fps_final = 60
+
+[i2v.motores.ltx25]
+# LTX-2.5 (22B destilado, GGUF Q4_0). Sustituyó a HunyuanVideo 1.5 el
+# 2026-10-12 tras medir los dos en el M3 Max con la misma imagen, prompt y
 # semilla, en caliente y a 8 pasos:
 #
-#   HunyuanVideo 1.5   480x848, 21 cuadros ..... 303 s
-#   LTX-2.5            480x864, 25 cuadros ......  90 s
+#   LTX-2.5            480x864,  25 cuadros ......  90 s
 #   LTX-2.5            768x1376, 25 cuadros ..... 213 s
+#   HunyuanVideo 1.5   480x848,  21 cuadros ..... 303 s
 #
-# O sea que LTX genera a la resolución de las imágenes de escena por menos
-# tiempo del que Hunyuan tardaba a 480, lo que además recorta el estirado que
-# hace el armado para llegar a 1080x1920. Ninguna de las resoluciones paginó.
+# Va a 768x1376, la resolución de las imágenes de escena: cuesta menos que lo
+# que tardaba Hunyuan a 480 y el armado tiene que estirar mucho menos para
+# llegar a 1080x1920. Ninguna resolución, hasta 1 MP, llegó a paginar. Para
+# cambiarla, el nodo ResolutionSelector del workflow.
 #
 # Necesita el parche del GGUF (`python scripts/instalar_parches.py`): el fichero
 # de molbal trae `keyframes_abs_pos_embedding` cuantizado siendo un parámetro
 # suelto, y sin dequantizarlo ComfyUI no carga el modelo.
 #
-# LTX genera también una pista de audio (es un modelo audio-vídeo). Loomcast no
-# la usa: el ffmpeg que escala el clip ya pasa -an, y la banda sonora sale de la
-# voz y de [musica].
+# Genera también una pista de audio (es un modelo audio-vídeo) que Loomcast no
+# usa: el ffmpeg que escala el clip ya pasa -an.
+nombre = "LTX-2.5"
 workflow = "workflows/i2v_ltx25_api.json"
-# Cuadros que genera el modelo i2v por escena (placeholder {FRAMES} del
-# workflow). Más cuadros = más recorrido de movimiento y menos estiramiento de
-# RIFE. LTX-2.5 los quiere de la forma 4n+1: 21, 25, 29…
+# Cuadros por escena ({FRAMES} del workflow). Más cuadros = más recorrido de
+# movimiento y menos estiramiento de RIFE. LTX los quiere de la forma 4n+1.
 frames = 25
-# fps que produce tu modelo i2v (para saber cuánto interpola RIFE).
 fps_origen = 24
-# fps de los clips i2v tras la interpolación. Déjalo en 60: es el ritmo al que
-# el armado concatena los clips, así que cualquier otro valor obliga a ffmpeg a
-# duplicar cuadros al final. RIFE genera los que hagan falta sin coste extra.
-fps_final = 60
+
+[i2v.motores.hunyuan]
+# HunyuanVideo 1.5 GGUF Q8, el motor anterior. Se mantiene porque es más rápido
+# a resoluciones bajas si alguna vez prefieres tiempo sobre nitidez, y para
+# poder comparar movimiento escena a escena.
+#
+# Su text encoder tiene que ser el fp16, no el fp8_scaled: Metal no implementa
+# Float8_e4m3fn.
+nombre = "HunyuanVideo 1.5"
+workflow = "workflows/i2v_api.json"
+# HunyuanVideo exige la forma 4n+1: 13, 17, 21, 25…
+frames = 21
+fps_origen = 24
 
 [rife]
 # rife-ncnn-vulkan (descargado en Fase 0). Corre en GPU vía Vulkan/MoltenVK.

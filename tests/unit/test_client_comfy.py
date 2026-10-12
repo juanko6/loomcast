@@ -315,9 +315,39 @@ def test_upscale_imagen_sube_el_origen_y_descarga(http_mock, tmp_path):
 
 
 def test_generar_video_i2v_sin_workflow_da_error_claro(tmp_path, monkeypatch):
-    monkeypatch.setattr(comfy, "I2V_WORKFLOW", "no/existe.json")
-    with pytest.raises(ComfyError, match="No existe el workflow i2v"):
+    from backend.config import MotorI2V
+
+    monkeypatch.setattr(
+        comfy, "motor_i2v",
+        lambda _=None: MotorI2V(id="roto", nombre="Roto",
+                                workflow="no/existe.json", frames=21, fps_origen=24),
+    )
+    with pytest.raises(ComfyError, match="No existe el workflow del motor i2v 'roto'"):
         comfy.generar_video_i2v(tmp_path / "a.png", "p", 1, tmp_path / "v.mp4")
+
+
+def test_generar_video_i2v_usa_los_cuadros_del_motor(tmp_path, monkeypatch):
+    """Los cuadros los pone el motor, no quien llama: cada modelo admite su
+    forma y pedirle los de otro sale caro o falla."""
+    from backend.config import MotorI2V
+
+    wf = tmp_path / "wf.json"
+    wf.write_text('{"n": {"class_type": "X", "inputs": {"f": "{FRAMES}", '
+                  '"i": "{IMAGE}", "p": "{PROMPT}", "s": "{SEED}"}}}')
+    monkeypatch.setattr(
+        comfy, "motor_i2v",
+        lambda _=None: MotorI2V(id="m", nombre="M", workflow=str(wf.relative_to(comfy.ROOT))
+                                if str(wf).startswith(str(comfy.ROOT)) else str(wf),
+                                frames=17, fps_origen=24),
+    )
+    enviados = {}
+    monkeypatch.setattr(comfy, "_subir_imagen", lambda c, p: "img.png")
+    monkeypatch.setattr(comfy, "_encolar_y_esperar",
+                        lambda c, wf: enviados.update(wf) or {"outputs": {}})
+    monkeypatch.setattr(comfy, "_descargar_primer_video", lambda c, e, d: None)
+
+    comfy.generar_video_i2v(tmp_path / "a.png", "p", 1, tmp_path / "v.mp4")
+    assert enviados["n"]["inputs"]["f"] == 17
 
 
 def test_generar_musica_sin_workflow_da_error_claro(tmp_path, monkeypatch):

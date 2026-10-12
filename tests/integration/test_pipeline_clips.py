@@ -42,8 +42,8 @@ def ffmpeg_falso(monkeypatch):
         hechos.append(("estatico", imagen.parent.name, dur))
         salida.write_bytes(b"clip")
 
-    def ia(imagen, prompt, seed, dur, salida):
-        hechos.append(("i2v", imagen.parent.name, prompt))
+    def ia(imagen, prompt, seed, dur, salida, motor=None):
+        hechos.append(("i2v", imagen.parent.name, prompt, motor))
         salida.write_bytes(b"clip")
 
     monkeypatch.setattr(clips, "clip_ken_burns", kb)
@@ -129,12 +129,38 @@ def test_generar_i2v_cae_al_prompt_visual_si_no_hay_de_movimiento(session, proy,
 def test_generar_i2v_salta_lo_hecho_y_distingue_el_modo(session, proy, dirs_tmp, ffmpeg_falso, fake_comfy):
     _poner(dirs_tmp, "imagenes", [0, 1, 2], "png")
     _poner(dirs_tmp, "clips", [0, 1], "mp4")
-    escenas_repo.anotar_clip(session, proy, 0, "i2v", 1)
+    escenas_repo.anotar_clip(session, proy, 0, "i2v", 1, motor="ltx25")
     escenas_repo.anotar_clip(session, proy, 1, "kenburns", 1)  # otro modo: se rehace
     session.commit()
     log = i2v.generar_i2v(proy)
     assert "2 clips i2v" in log and "(1 ya estaban)" in log
     assert i2v.generar_i2v(proy).startswith("3 clips i2v ya estaban")
+
+
+def test_generar_i2v_rehace_lo_hecho_con_otro_motor(session, proy, dirs_tmp, ffmpeg_falso, fake_comfy):
+    _poner(dirs_tmp, "imagenes", [0, 1, 2], "png")
+    _poner(dirs_tmp, "clips", [0, 1, 2], "mp4")
+    for orden in (0, 1, 2):
+        escenas_repo.anotar_clip(session, proy, orden, "i2v", 1, motor="ltx25")
+    session.commit()
+
+    # Mismo motor: no hay nada que hacer.
+    assert i2v.generar_i2v(proy, motor="ltx25").startswith("3 clips i2v ya estaban")
+    # Otro motor: se rehacen las tres, y el log dice con cuál.
+    log = i2v.generar_i2v(proy, motor="hunyuan")
+    assert "3 clips i2v con HunyuanVideo 1.5" in log
+    assert {h[3] for h in ffmpeg_falso if h[0] == "i2v"} == {"hunyuan"}
+
+
+def test_generar_i2v_sin_motor_registrado_rehace(session, proy, dirs_tmp, ffmpeg_falso, fake_comfy):
+    """Los clips de antes de que se registrara el motor cuentan como
+    desconocidos: si no, un vídeo viejo se armaría mezclando motores."""
+    _poner(dirs_tmp, "imagenes", [0, 1, 2], "png")
+    _poner(dirs_tmp, "clips", [0, 1, 2], "mp4")
+    for orden in (0, 1, 2):
+        escenas_repo.anotar_clip(session, proy, orden, "i2v", 1)  # sin motor
+    session.commit()
+    assert "3 clips i2v" in i2v.generar_i2v(proy)
 
 
 def test_i2v_error_libera_memoria_y_no_avanza(session, proy, dirs_tmp, fake_comfy, monkeypatch):
