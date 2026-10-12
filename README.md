@@ -308,6 +308,13 @@ Loomcast manda por defecto responde un 404 (*Repository Not Found for url:
 .../models/local*). llama.cpp, en cambio, ignora el campo y usa el modelo que ya
 tiene cargado.
 
+Los repos `-MTP-` de mlx-community **no se sirven sueltos**: son el *drafter* de
+decodificación especulativa, el equivalente al `--model-draft` de llama.cpp, y
+van en `--draft-model`. A día de hoy mlx-lm no los carga de ninguna de las dos
+formas (*Model type qwen3_5_mtp not supported*); el soporte está en el PR #990,
+todavía abierto, así que de MLX solo se declaran las variantes normales y el
+35B A3B con MTP va por llama.cpp.
+
 Un script que empiece pidiendo `sudo` (por ejemplo `sudo sysctl
 iogpu.wired_limit_mb=...`) no sirve para arranque automático: Loomcast no puede
 responder a la petición de contraseña. Declara ese modelo sin `comando` y
