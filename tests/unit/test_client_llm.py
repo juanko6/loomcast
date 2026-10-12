@@ -18,6 +18,15 @@ def _respuesta(contenido: str, status: int = 200) -> httpx.Response:
     )
 
 
+def _cortada(contenido: str) -> httpx.Response:
+    """Lo que devuelve el servidor cuando se agotan los max_tokens."""
+    return httpx.Response(
+        200,
+        json={"choices": [{"message": {"content": contenido},
+                           "finish_reason": "length"}]},
+    )
+
+
 # --- _extract_json ----------------------------------------------------------
 
 @pytest.mark.parametrize("texto,esperado", [
@@ -66,6 +75,30 @@ def test_chat_reintenta_sin_schema_si_el_servidor_lo_rechaza(http_mock):
     assert llm.chat("s", "u", Salida).titulo == "ok"
     assert len(vistas) == 2
     assert "response_format" not in json.loads(vistas[1].content)
+
+
+def test_chat_respuesta_cortada_lo_dice_en_vez_de_culpar_al_json(http_mock):
+    """Un guion que no cabe en max_tokens llega como JSON a medias. Sin mirar
+    finish_reason el error sale como "JSON inválido" y parece que el modelo
+    escribe mal, cuando lo que hay que tocar es max_tokens."""
+    http_mock(lambda r: _cortada('{"titulo": "a med'))
+
+    with pytest.raises(llm.LLMTruncado) as e:
+        llm.chat("s", "u", Salida)
+
+    assert "sin tokens" in str(e.value)
+    assert "max_tokens" in str(e.value)
+    assert "a med" in str(e.value)  # dice por dónde se quedó
+
+
+def test_chat_no_reintenta_si_la_respuesta_vino_cortada(http_mock):
+    """Reintentar sin schema daría el mismo corte y doblaría la espera."""
+    vistas = http_mock(lambda r: _cortada('{"titulo": "a med'))
+
+    with pytest.raises(llm.LLMTruncado):
+        llm.chat("s", "u", Salida)
+
+    assert len(vistas) == 1
 
 
 def test_chat_error_en_ambos_intentos_lanza_llmerror(http_mock):

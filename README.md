@@ -24,7 +24,7 @@ Ver [PLAN.md](PLAN.md) para la arquitectura completa y [fase0/RESULTADOS.md](fas
 - macOS con Apple Silicon (desarrollado en M3 Max / 48 GB)
 - Python 3.12
 - Node 20+ y pnpm (solo para compilar el frontend)
-- [llama.cpp](https://github.com/ggml-org/llama.cpp) (`llama-server`) con un modelo instruct en español
+- Un servidor de LLM con API de OpenAI y un modelo instruct en español: [llama.cpp](https://github.com/ggml-org/llama.cpp) (`llama-server`) o [MLX](https://github.com/ml-explore/mlx-lm) (`mlx_lm.server`)
 - [ComfyUI](https://github.com/comfyanonymous/ComfyUI), con los modelos de lo que vayas a usar:
   - **imágenes**: Z-Image-Turbo (bf16) + VAE `ae.safetensors` + text encoder `qwen_3_4b`; opcionalmente Qwen-Image-Edit 2511 y FLUX.2 Klein (ver "Imágenes")
   - **música**: ACE-Step 1.5 XL Turbo (ver "Música")
@@ -290,12 +290,36 @@ url = "http://127.0.0.1:9876"
 
 El script se ejecuta tal cual (con `sh`, desde la raíz del proyecto) y **debe quedarse en primer plano**, sin `&` ni `nohup`, para que Loomcast pueda pararlo; su salida va a `logs/llm-<id>.log`. El sampling, el contexto y el reasoning siguen siendo cosa tuya: Loomcast solo lo arranca y lo para.
 
+No tiene que ser llama.cpp: vale cualquier servidor con API de OpenAI. Con
+**MLX** (`mlx_lm.server`), el `comando` lleva el modelo y el puerto:
+
+```toml
+[[llm.modelos]]
+id = "mlx-qwen38-27b"
+nombre = "Qwen3.8 27B (MLX)"
+comando = "~/Models/mlx/venv/bin/mlx_lm.server --model mlx-community/Qwen3.8-27B-4bit --port 9876"
+url = "http://127.0.0.1:9876"
+model = "mlx-community/Qwen3.8-27B-4bit"
+```
+
+**El `model` es obligatorio ahí.** `mlx_lm.server` trata ese campo como un repo
+de Hugging Face y se lo descarga si no lo tiene, así que con el `"local"` que
+Loomcast manda por defecto responde un 404 (*Repository Not Found for url:
+.../models/local*). llama.cpp, en cambio, ignora el campo y usa el modelo que ya
+tiene cargado.
+
+Un script que empiece pidiendo `sudo` (por ejemplo `sudo sysctl
+iogpu.wired_limit_mb=...`) no sirve para arranque automático: Loomcast no puede
+responder a la petición de contraseña. Declara ese modelo sin `comando` y
+levántalo tú.
+
 - **Selector en la cabecera**: elige cuál de tus modelos se usa. Se guarda en la BD y el relevo (parar uno, arrancar otro) ocurre solo. Con un único modelo declarado el desplegable no aparece.
 - **Semáforo LLM**: verde = cargado; **ámbar = descargado a propósito**, se carga solo en la siguiente etapa de texto; rojo = declarado como externo y no responde.
 - **Modelo sin `comando`**: externo. Lo levantas tú y Loomcast no lo toca, como siempre. Lo mismo si pones `autostart = false`.
 - Si encuentra un llama-server ya escuchando en la url del modelo, lo **adopta** en vez de arrancar otro, y no lo para al terminar: puede ser tuyo.
 - Si Loomcast muere de golpe (SIGKILL, cuelgue), al volver a arrancar **recupera la RAM** del llama-server que dejó huérfano (`logs/llm.pid`).
 - `inactividad_s` descarga el modelo tras un rato sin usarse, aunque no haya llegado ninguna etapa de GPU.
+- `max_tokens` ([llm] o por modelo) tiene que dar para la etapa más larga, que es el guion. Si se queda corto, la respuesta llega cortada a media frase y Loomcast lo dice tal cual, con el valor que había y por dónde se quedó.
 
 ## Banco de voces
 

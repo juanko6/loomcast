@@ -55,11 +55,30 @@ def _extract_json(text: str) -> dict | list:
         raise LLMError(f"JSON inválido del modelo: {text[:300]}")
 
 
+class LLMTruncado(LLMError):
+    """La respuesta se cortó por el límite de tokens, no por estar mal.
+
+    Se distingue del resto porque el arreglo es otro: subir `max_tokens` en
+    config.toml, no cambiar de modelo ni tocar el prompt. Sin esto, un guion
+    largo acaba como "JSON inválido del modelo" y parece que el modelo escribe
+    mal cuando lo que pasa es que no le dejaron terminar.
+    """
+
+
 def _completar(client: httpx.Client, url: str, body: dict) -> str:
     r = client.post(f"{url}/v1/chat/completions", json=body)
     if r.status_code >= 400:
-        raise LLMError(f"llama-server respondió {r.status_code}: {r.text[:300]}")
-    return r.json()["choices"][0]["message"]["content"]
+        raise LLMError(f"El servidor del LLM respondió {r.status_code}: {r.text[:300]}")
+    eleccion = r.json()["choices"][0]
+    contenido = eleccion["message"]["content"]
+    if eleccion.get("finish_reason") == "length":
+        raise LLMTruncado(
+            f"El modelo se quedó sin tokens a mitad de la respuesta "
+            f"(max_tokens = {body.get('max_tokens')}). Súbelo en config.toml, "
+            f"en [llm] o en el modelo. Lo que alcanzó a escribir: "
+            f"{contenido[-200:]}"
+        )
+    return contenido
 
 
 def chat(system: str, user: str, salida: type[T]) -> T:
@@ -97,6 +116,9 @@ def chat(system: str, user: str, salida: type[T]) -> T:
         }
         try:
             contenido = _completar(client, m.url, con_schema)
+        except LLMTruncado:
+            # Reintentar sin schema daría exactamente el mismo corte.
+            raise
         except LLMError:
             contenido = _completar(client, m.url, base)
 
