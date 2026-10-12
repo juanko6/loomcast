@@ -54,7 +54,21 @@ en su sección, y el script los enlaza todos:
 
 ## Arranque diario
 
-Dos procesos, cada uno en su terminal, en este orden.
+Todo de una vez, con los logs de cada servicio entremezclados y prefijados, y
+Ctrl+C para pararlo todo de forma ordenada:
+
+```bash
+scripts/run-loomcast.sh
+```
+
+Admite `--lan` (accesible desde la red local), `--dev` (añade Astro en 4321 con
+recarga en caliente; entonces la UI buena es esa) y `--sin-comfy` (si ya llevas
+ComfyUI por tu cuenta). Si ComfyUI ya escucha en su puerto, lo reutiliza en vez
+de levantar otro, y avisa si no ve cargados los parches de `custom_nodes/`. Da
+por hecho que ComfyUI está en `~/Documents/ComfyUI`; con otra ruta,
+`COMFY_DIR=/donde/sea scripts/run-loomcast.sh`. Con `--ayuda` lo resume todo.
+
+A mano son dos procesos, cada uno en su terminal, en este orden.
 
 **1. ComfyUI** (puerto 8188), que es quien genera imágenes, vídeo y música:
 
