@@ -139,33 +139,23 @@ url = "http://127.0.0.1:9876"
 #
 # Los pesos están en ~/.cache/huggingface; `mlx_lm.server --model` los carga de
 # ahí sin volver a descargarlos.
-[[llm.modelos]]
-id = "mlx-qwen38-27b"
-nombre = "Qwen3.8 27B (MLX)"
-comando = "~/Models/mlx/venv/bin/mlx_lm.server --model mlx-community/Qwen3.8-27B-4bit --port 9876"
-url = "http://127.0.0.1:9876"
-model = "mlx-community/Qwen3.8-27B-4bit"
-
-[[llm.modelos]]
-id = "mlx-qwen38-27b-mtp"
-nombre = "Qwen3.8 27B MTP (MLX)"
-comando = "~/Models/mlx/venv/bin/mlx_lm.server --model mlx-community/Qwen3.8-27B-MTP-4bit --port 9876"
-url = "http://127.0.0.1:9876"
-model = "mlx-community/Qwen3.8-27B-MTP-4bit"
-
+#
+# Solo los MoE: de los modelos MLX que hay descargados, el denso (Qwen3.8 27B,
+# `model_type` qwen3_5) no rinde aquí, así que no se declara.
+#
+# Los repos `-MTP-4bit` que también tienes descargados NO están aquí: su
+# `model_type` es `qwen3_5_mtp` y este mlx_lm no lo conoce ("Model type
+# qwen3_5_mtp not supported"), ni como modelo ni pasándolo en --draft-model, que
+# es para lo que sirven (son el drafter de decodificación especulativa, el
+# equivalente al --model-draft de tus scripts de llama.cpp). El soporte va en el
+# PR #990 de ml-explore/mlx-lm, sin publicar todavía. Cuando salga, se añaden
+# como `--model <base> --draft-model <mtp>`, no como modelo suelto.
 [[llm.modelos]]
 id = "mlx-qwen36-35b"
 nombre = "Qwen3.6 35B A3B (MLX)"
 comando = "~/Models/mlx/venv/bin/mlx_lm.server --model mlx-community/Qwen3.6-35B-A3B-4bit --port 9876"
 url = "http://127.0.0.1:9876"
 model = "mlx-community/Qwen3.6-35B-A3B-4bit"
-
-[[llm.modelos]]
-id = "mlx-qwen36-35b-mtp"
-nombre = "Qwen3.6 35B A3B MTP (MLX)"
-comando = "~/Models/mlx/venv/bin/mlx_lm.server --model mlx-community/Qwen3.6-35B-A3B-MTP-4bit --port 9876"
-url = "http://127.0.0.1:9876"
-model = "mlx-community/Qwen3.6-35B-A3B-MTP-4bit"
 
 # Si prefieres levantar alguno a mano, un modelo sin `comando` es externo:
 # Loomcast lo usa donde esté pero no lo arranca ni lo para.
