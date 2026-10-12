@@ -203,6 +203,7 @@ def _lanzar(modelo: ModeloLLM) -> subprocess.Popen:
             modelo.comando,
             shell=True,  # es tu script tal cual: admite ~, variables y argumentos
             cwd=ROOT,
+            stdin=subprocess.DEVNULL,  # ver el porqué en backend/procesos.py
             stdout=f,
             stderr=subprocess.STDOUT,
             start_new_session=True,  # grupo propio, para poder matar también a sus hijos

@@ -107,3 +107,20 @@ def test_nadie_llama_a_subprocess_run_sin_pasar_por_procesos():
                 sueltos.append(f"{f.relative_to(raiz.parent)}:{n}")
     # llm_runtime._inicio_proceso ya lleva su propio timeout=5 (consulta a `ps`).
     assert [s.split(":")[0] for s in sueltos] == ["backend/services/llm_runtime.py"]
+
+
+def test_ejecutar_no_le_deja_la_terminal_al_proceso(monkeypatch):
+    """ffmpeg lee stdin para sus teclas interactivas. Si hereda la terminal
+    estando en un grupo en segundo plano (lo que pasa al arrancar con
+    scripts/run-loomcast.sh), el kernel le manda SIGTTIN y suspende el backend
+    entero: se queda congelado hasta que algo le mande SIGCONT."""
+    visto = {}
+
+    def falso_run(cmd, **kw):
+        visto.update(kw)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(subprocess, "run", falso_run)
+    procesos.ejecutar(["ffmpeg", "-i", "x"], timeout=10)
+
+    assert visto["stdin"] is subprocess.DEVNULL

@@ -24,9 +24,20 @@ class ProcesoTimeout(RuntimeError):
 
 
 def ejecutar(cmd: list[str], *, timeout: float, que: str = "", **kw) -> subprocess.CompletedProcess:
-    """`subprocess.run` con tope obligatorio. `que` nombra la tarea en el error."""
+    """`subprocess.run` con tope obligatorio y sin terminal. `que` nombra la
+    tarea en el error.
+
+    **stdin va a /dev/null a propósito.** ffmpeg lee stdin para sus teclas
+    interactivas (`q` para parar), y si hereda la terminal estando en un grupo
+    de procesos en segundo plano —que es lo que pasa al arrancar con
+    `scripts/run-loomcast.sh`, porque su `set -m` da un grupo propio a cada
+    servicio— el kernel le manda SIGTTIN y **suspende el grupo entero**: el
+    backend se queda congelado, sin consumir CPU, hasta que algo le mande
+    SIGCONT. Visto el 2026-10-12 generando la voz: el ffmpeg del atempo se
+    suspendió, agotó sus 120 s y el job murió por timeout sin motivo aparente.
+    """
     try:
-        return subprocess.run(cmd, timeout=timeout, **kw)
+        return subprocess.run(cmd, timeout=timeout, stdin=subprocess.DEVNULL, **kw)
     except subprocess.TimeoutExpired:
         tarea = que or cmd[0]
         raise ProcesoTimeout(
