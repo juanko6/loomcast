@@ -67,7 +67,7 @@ def generar_voz(proyecto_id: int, modo: str = "clon", instruct: str | None = Non
             text=texto_completo,
             language=language,
             instruct=instruct,
-            max_new_tokens=8192,
+            max_new_tokens=tts.tope_tokens(texto_completo),
         )
         tts.liberar(modelo)
         etiqueta = "diseñada (VoiceDesign, estilo de la plantilla)"
@@ -82,7 +82,7 @@ def generar_voz(proyecto_id: int, modo: str = "clon", instruct: str | None = Non
             text=texto_completo,
             language=language,
             voice_clone_prompt=prompt,
-            max_new_tokens=8192,
+            max_new_tokens=tts.tope_tokens(texto_completo),
         )
         tts.liberar(base)
         etiqueta = f"clon '{voz_slug}'"
