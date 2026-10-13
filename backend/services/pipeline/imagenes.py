@@ -60,10 +60,13 @@ def _retratos_de(escena_personajes: str, slug: str) -> list[Path]:
     return [r for r in existentes if r.exists()][:tope]
 
 
-def _generar_una(escena: dict, slug: str) -> bool:
-    """Genera la imagen de una escena. Devuelve si usó retratos."""
+def _generar_una(escena: dict, slug: str, refs: list[Path]) -> bool:
+    """Genera la imagen de una escena. Devuelve si usó retratos.
+
+    `refs` viene resuelto de fuera porque el orden de generación depende de si
+    los hay: ver `generar_imagenes`.
+    """
     destino = ruta_imagen(slug, escena["orden"])
-    refs = _retratos_de(escena["personajes"], slug)
     if refs:
         comfy.editar_imagen(
             refs,
@@ -95,12 +98,23 @@ def generar_imagenes(proyecto_id: int) -> str:
         raise ValueError("El proyecto no tiene escenas; genera las escenas primero")
 
     (PROYECTOS_DIR / slug / "imagenes").mkdir(parents=True, exist_ok=True)
+
+    # Las escenas con reparto van por el motor de edición y las demás por el de
+    # texto→imagen, así que generarlas en el orden del guion hace que ComfyUI
+    # suelte un stack y cargue el otro en cada cambio: con doce escenas
+    # alternadas eso fueron siete cargas, ~19 GB cada vez que toca el de
+    # personajes, y los picos acaban en swap. Agrupadas son dos cargas.
+    # El sort es estable, así que dentro de cada grupo se respeta el guion, y
+    # cada imagen se guarda en su `orden`: el resultado es el mismo.
+    trabajos = [(e, _retratos_de(e["personajes"], slug)) for e in escenas]
+    trabajos.sort(key=lambda par: bool(par[1]))
+
     con_retrato = 0
     try:
-        for i, e in enumerate(escenas):
-            progreso.lote(i, len(escenas), "imagen")
+        for i, (e, refs) in enumerate(trabajos):
+            progreso.lote(i, len(trabajos), "imagen")
             t0 = time.time()
-            con_retrato += _generar_una(e, slug)
+            con_retrato += _generar_una(e, slug, refs)
             _anotar_tiempo(proyecto_id, e["orden"], time.time() - t0)
     finally:
         comfy.liberar_memoria()
@@ -152,7 +166,7 @@ def regenerar_imagen(proyecto_id: int, orden: int, nuevo_seed: bool = True) -> s
     (PROYECTOS_DIR / slug / "imagenes").mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     try:
-        con_retrato = _generar_una(datos, slug)
+        con_retrato = _generar_una(datos, slug, _retratos_de(datos["personajes"], slug))
     finally:
         comfy.liberar_memoria()
     tardo = time.time() - t0

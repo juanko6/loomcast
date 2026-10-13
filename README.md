@@ -521,8 +521,17 @@ pasos:
 
 LTX se usa a 768×1376, que es la resolución de las imágenes de escena: cuesta
 menos que lo que tardaba Hunyuan a 480 y el armado tiene que estirar mucho menos
-para llegar a 1080×1920. Ninguna resolución, hasta 1 MP, llegó a paginar. Para
-cambiarla, el nodo `ResolutionSelector` del workflow.
+para llegar a 1080×1920. Para cambiarla, el nodo `ResolutionSelector` del
+workflow.
+
+Su text encoder va **en CPU** (`"device": "cpu"` en el `CLIPLoader`), como los
+workflows de imagen. En GPU competía con el DiT: ComfyUI lo soltaba para hacer
+sitio al muestreo y lo recargaba en la escena siguiente, y ese ir y venir de
+14,6 GB disparaba el swap a 18 GB. En CPU se queda en 0,6 GB y cada clip baja
+unos 8 s.
+
+Un aviso por si mides esto: en macOS **`Pageouts` de `vm_stat` no es el swap**.
+Lo que cuenta es `Swapouts`; con `Pageouts` parece que no pagina nunca.
 
 **Hunyuan sigue disponible** como segundo motor: es más rápido a resoluciones
 bajas, y tenerlo permite comparar movimiento escena a escena sin tocar ficheros.

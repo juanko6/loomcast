@@ -54,6 +54,28 @@ def test_generar_imagenes_con_retrato_usa_edicion_con_referencias(session, proy,
     assert "1 con el reparto (2 sin personajes)" in log
 
 
+def test_generar_imagenes_agrupa_por_motor_para_no_recargar(session, proy, fake_comfy, dirs_tmp):
+    """Primero todas las de texto→imagen y luego todas las de edición.
+
+    Alternando, ComfyUI suelta un stack y carga el otro en cada cambio (~19 GB
+    el de personajes), y los picos acaban en swap. Agrupadas son dos cargas.
+    Las imágenes salen iguales: cada una se guarda en su `orden`.
+    """
+    f.personaje(session, proy)
+    # La primera y la última llevan reparto; la de en medio no (las escenas del
+    # factory van numeradas desde 1). En el orden del guion eso serían dos
+    # cambios de motor.
+    escenas_repo.actualizar_prompts(session, proy, {1: {"personajes": "ANA"},
+                                                   3: {"personajes": "ANA"}})
+    session.commit()
+    _retrato(dirs_tmp)
+
+    imagenes.generar_imagenes(proy)
+
+    assert fake_comfy.nombres() == ["generar_imagen", "editar_imagen",
+                                    "editar_imagen", "liberar_memoria"]
+
+
 def test_escena_con_personaje_sin_retrato_cae_a_texto(session, proy, fake_comfy):
     f.personaje(session, proy)
     escenas_repo.actualizar_prompts(session, proy, {1: {"personajes": "ANA"}})

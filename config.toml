@@ -235,8 +235,12 @@ fps_final = 60
 #
 # Va a 768x1376, la resolución de las imágenes de escena: cuesta menos que lo
 # que tardaba Hunyuan a 480 y el armado tiene que estirar mucho menos para
-# llegar a 1080x1920. Ninguna resolución, hasta 1 MP, llegó a paginar. Para
-# cambiarla, el nodo ResolutionSelector del workflow.
+# llegar a 1080x1920. Para cambiarla, el nodo ResolutionSelector del workflow.
+#
+# El text encoder va en CPU (`"device": "cpu"` en su CLIPLoader) igual que en
+# los workflows de imagen. Con --gpu-only, en GPU compite con el DiT: ComfyUI lo
+# soltaba para hacer sitio al muestreo y lo recargaba en la escena siguiente, y
+# ese vaivén de 14,6 GB metía 15 GB de swap. En CPU el swap se queda en 0,6 GB.
 #
 # Necesita el parche del GGUF (`python scripts/instalar_parches.py`): el fichero
 # de molbal trae `keyframes_abs_pos_embedding` cuantizado siendo un parámetro
