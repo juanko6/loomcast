@@ -1,0 +1,6 @@
+# Los .ai de Illustrator son PDF por dentro, pero llevan cabecera de texto y
+# git intenta diffearlos: cada vez que se guarda el documento aparecen decenas
+# de miles de líneas cambiadas que tapan el resto del diff (el de marca son
+# 32.500). Marcarlos binarios no cambia lo que se guarda —git sigue versionando
+# el archivo entero—, solo deja de intentar comparar su contenido línea a línea.
+*.ai binary
