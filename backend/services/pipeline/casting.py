@@ -9,7 +9,8 @@ recurrente, y luego esa ficha se pega **literal** en cada prompt donde aparezca.
 Que sea literal es el punto: si se deja que el LLM la parafrasee en cada escena,
 el personaje vuelve a derivar, solo que más despacio.
 
-El reparto vacío es una respuesta válida y normal (curiosidades casi siempre).
+El reparto vacío es una respuesta válida y normal (curiosidades a menudo; no
+cuando la historia es la de un objeto concreto, que entonces es el protagonista).
 """
 import json
 import random

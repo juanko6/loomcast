@@ -67,9 +67,24 @@ class PersonajeLLM(BaseModel):
 
 
 class CastingLLM(BaseModel):
-    # Lista vacía cuando el guion no tiene personas recurrentes (lo normal en
+    # Lista vacía cuando el guion no tiene nada recurrente (frecuente en
     # curiosidades): no hay nada que fijar y las escenas van como siempre.
     personajes: list[PersonajeLLM] = []
+
+
+class PlanoLLM(BaseModel):
+    # Tamaño de plano y ángulo ("wide establishing shot, high angle").
+    camara: str = Field(min_length=1)
+    # Qué pasa en el plano, en inglés y con los marcadores {CLAVE} del reparto.
+    accion: str = Field(min_length=1)
+
+
+class StoryboardLLM(BaseModel):
+    # El mundo visual del video entero: época, lugares, hora, atrezo, luz.
+    mundo: str = Field(min_length=1)
+    # Un plano por segmento de voz, en orden. El largo lo cuadra escenas.py:
+    # no se puede fijar en el esquema porque cambia con cada video.
+    planos: list[PlanoLLM] = Field(min_length=1)
 
 
 class EscenaLLM(BaseModel):

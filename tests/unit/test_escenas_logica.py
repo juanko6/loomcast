@@ -96,3 +96,61 @@ def test_bloque_casting_vacio_si_no_hay_reparto():
     assert escenas._bloque_casting({}) == ""
     bloque = escenas._bloque_casting(FICHAS)
     assert "- {ANA}: a woman" in bloque and "do not invent markers" in bloque
+
+
+# --- _quitar_eco ------------------------------------------------------------
+
+ROBOT = ("a vintage 1970s industrial robot with a boxy metallic chassis, "
+         "exposed wiring, and wheeled treads")
+
+
+@pytest.mark.parametrize("prompt, queda", [
+    # Aposición detrás, aunque traiga varias comas
+    ("Close-up of {R}, a vintage 1970s industrial robot with a boxy chassis, "
+     "exposed wiring, standing in a lab", "Close-up of {R}, standing in a lab"),
+    # Descripción delante del marcador
+    ("A vintage industrial robot {R} frozen mid-motion", "{R} frozen mid-motion"),
+    ("Close-up of a robot {R} near the door", "Close-up of {R} near the door"),
+    # Lo que no repite la ficha se queda
+    ("A close-up of {R} in a lab", "A close-up of {R} in a lab"),
+    ("{R}, a lone survivor of the fire, rolls on", "{R}, a lone survivor of the fire, rolls on"),
+    ("{R}’s sensor head turns slowly", "{R}’s sensor head turns slowly"),
+])
+def test_quitar_eco_quita_solo_lo_que_repite_la_ficha(prompt, queda):
+    assert escenas._quitar_eco(prompt, "{R}", ROBOT) == queda
+
+
+def test_aplicar_casting_no_duplica_la_ficha_que_el_llm_repite():
+    prompt, _ = escenas._aplicar_casting(
+        "{R}, a vintage industrial robot with a boxy metallic chassis, rolls forward",
+        {"R": ROBOT})
+    assert prompt == f"{ROBOT}, rolls forward"
+
+
+def test_aplicar_casting_articulo_suelto_delante_del_marcador_sobra():
+    prompt, _ = escenas._aplicar_casting("Close-up of the {R} on a bench", {"R": ROBOT})
+    assert prompt == f"Close-up of {ROBOT} on a bench"
+
+
+def test_aplicar_casting_marcador_repetido_lleva_la_ficha_una_vez():
+    prompt, quienes = escenas._aplicar_casting(
+        "A man pushes {R}. {R} resists, and R stays put", {"R": ROBOT})
+    assert prompt.count("boxy metallic chassis") == 1
+    assert prompt.endswith("the vintage 1970s industrial robot resists, and "
+                           "the vintage 1970s industrial robot stays put")
+    assert quienes == ["R"]
+
+
+def test_breve_no_deja_la_frase_colgando():
+    assert escenas._breve("a compact silver digital camera from the late 1980s, "
+                          "black lens") == "a compact silver digital camera"
+
+
+def test_aplicar_casting_aposicion_con_coma_delante():
+    prompt, _ = escenas._aplicar_casting("Close-up of a vintage robot, {R}, on a bench", {"R": ROBOT})
+    assert prompt == f"Close-up of {ROBOT}, on a bench"
+
+
+def test_aplicar_casting_reconoce_al_personaje_descrito_sin_marcador():
+    _, quienes = escenas._aplicar_casting("a vintage 1970s industrial robot rolls on", {"R": ROBOT})
+    assert quienes == ["R"]

@@ -36,6 +36,8 @@ from .llm import (
     ImagenLibrePromptLLM,
     MusicaPromptLLM,
     PersonajeLLM,
+    PlanoLLM,
+    StoryboardLLM,
     TituloLLM,
 )
 from .plantilla import (
@@ -54,6 +56,7 @@ __all__ = [
     "VideoIn", "VozGenerarIn", "VozNuevaIn", "VozSeleccionIn",
     "CastingLLM", "DescripcionLLM", "EscenaLLM", "EtiquetasLLM",
     "GuionLLM", "GuionNarracionLLM", "IdeaLLM", "IdeasLLM",
-    "ImagenLibrePromptLLM", "MusicaPromptLLM", "PersonajeLLM", "TituloLLM",
+    "ImagenLibrePromptLLM", "MusicaPromptLLM", "PersonajeLLM", "PlanoLLM",
+    "StoryboardLLM", "TituloLLM",
     "Plantilla", "RitmoPlantilla", "SubtitulosPlantilla", "VozPlantilla",
 ]
