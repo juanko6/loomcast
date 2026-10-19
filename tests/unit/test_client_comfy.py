@@ -375,11 +375,69 @@ def test_generar_musica_en_cpu_no_traduce_el_error(http_mock, tmp_path):
     assert "multinomial" not in str(e.value)
 
 
+# --- memoria ----------------------------------------------------------------
+
+@pytest.fixture
+def reloj(monkeypatch):
+    """Reloj falso que avanza un segundo por consulta.
+
+    Con `sin_esperas` anulando el sleep y `time.monotonic` de verdad, una espera
+    que no se cumple daría vueltas los 20 s reales de `espera_liberacion_s`.
+    """
+    tic = iter(range(0, 10_000))
+    monkeypatch.setattr(comfy.time, "monotonic", lambda: next(tic))
+
+
+def _stats(libre_gb):
+    return {"system": {"ram_total": 48 * comfy.GB, "ram_free": libre_gb * comfy.GB},
+            "devices": [{"name": "mps", "vram_free": libre_gb * comfy.GB}]}
+
+
+def _servidor_memoria(libres):
+    """ComfyUI que reporta `libres[i]` GiB en la i-ésima consulta a /system_stats.
+
+    El último valor se repite: así un test puede decir "sube al tercer sondeo y
+    se queda ahí" sin contar cuántos sondeos hará la espera.
+    """
+    def handler(request):
+        if request.url.path == "/system_stats":
+            handler.vistas += 1
+            i = min(handler.vistas - 1, len(libres) - 1)
+            return httpx.Response(200, json=_stats(libres[i]))
+        return httpx.Response(200)
+
+    handler.vistas = 0
+    return handler
+
+
+def test_memoria_libre_sale_del_dispositivo(http_mock):
+    http_mock(_servidor_memoria([30.0]))
+    assert comfy.memoria_libre_gb() == pytest.approx(30.0)
+
+
+def test_memoria_libre_cae_al_ram_free_si_no_hay_dispositivos(http_mock):
+    def handler(request):
+        return httpx.Response(200, json={"system": {"ram_free": 12 * comfy.GB},
+                                         "devices": []})
+
+    http_mock(handler)
+    assert comfy.memoria_libre_gb() == pytest.approx(12.0)
+
+
+def test_memoria_libre_sin_comfy_es_none(http_mock):
+    def handler(request):
+        raise httpx.ConnectError("caído")
+
+    http_mock(handler)
+    assert comfy.memoria_libre_gb() is None
+
+
 def test_liberar_memoria_pide_descargar_modelos(http_mock):
-    vistas = http_mock(lambda r: httpx.Response(200))
+    vistas = http_mock(_servidor_memoria([30.0]))
     comfy.liberar_memoria()
-    assert vistas[0].url.path == "/free"
-    assert json.loads(vistas[0].content) == {"unload_models": True, "free_memory": True}
+    free = [v for v in vistas if v.url.path == "/free"]
+    assert len(free) == 1
+    assert json.loads(free[0].content) == {"unload_models": True, "free_memory": True}
 
 
 def test_liberar_memoria_tolera_que_comfy_no_responda(http_mock):
@@ -387,4 +445,71 @@ def test_liberar_memoria_tolera_que_comfy_no_responda(http_mock):
         raise httpx.ConnectError("caído")
 
     http_mock(handler)
-    comfy.liberar_memoria()  # no lanza
+    lib = comfy.liberar_memoria(hasta_gb=22)
+    # Sin medición no se da por fallido: un ComfyUI caído no retiene nada.
+    assert lib.logrado and lib.antes_gb is None and lib.peticiones == 0
+
+
+def test_liberar_memoria_sin_hasta_gb_no_espera(http_mock):
+    """Lo que hacen las etapas al terminar: sueltan para el siguiente y siguen."""
+    http_mock(_servidor_memoria([16.0]))
+    lib = comfy.liberar_memoria()
+    assert lib.logrado and lib.espera_s == 0 and lib.antes_gb == pytest.approx(16.0)
+
+
+def test_liberar_memoria_si_ya_sobra_no_espera(http_mock, reloj):
+    """ComfyUI sin nada cargado: no hay ninguna bajada que esperar."""
+    http_mock(_servidor_memoria([27.0]))
+    lib = comfy.liberar_memoria(hasta_gb=22)
+    assert lib.logrado and lib.peticiones == 1 and lib.espera_s <= 1
+
+
+def test_liberar_memoria_espera_a_ver_la_bajada(http_mock, reloj):
+    http_mock(_servidor_memoria([16.0, 16.0, 10.0, 27.0]))
+    lib = comfy.liberar_memoria(hasta_gb=22)
+    assert lib.logrado
+    assert lib.antes_gb == pytest.approx(16.0) and lib.despues_gb == pytest.approx(27.0)
+
+
+def test_liberar_memoria_no_se_fia_del_bajon_intermedio(http_mock, reloj):
+    """Descargar mueve los pesos al dispositivo de offload y un instante hay dos
+    copias en la misma memoria unificada: medido, baja de 16,4 a 10,0 GiB antes
+    de subir. Quedarse en ese bajón no cuenta como memoria libre."""
+    http_mock(_servidor_memoria([16.4, 10.0]))
+    lib = comfy.liberar_memoria(hasta_gb=22)
+    assert not lib.logrado and lib.despues_gb == pytest.approx(10.0)
+
+
+def test_liberar_memoria_repite_el_free_si_no_baja(http_mock, reloj):
+    """La bandera se consume entre prompts: la primera pudo gastarse en uno que
+    ya estaba en vuelo, así que se vuelve a pedir una vez."""
+    vistas = http_mock(_servidor_memoria([16.0]))
+    lib = comfy.liberar_memoria(hasta_gb=22)
+    assert not lib.logrado and lib.peticiones == 2
+    assert len([v for v in vistas if v.url.path == "/free"]) == 2
+
+
+def test_liberar_memoria_si_comfy_desaparece_a_mitad_no_bloquea(http_mock, reloj):
+    """Deja de responder mientras se espera: no hay con qué decir que no soltó,
+    y un ComfyUI caído tampoco retiene nada."""
+    def handler(request):
+        if request.url.path == "/system_stats":
+            handler.vistas += 1
+            if handler.vistas == 1:
+                return httpx.Response(200, json=_stats(16.0))
+            raise httpx.ConnectError("caído")
+        return httpx.Response(200)
+
+    handler.vistas = 0
+    http_mock(handler)
+    lib = comfy.liberar_memoria(hasta_gb=22)
+    assert lib.logrado and lib.despues_gb is None
+    assert "dejó de responder" in str(lib)
+
+
+def test_liberacion_se_cuenta_sola_en_una_linea():
+    lib = comfy.Liberacion(16.4, 27.0, 1.7, 1, True)
+    assert str(lib) == "16.4 → 27.0 GiB libres (+10.6 en 1.7 s, 1 petición a /free)"
+
+    dos = comfy.Liberacion(16.4, 16.4, 20.0, 2, False)
+    assert "2 peticiones a /free" in str(dos)

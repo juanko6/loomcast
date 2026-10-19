@@ -13,7 +13,7 @@ from ..config import COLA_ESPERA_S, COLA_INTENTOS
 from ..db import get_session
 from ..models import ImagenLibre, Musica, Proyecto, Tema, Voz
 from ..repositories import jobs as jobs_repo
-from ..services import llm_runtime, progreso
+from ..services import apuntes, llm_runtime, progreso
 from ..services.pipeline import (
     armado,
     armado_estatico,
@@ -262,14 +262,22 @@ def _procesar(job_id: int) -> None:
         params = json.loads(job.params or "{}")
     parada.iniciar(job_id)
     progreso.iniciar(job_id, tipo)
+    apuntes.iniciar()
     try:
         estado, log = _intentar(job_id, tipo, ref_id, params)
         # Se lee antes de limpiar: el handler puede haber terminado bien justo
         # antes del corte, y entonces su trabajo vale pero la cadena no sigue.
         parado = parada.pedida()
+        # Lo que midieron las capas de debajo (la memoria que soltó ComfyUI
+        # antes de cargar el LLM, por ejemplo): el handler no lo sabe y el
+        # historial de la UI es donde se lee.
+        notas = apuntes.recoger()
     finally:
         progreso.limpiar()
         parada.limpiar()
+        apuntes.limpiar()
+    if notas:
+        log = "\n\n".join(filter(None, [log, "\n".join(notas)]))
     if estado == "ok" and parado:
         # Pasa en las etapas que no se pueden cortar a mitad (la síntesis de voz
         # es una sola llamada a PyTorch): se pidió parar, la etapa terminó de

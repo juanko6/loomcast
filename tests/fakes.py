@@ -10,6 +10,8 @@ from pathlib import Path
 from PIL import Image
 from pydantic import BaseModel
 
+from backend.clients.comfy import Liberacion
+
 
 class FakeLLM:
     """`chat` devuelve la respuesta programada para el esquema pedido.
@@ -107,8 +109,11 @@ class FakeComfy:
         _bytes(final, b"fake-audio")
         return final
 
-    def liberar_memoria(self):
-        self._reg("liberar_memoria")
+    def liberar_memoria(self, hasta_gb=None):
+        self._reg("liberar_memoria", hasta_gb=hasta_gb)
+        # Un ComfyUI con sitio de sobra: la memoria ya está donde hacía falta.
+        libre = (hasta_gb or 0) + 5
+        return Liberacion(libre, libre, 0.0, 1, True)
 
 
 class FakeSTT:

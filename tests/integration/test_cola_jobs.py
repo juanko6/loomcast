@@ -327,3 +327,45 @@ def test_un_job_que_termina_justo_antes_del_corte_no_encadena(cola, session):
 
     assert _estado(jid)[0] == "ok"      # el trabajo está hecho y se dice
     assert queue._cola.empty()          # pero la etapa siguiente no sale
+
+
+# --- apuntes de las capas de debajo -----------------------------------------
+
+def test_el_log_del_job_recoge_los_apuntes(cola):
+    """Lo que midió una capa que no escribe el log: la memoria que soltó ComfyUI
+    antes de cargar el LLM. El historial de la UI es donde se lee."""
+    from backend.services import apuntes
+
+    def handler(ref):
+        apuntes.anotar("Memoria para «X» (22 GiB): 16.4 → 27.0 GiB libres")
+        return "ideas generadas"
+
+    queue.HANDLERS["generar_ideas"] = handler
+    jid = queue.encolar("generar_ideas", 1)
+
+    queue._procesar(queue._cola.get())
+
+    estado, log = _estado(jid)
+    assert estado == "ok"
+    assert log == (
+        "ideas generadas\n\nMemoria para «X» (22 GiB): 16.4 → 27.0 GiB libres"
+    )
+
+
+def test_los_apuntes_no_se_arrastran_al_job_siguiente(cola):
+    from backend.services import apuntes
+
+    def anota(ref):
+        apuntes.anotar("algo del primero")
+        return "hecho"
+
+    queue.HANDLERS["generar_ideas"] = anota
+    queue.HANDLERS["generar_guion"] = lambda ref: "guion"
+    primero = queue.encolar("generar_ideas", 1)
+    segundo = queue.encolar("generar_guion", 1)
+
+    queue._procesar(queue._cola.get())
+    queue._procesar(queue._cola.get())
+
+    assert "algo del primero" in _estado(primero)[1]
+    assert _estado(segundo) == ("ok", "guion")

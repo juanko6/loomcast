@@ -22,6 +22,16 @@ espera_arranque_s = 240
 # Valores por defecto para todos los modelos; cada uno puede sobrescribirlos.
 # Nombre del modelo: informativo; llama-server usa el que tenga cargado.
 model = "local"
+# GiB de memoria unificada libres que hacen falta para cargar un modelo. No
+# reserva nada: es la condición que se comprueba antes de lanzarlo, y si no se
+# cumple el job falla diciéndolo en vez de dejar que el kernel elija a quién
+# mata. El 2026-10-19 el backend murió con `Killed: 9` justo aquí: ComfyUI
+# retenía 11,7 GiB de Z-Image y encima se lanzó un MLX de ~20 GiB.
+#
+# 22 está medido en este M3 Max de 48 GiB: con Z-Image dentro quedan 16,4 GiB
+# libres (no basta), y en cuanto ComfyUI suelta sube a 27,0 (sobra). Un modelo
+# pequeño puede declarar menos con su propio `memoria_gb`.
+memoria_gb = 22
 timeout_s = 600
 # Un guion entero no cabe en 4096: el 2026-10-12 uno se cortó a mitad de la
 # segunda frase y el error salió como "JSON inválido del modelo". Si vuelve a
@@ -176,6 +186,11 @@ url = "http://127.0.0.1:8188"
 # perdido. Debe cubrir el clip i2v más lento: con 21 cuadros ronda los 250 s,
 # pero si el equipo se suspende o se ralentiza conviene margen de sobra.
 timeout_s = 1800
+# Cuánto se espera a ver la memoria libre después de pedirle a ComfyUI que
+# suelte los modelos. El `POST /free` solo enciende una bandera que su hilo de
+# ejecución atiende entre prompts: medido, la descarga llega ~1,7 s después,
+# pero si ComfyUI está acabando un workflow no mira la bandera hasta terminarlo.
+espera_liberacion_s = 20
 
 [stt]
 # Transcripción (subtítulos y el ref_text del clonado de voz), con

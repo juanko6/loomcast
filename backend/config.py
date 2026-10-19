@@ -33,6 +33,10 @@ class ModeloLLM:
     temperature: float | None
     # {} → no se envían chat_template_kwargs.
     chat_template_kwargs: dict
+    # GiB de memoria unificada libres que hacen falta para cargarlo. No se
+    # reserva nada: es la condición que se comprueba antes de lanzarlo, para no
+    # pedirle al kernel más de lo que hay (ver services/llm_runtime.py).
+    memoria_gb: float
 
     @property
     def gestionado(self) -> bool:
@@ -53,6 +57,7 @@ def _modelo(bruto: dict) -> ModeloLLM:
         chat_template_kwargs=bruto.get(
             "chat_template_kwargs", _llm.get("chat_template_kwargs", {})
         ),
+        memoria_gb=bruto.get("memoria_gb", _llm.get("memoria_gb", 20)),
     )
 
 
@@ -69,6 +74,7 @@ LLM_LOGS_DIR: Path = ROOT / "logs"
 
 COMFY_URL: str = _cfg["comfy"]["url"].rstrip("/")
 COMFY_TIMEOUT_S: float = _cfg["comfy"].get("timeout_s", 1800)
+COMFY_ESPERA_LIBERACION_S: float = _cfg["comfy"].get("espera_liberacion_s", 20)
 
 # Cola de jobs: reintentos de lo que falla por algo transitorio.
 _cola = _cfg.get("cola", {})
