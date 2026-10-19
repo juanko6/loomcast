@@ -32,6 +32,7 @@ from ..config import (
 )
 from ..db import get_session
 from ..repositories import ajustes as ajustes_repo
+from . import apuntes
 
 CLAVE_AJUSTE = "llm_modelo"
 # Cada cuánto comprueba el vigilante si el modelo lleva demasiado ocioso.
@@ -247,6 +248,44 @@ def _detener(motivo: str) -> None:
 
 # ---------- API para el worker ----------
 
+def _hacer_sitio(modelo: ModeloLLM) -> None:
+    """Pide a ComfyUI que suelte la memoria y no vuelve hasta comprobarlo.
+
+    Lo que hacía antes era mandar el `POST /free` y lanzar el modelo acto
+    seguido, y eso es lo que mató al backend con `Killed: 9` el 2026-10-19:
+    `/free` solo enciende una bandera en la cola de ComfyUI y devuelve 200 en
+    1 ms con los 11,7 GiB de Z-Image todavía dentro, así que el MLX de ~20 GiB
+    arrancó sobre una memoria que nadie había liberado. El kernel eligió a quién
+    matar y eligió al backend: SIGKILL, sin excepción ni traza.
+
+    Peor aún, medido: durante la descarga la memoria libre **baja** antes de
+    subir (16,4 → 10,0 → 27,0 GiB), porque mover los pesos al dispositivo de
+    offload duplica un instante las copias en la misma memoria unificada. El
+    momento justo después del POST es el peor de todos.
+
+    Si la memoria no llega, se lanza en vez de arrancar el modelo: el job sale
+    como error con el antes/después medido, que es información, y no como un
+    backend muerto, que no es ninguna.
+    """
+    lib = comfy.liberar_memoria(hasta_gb=modelo.memoria_gb)
+    linea = f"Memoria para «{modelo.nombre}» ({modelo.memoria_gb:.0f} GiB): {lib}"
+    print(f"[llm] {linea}", flush=True)
+    apuntes.anotar(linea)
+    if lib.logrado:
+        return
+    raise LLMProcesoError(
+        f"No se lanza «{modelo.nombre}»: no hay memoria. Necesita "
+        f"{modelo.memoria_gb:.0f} GiB libres y quedan {lib.despues_gb:.1f} "
+        f"({lib.antes_gb:.1f} antes de pedirle a ComfyUI que suelte), tras "
+        f"{lib.espera_s:.0f} s de espera. Lanzarlo igualmente es lo que hace "
+        "que el kernel mate al backend con Killed: 9. Mira si ComfyUI tiene "
+        "un workflow en marcha —solo atiende el /free entre prompts—, si "
+        "quedó algún llama-server "
+        "suelto, o si hay otra cosa ocupándola. Si tu equipo es más pequeño, "
+        "baja [llm].memoria_gb (o el del modelo) a lo que de verdad necesite."
+    )
+
+
 def asegurar() -> ModeloLLM:
     """Deja al modelo activo listo para responder. Devuelve cuál es."""
     global _proc, _proc_modelo, _ultimo_uso
@@ -263,8 +302,7 @@ def asegurar() -> ModeloLLM:
             _detener(f"cambio a «{modelo.nombre}»")
         if llm.ping(modelo.url):
             return modelo  # ya había uno escuchando; se adopta y no se toca
-        # El modelo va a pedir memoria: que ComfyUI suelte la suya antes.
-        comfy.liberar_memoria()
+        _hacer_sitio(modelo)
         _proc = _lanzar(modelo)
         _proc_modelo = modelo.id
         return modelo

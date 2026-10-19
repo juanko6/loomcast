@@ -3,11 +3,13 @@ imágenes. Los workflows base viven en workflows/*.json."""
 import json
 import re
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 
 from ..config import (
+    COMFY_ESPERA_LIBERACION_S,
     COMFY_TIMEOUT_S,
     COMFY_URL,
     motor_i2v,
@@ -22,6 +24,16 @@ from ..config import (
 
 WORKFLOW_ESRGAN = ROOT / "workflows" / "esrgan_api.json"
 TIMEOUT_S = COMFY_TIMEOUT_S
+GB = 1024 ** 3
+# Cuánto se espera como mucho a ver la memoria libre tras pedir el /free. La
+# descarga medida tarda ~1,7 s; el margen es para cuando ComfyUI está acabando
+# un prompt y no mira la bandera hasta terminarlo.
+LIBERACION_ESPERA_S = COMFY_ESPERA_LIBERACION_S
+# Cada cuánto se vuelve a mirar /system_stats mientras se espera.
+LIBERACION_LATIDO_S = 0.25
+# A los tantos segundos sin ver la bajada se repite el POST: la bandera se
+# consume entre prompts y la primera pudo gastarse en uno que ya estaba en vuelo.
+LIBERACION_REINTENTO_S = 4.0
 EXT_VIDEO = (".mp4", ".webm", ".mkv", ".mov", ".gif")
 EXT_AUDIO = (".flac", ".mp3", ".wav", ".opus", ".ogg", ".m4a")
 
@@ -531,8 +543,110 @@ def interrumpir() -> None:
         pass
 
 
-def liberar_memoria() -> None:
-    """Descarga los modelos de ComfyUI de la memoria unificada."""
+def memoria_libre_gb() -> float | None:
+    """GiB de memoria unificada libres, según ComfyUI. None si no responde.
+
+    Sale de `/system_stats`, que no necesita dependencias nuevas. En MPS el
+    `vram_free` del dispositivo no es "VRAM": ComfyUI lo saca de la memoria
+    disponible del sistema (`get_free_memory` manda cpu y mps al mismo sitio),
+    que es justo la cifra que mira el kernel cuando decide a quién mata.
+    """
+    try:
+        with httpx.Client(timeout=10) as c:
+            datos = c.get(f"{COMFY_URL}/system_stats").json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    dispositivos = datos.get("devices") or []
+    libre = (
+        dispositivos[0].get("vram_free")
+        if dispositivos
+        else datos.get("system", {}).get("ram_free")
+    )
+    return None if libre is None else libre / GB
+
+
+@dataclass(frozen=True)
+class Liberacion:
+    """Lo medido al pedirle a ComfyUI que suelte los modelos.
+
+    `logrado` es False solo cuando se midió y la memoria **no** llegó a donde
+    hacía falta: si ComfyUI no responde a `/system_stats` no hay medición y no
+    se da por fallido, porque un ComfyUI caído no retiene nada.
+    """
+
+    antes_gb: float | None
+    despues_gb: float | None
+    espera_s: float
+    peticiones: int
+    logrado: bool
+
+    def __str__(self) -> str:
+        if self.antes_gb is None:
+            return "ComfyUI no responde, no se pudo medir la memoria"
+        if self.despues_gb is None:
+            return (
+                f"{self.antes_gb:.1f} GiB libres antes del /free; ComfyUI dejó "
+                "de responder y no se pudo comprobar si soltó"
+            )
+        antes, despues = self.antes_gb, self.despues_gb
+        n = self.peticiones
+        veces = "1 petición" if n == 1 else f"{n} peticiones"
+        return (
+            f"{antes:.1f} → {despues:.1f} GiB libres "
+            f"({despues - antes:+.1f} en {self.espera_s:.1f} s, {veces} a /free)"
+        )
+
+
+def liberar_memoria(hasta_gb: float | None = None) -> Liberacion:
+    """Descarga los modelos de ComfyUI de la memoria unificada.
+
+    `POST /free` **no descarga nada**: solo enciende una bandera en la cola de
+    ComfyUI, que su hilo de ejecución atiende entre prompts. Devuelve 200 en 1 ms
+    con los modelos todavía dentro, así que quien vaya a pedir memoria detrás no
+    puede fiarse de que haya vuelto.
+
+    Medido en el M3 Max con `--gpu-only` y Z-Image cargado (16,4 GiB libres):
+    la descarga ocurre **~1,7 s** después del POST y deja 27,0 GiB. Y en el
+    camino la memoria libre *baja* primero hasta 10,0 GiB, porque descargar
+    mueve los pesos al dispositivo de offload (la CPU, que en un Mac es la misma
+    memoria) y durante un instante existen las dos copias. O sea que el peor
+    momento posible para lanzar otro modelo es justo después del POST.
+
+    `hasta_gb` es la memoria libre que necesita quien llama. Con None se vuelve
+    enseguida, como siempre: es lo que hacen las etapas al terminar, que sueltan
+    para el siguiente y no van a cargar nada. Con un número se espera a ver la
+    bajada de verdad y se repite el POST por si la bandera se perdió (ComfyUI
+    solo la atiende entre prompts: con un workflow en marcha —el tuyo desde su
+    UI— no la ve hasta que acabe).
+    """
+    antes = memoria_libre_gb()
+    inicio = time.monotonic()
+    peticiones = _pedir_free()
+    if hasta_gb is None or antes is None:
+        return Liberacion(antes, antes, 0.0, peticiones, True)
+
+    fin = inicio + LIBERACION_ESPERA_S
+    libre = antes
+    while True:
+        # Se mide antes de dormir la primera vez por si ya sobraba memoria: el
+        # caso normal es que ComfyUI no tuviera nada cargado, y ahí no hay
+        # ninguna bajada que esperar.
+        libre = memoria_libre_gb()
+        if libre is None or libre >= hasta_gb:
+            break
+        if time.monotonic() >= fin:
+            break
+        if peticiones == 1 and time.monotonic() - inicio >= LIBERACION_REINTENTO_S:
+            peticiones += _pedir_free()
+        time.sleep(LIBERACION_LATIDO_S)
+    espera = time.monotonic() - inicio
+    return Liberacion(
+        antes, libre, espera, peticiones, libre is None or libre >= hasta_gb
+    )
+
+
+def _pedir_free() -> int:
+    """Manda el POST /free; devuelve 1 si salió y 0 si ComfyUI no respondió."""
     try:
         with httpx.Client(timeout=15) as c:
             c.post(
@@ -540,4 +654,5 @@ def liberar_memoria() -> None:
                 json={"unload_models": True, "free_memory": True},
             )
     except httpx.HTTPError:
-        pass
+        return 0
+    return 1

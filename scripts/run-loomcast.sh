@@ -2,6 +2,9 @@
 # Levanta Loomcast entero en una sola terminal: ComfyUI + backend, con los logs
 # de ambos entremezclados y prefijados. Ctrl+C lo para todo de forma ordenada.
 #
+# Si el backend muere (el caso real: el OOM del kernel), se relanza solo hasta
+# tres veces y ComfyUI se queda en pie, que es lo que cuesta minutos levantar.
+#
 #   scripts/run-loomcast.sh              ComfyUI + backend; UI en 127.0.0.1:8700
 #   scripts/run-loomcast.sh --lan        igual, pero accesible desde la red local
 #   scripts/run-loomcast.sh --dev        añade Astro en 4321 con recarga en caliente
@@ -55,18 +58,29 @@ NOMBRES=()
 
 escucha() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
 
-# Lanza un servicio en segundo plano. Su salida va al log sin colores y a la
-# pantalla con un prefijo de color, línea a línea (awk + fflush: los pipes se
-# bufferizan y si no, los logs llegarían a bloques de 4 KB).
-arrancar() {
+# Lanza un servicio en segundo plano y deja su pid en PID_NUEVO. Su salida va al
+# log sin colores y a la pantalla con un prefijo de color, línea a línea
+# (awk + fflush: los pipes se bufferizan y si no, los logs llegarían a bloques
+# de 4 KB).
+#
+# Al relanzar el backend el log NO se vacía: la traza de la muerte anterior es
+# justo lo que hace falta para entender por qué se reinició.
+CONSERVAR_LOG=0
+lanzar() {
   local nombre="$1" color="$2"; shift 2
   local log="$RAIZ/logs/$nombre.log"
-  : > "$log"
+  [ "$CONSERVAR_LOG" -eq 1 ] || : > "$log"
   { "$@" 2>&1 | tee -a "$log" \
       | awk -v p="${color}[${nombre}]${FIN} " '{ print p $0; fflush() }'; } &
-  PIDS+=("$!")
-  NOMBRES+=("$nombre")
+  PID_NUEVO=$!
   echo "${GRIS}→ $nombre arrancando (log: logs/$nombre.log)${FIN}"
+}
+
+# Lo mismo, apuntándolo en la lista de servicios vigilados.
+arrancar() {
+  lanzar "$@"
+  PIDS+=("$PID_NUEVO")
+  NOMBRES+=("$1")
 }
 
 limpiar() {
@@ -91,14 +105,21 @@ limpiar() {
 trap 'limpiar; exit 0' INT TERM
 trap limpiar EXIT
 
+# El cuarto argumento es opcional: el pid del servicio. Con él, esperar deja de
+# esperar en cuanto el proceso muere, en vez de agotar el límite contra algo que
+# ya no existe. Importa en el reinicio del backend: un error de import muere al
+# instante, y sin esto cada intento se llevaría el minuto entero del límite.
 esperar() {
-  local nombre="$1" url="$2" limite="$3" i=0
+  local nombre="$1" url="$2" limite="$3" pid="${4:-}" i=0
   while [ "$i" -lt "$limite" ]; do
     if curl -sf --max-time 2 "$url" >/dev/null 2>&1; then
       echo "${VERDE}✓${FIN} $nombre responde"
       return 0
     fi
-    kill -0 "${PIDS[${#PIDS[@]}-1]}" 2>/dev/null || true
+    if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+      echo "${ROJO}✗${FIN} $nombre murió al arrancar — revisa sus líneas de arriba"
+      return 1
+    fi
     sleep 1; i=$((i + 1))
   done
   echo "${AMAR}!${FIN} $nombre no respondió en ${limite}s — revisa sus líneas de arriba"
@@ -145,10 +166,16 @@ if escucha "$PUERTO_BACK"; then
   echo "${ROJO}El puerto $PUERTO_BACK ya está ocupado.${FIN} ¿Tienes otro Loomcast abierto?" >&2
   exit 1
 fi
-arrancar loomcast "$CIAN" \
-  env PYTHONUNBUFFERED=1 "$RAIZ/.venv/bin/uvicorn" backend.main:app \
-      --host "$HOST" --port "$PUERTO_BACK"
-esperar Loomcast "http://127.0.0.1:$PUERTO_BACK/api/salud" 60 || true
+# En una función porque el vigilante la repite tal cual al relanzarlo.
+backend_cmd() {
+  lanzar loomcast "$CIAN" \
+    env PYTHONUNBUFFERED=1 "$RAIZ/.venv/bin/uvicorn" backend.main:app \
+        --host "$HOST" --port "$PUERTO_BACK"
+}
+backend_cmd
+PIDS+=("$PID_NUEVO"); NOMBRES+=("loomcast")
+IDX_BACK=$(( ${#PIDS[@]} - 1 ))
+esperar Loomcast "http://127.0.0.1:$PUERTO_BACK/api/salud" 60 "$PID_NUEVO" || true
 
 # ---------------------------------------------------------------- astro dev
 if [ "$DEV" -eq 1 ]; then
@@ -187,14 +214,82 @@ echo
 echo "${GRIS}  Ctrl+C para parar todo.${FIN}"
 echo
 
-# Vigilancia: si un servicio se cae, paramos el resto en vez de dejar medio
-# sistema en pie fingiendo que funciona.
+# ---------------------------------------------------------------- vigilancia
+# El backend se relanza solo; los demás servicios siguen cerrando todo.
+#
+# Por qué la diferencia: el backend es lo que muere de verdad. El 2026-10-19 se
+# lo llevó el OOM del kernel (`Killed: 9`, sin traza) por lanzar un LLM de
+# ~20 GiB mientras ComfyUI retenía los suyos, y cerrarlo todo obligaba a volver
+# a levantar ComfyUI y a recargar un modelo de 20 GiB desde disco: minutos por
+# una caída que se arregla en segundos. ComfyUI y el llama-server se quedan en
+# pie, y el backend vuelve con la cola intacta (`recuperar_pendientes()`
+# re-encola lo que quedó a medias).
+#
+# ComfyUI y Astro mantienen el comportamiento de antes —si uno cae, se cierra
+# todo— porque sin ellos no hay nada que relanzar en su sitio: ComfyUI lo
+# arranca este script una sola vez y cada intento vuelve a pagar su arranque, y
+# un Astro caído solo pasa cuando lo has parado tú.
+#
+# El llama-server no lo gestiona este script: lo arranca y lo para el backend
+# según config.toml. Al volver, `_reclamar_huerfano()` descarga el que dejó la
+# ejecución muerta — y eso es lo correcto justo aquí: si el backend murió por
+# falta de memoria, esos GB son el problema, no algo que convenga conservar.
+MAX_REINICIOS=3
+ESPERA_REINICIO_S=5
+# Si aguanta esto en pie, el reinicio contó como bueno y la cuenta vuelve a
+# cero: una caída cada varias horas no debe agotar los reintentos de la sesión.
+ESTABLE_S=300
+
+reinicios=0
+arranque_back=$SECONDS
+
+relanzar_backend() {
+  local motivo="$1"
+  # Avisa en su propio log, al lado de la traza (si la hubo: un SIGKILL del
+  # kernel no deja ninguna, y entonces esta línea es todo lo que queda).
+  {
+    echo
+    echo "[lanzador] el backend se reinicia: $motivo"
+    echo "[lanzador] reinicio $reinicios de $MAX_REINICIOS; ComfyUI y el LLM siguen en pie"
+  } >> "$RAIZ/logs/loomcast.log"
+  echo "${ROJO}✗ el backend se ha parado${FIN} ($motivo) — lo relanzo" \
+       "${GRIS}(reinicio $reinicios de $MAX_REINICIOS; ComfyUI sigue en pie)${FIN}"
+  sleep "$ESPERA_REINICIO_S"
+  # El uvicorn muerto puede tardar en soltar el puerto; sin esto el nuevo
+  # arrancaría para morir con "address already in use".
+  local i=0
+  while escucha "$PUERTO_BACK" && [ "$i" -lt 15 ]; do sleep 1; i=$((i + 1)); done
+  CONSERVAR_LOG=1; backend_cmd; CONSERVAR_LOG=0
+  PIDS[$IDX_BACK]=$PID_NUEVO
+  arranque_back=$SECONDS
+  esperar Loomcast "http://127.0.0.1:$PUERTO_BACK/api/salud" 60 "$PID_NUEVO" || true
+}
+
 while true; do
   for i in "${!PIDS[@]}"; do
-    if ! kill -0 "${PIDS[$i]}" 2>/dev/null; then
+    # El `if` y no un `&& continue`: con `set -e`, un `&&` cuyo primer comando
+    # falla deja el estado de la lista en no-cero y eso es pisar una mina.
+    if kill -0 "${PIDS[$i]}" 2>/dev/null; then
+      continue
+    fi
+    if [ "$i" -ne "$IDX_BACK" ]; then
       echo "${ROJO}✗ ${NOMBRES[$i]} se ha parado${FIN} — cierro el resto."
       exit 1
     fi
+    # Llevaba un buen rato en pie: esta caída no es la misma racha.
+    if [ $(( SECONDS - arranque_back )) -ge "$ESTABLE_S" ]; then
+      reinicios=0
+    fi
+    if [ "$reinicios" -ge "$MAX_REINICIOS" ]; then
+      # El tope es lo que evita el bucle infinito cuando no es una caída sino
+      # que no arranca: un error de import muere igual de rápido las tres veces.
+      echo "${ROJO}✗ el backend ha muerto $((reinicios + 1)) veces${FIN} — no lo relanzo más."
+      echo "  ${GRIS}Mira logs/loomcast.log: si no es una caída sino que no arranca," \
+           "el error está en sus últimas líneas.${FIN}"
+      exit 1
+    fi
+    reinicios=$((reinicios + 1))
+    relanzar_backend "murió tras $(( SECONDS - arranque_back ))s en pie"
   done
   sleep 2
 done

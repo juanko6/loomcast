@@ -91,6 +91,33 @@ modelo sin `comando` tienes que levantarlo tú.
 Para tocar la interfaz con recarga en caliente, en vez de recompilar a mano, ver
 "Frontend".
 
+### El backend se reinicia solo; ComfyUI se queda en pie
+
+Si el backend muere, el lanzador **lo relanza** (hasta tres veces, con 5 s entre
+intentos) y deja ComfyUI en marcha. El motivo es el coste: levantar ComfyUI y
+recargar un modelo de 20 GiB desde disco son minutos, y la caída que se ve de
+verdad —el OOM del kernel, `Killed: 9` sin traza— se arregla en segundos. Al
+volver, `recuperar_pendientes()` re-encola los jobs que quedaron a medias.
+
+El aviso queda en `logs/loomcast.log`, pegado a la traza si la hubo (un SIGKILL
+del kernel no deja ninguna, y entonces estas dos líneas son todo lo que queda):
+
+```
+[lanzador] el backend se reinicia: murió tras 10s en pie
+[lanzador] reinicio 1 de 3; ComfyUI y el LLM siguen en pie
+```
+
+El tope de tres es lo que evita el bucle infinito cuando no es una caída sino
+que **no arranca**: un error de import muere igual de rápido las tres veces, así
+que a la cuarta el lanzador se rinde y cierra todo. Si aguanta 5 minutos en pie,
+la cuenta vuelve a cero. Ctrl+C sigue parando todo de forma ordenada, y si quien
+muere es ComfyUI (o el Astro de `--dev`) se cierra todo como antes: ahí no hay
+nada que relanzar en su sitio sin volver a pagar su arranque.
+
+El llama-server no lo lleva el lanzador, sino el backend. El que quedó huérfano
+se descarga al volver (`logs/llm.pid`), y eso es lo correcto justo aquí: si el
+backend murió por falta de memoria, esos GiB son el problema.
+
 ### Sobre el arranque de ComfyUI
 
 El `--` es obligatorio: separa los argumentos de comfy-cli de los que van a
@@ -124,6 +151,51 @@ Dos líneas que conviene mirar en el arranque:
 - `[loomcast] Parche de torch.multinomial en MPS activo` — si no está, la música
   fallará en pistas de más de ~33 s (ver "Música").
 - `Set vram state to: SHARED` — es lo normal en Mac, no es un problema.
+
+### `POST /free` sí suelta con `--gpu-only`, pero no cuando devuelve
+
+Loomcast le pide a ComfyUI que descargue sus modelos (`POST /free` con
+`unload_models` y `free_memory`) antes de cada etapa que vaya a pedir memoria.
+**Ese POST no descarga nada**: solo enciende una bandera en la cola de ComfyUI,
+que su hilo de ejecución atiende *entre prompts*. Devuelve 200 en **1 ms** con
+los modelos todavía dentro.
+
+Medido en el M3 Max con `--gpu-only` y Z-Image cargado:
+
+| momento | memoria libre |
+|---|---|
+| con Z-Image + su encoder dentro | 16,4 GiB |
+| 0,6 s después del POST | **10,0 GiB** |
+| 1,7 s después del POST | 27,0 GiB |
+
+Dos cosas, y las dos importan:
+
+1. **Suelta de verdad** — los ~10,6 GiB vuelven, con `--gpu-only` incluido. El
+   flag fuerza los encoders a la GPU (`text_encoder_device()` mira
+   `args.gpu_only` directamente), pero el estado de memoria sigue siendo
+   `SHARED` en MPS y la descarga funciona igual.
+2. **Tarda ~1,7 s, y en el camino la memoria libre BAJA** a 10,0 GiB. Descargar
+   mueve los pesos al dispositivo de offload, que en un Mac es la misma memoria
+   unificada: durante un instante existen las dos copias. O sea que el momento
+   justo después del POST es **el peor posible** para lanzar otro modelo.
+
+No busques la descarga en `logs/comfy.log`: ComfyUI la registra en `debug`, así
+que no deja ni una línea. Lo único que aparece es un `Using RAM pressure cache.`
+suelto. Para verlo, `curl -s localhost:8188/system_stats` y mira el `vram_free`
+del dispositivo — en MPS no es "VRAM" sino la memoria disponible del sistema,
+que es justo la cifra que mira el kernel al decidir a quién mata.
+
+Esto es lo que mató al backend con `Killed: 9` el 2026-10-19: se pidió el
+`/free` y se lanzó un MLX de ~20 GiB acto seguido, con los 11,7 GiB de Z-Image
+sin soltar. Ahora `asegurar()` espera a ver la memoria antes de lanzar (ver
+"Ciclo de vida del LLM").
+
+**Si ComfyUI no suelta**, la causa habitual es que tenga un workflow en marcha
+—lanzado desde su propia UI, por ejemplo—, porque la bandera solo se atiende
+entre prompts. Loomcast repite el POST a los 4 s y espera hasta
+`[comfy].espera_liberacion_s` (20 s); pasado eso, el job falla diciendo cuánta
+memoria había antes y después, en vez de lanzar el modelo y dejar que el kernel
+elija a quién mata.
 
 ## Frontend
 
@@ -465,6 +537,32 @@ levántalo tú.
 - Si Loomcast muere de golpe (SIGKILL, cuelgue), al volver a arrancar **recupera la RAM** del llama-server que dejó huérfano (`logs/llm.pid`).
 - `inactividad_s` descarga el modelo tras un rato sin usarse, aunque no haya llegado ninguna etapa de GPU.
 - `max_tokens` ([llm] o por modelo) tiene que dar para la etapa más larga, que es el guion. Si se queda corto, la respuesta llega cortada a media frase y Loomcast lo dice tal cual, con el valor que había y por dónde se quedó.
+
+### Antes de lanzar un modelo se comprueba que cabe
+
+`memoria_gb` ([llm] o por modelo) son los GiB de memoria unificada libres que
+hacen falta para cargarlo. No reserva nada: es la condición que se comprueba
+justo antes de lanzarlo. Loomcast pide el `/free` a ComfyUI, **espera a ver la
+memoria de verdad** (el POST vuelve en 1 ms sin haber soltado nada; ver
+"`POST /free` sí suelta con `--gpu-only`…"), repite la petición si no baja y,
+si aun así no llega, el job sale como error contando la medición en vez de
+arrancar el modelo.
+
+El antes/después queda en el log del job, o sea en el historial de la UI:
+
+```
+Memoria para «Qwen3.6 35B A3B (MLX)» (22 GiB): 16.4 → 27.0 GiB libres
+(+10.6 en 1.7 s, 1 petición a /free)
+```
+
+El 22 de serie está medido en un M3 Max de 48 GiB: con Z-Image dentro quedan
+16,4 GiB libres (no basta para un MLX de ~20 GiB) y en cuanto ComfyUI suelta
+sube a 27,0 (sobra). Con otro equipo, ajústalo a lo que tus modelos necesiten de
+verdad — ponerlo demasiado alto hace fallar jobs que habrían ido bien, y
+demasiado bajo devuelve el `Killed: 9`.
+
+Si ComfyUI no responde no se bloquea nada: un ComfyUI caído no retiene memoria,
+y Loomcast se usa también sin él (`--sin-comfy`).
 
 ## Banco de voces
 
