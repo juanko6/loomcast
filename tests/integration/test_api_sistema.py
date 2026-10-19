@@ -16,7 +16,9 @@ def llm_restaurado():
 
 
 def test_plantillas_lista_las_del_repo(client):
-    assert {"curiosidades", "drama"} <= set(client.get("/api/plantillas").json())
+    assert {"curiosidades", "drama", "historia"} <= set(
+        client.get("/api/plantillas").json()
+    )
 
 
 def test_listar_modelos_llm(client):

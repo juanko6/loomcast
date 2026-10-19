@@ -233,6 +233,46 @@ un estado propio y se lee «Parado», distinto de «Error»: pararlo fue una
 decisión, no un fallo.
 
 
+## Plantillas de estilo
+
+Una plantilla define el sabor completo de un nicho y vive en
+`plantillas/<nombre>/`: un `plantilla.json` (voz, estilo visual, subtítulos y
+ritmo) y una carpeta `prompts/` con los ocho prompts de sistema del pipeline de
+texto y de escenas. El selector de la UI se alimenta de `/api/plantillas`, que
+lista el directorio: una carpeta nueva aparece sola, sin tocar código.
+
+| plantilla | qué cuenta | voz | ritmo |
+|---|---|---|---|
+| **curiosidades** | datos sorprendentes y hechos poco conocidos, con giro final | grave de documental, ágil | 45 s, escenas de 4 s, atempo 1.05 |
+| **drama** | storytime de chisme: un conflicto cotidiano que escala | joven y cómplice | 50 s, escenas de 4 s, atempo 1.0 |
+| **historia** | un hecho real contado como relato: situación, tensión y desenlace con consecuencia | grave y pausada | 55 s, escenas de 5 s, atempo 1.0 |
+
+`historia` es la que más se apoya en el resto del pipeline, y por eso vale como
+ejemplo de hasta dónde llega una plantilla:
+
+- **Guion en `formato_guion: "narracion"`**, como *drama* y al revés que
+  *curiosidades*. El formato de frases da frases independientes y sonoras, que
+  es justo lo que quiere un dato suelto; un relato necesita lo contrario —
+  encadenar por causa y consecuencia, y que la voz saque las pausas de la
+  puntuación de un párrafo seguido. En frases sueltas, el mismo hecho suena a
+  entrada de enciclopedia leída en voz alta.
+- **El reparto no es opcional**: el relato sigue a alguien de principio a fin,
+  así que `casting.md` obliga a fijar al protagonista aunque el guion solo lo
+  nombre por su oficio (el escribano, la viuda, el grumete), y `escena.md` lo
+  pide en la mayoría de los planos por su marcador. Un reparto vacío aquí casi
+  siempre es un error, al contrario que en *curiosidades*.
+- **Época sin anacronismos**: ropa, materiales, herramientas, arquitectura y
+  luz (vela, candil, ventana, día encapotado) pertenecen al periodo, y el
+  storyboard fija uno solo para todo el vídeo.
+- **Nadie reconocible**: la gente de la época sí, un personaje histórico
+  identificable no. El generador lo hace mal y el relato se sostiene mejor
+  sobre quien estaba alrededor del hecho. Tampoco escudos, banderas ni uniformes
+  de un estado o un ejército reales.
+
+El ajuste fino de una plantilla solo se ve generando un vídeo entero: lo que se
+puede comprobar sin GPU es que carga, que aparece en el selector y que las
+etapas de texto la usan.
+
 ## Flujo de creación (UI)
 
 Tema → ideas → seleccionar/aprobar → y ya en el proyecto, los pasos del
@@ -285,7 +325,8 @@ caber en 25-45 palabras.
 
 Un reparto vacío es una respuesta válida: en *curiosidades* es lo normal. En
 *drama* casi nunca lo es, y el prompt incluye al narrador aunque el guion nunca
-lo describa. Editar una ficha no reescribe los prompts ya generados: hay que
+lo describa; en *historia* tampoco, porque el relato sigue a un protagonista
+aunque solo se le nombre por su oficio. Editar una ficha no reescribe los prompts ya generados: hay que
 regenerarlos.
 
 El reparto también se edita a mano: se pueden **añadir y quitar** personajes. Hace
@@ -445,7 +486,8 @@ Voces reutilizables generadas con Qwen3-TTS VoiceDesign, guardadas en `voces/<sl
 - ✅ **Estudio en Astro + Svelte** — los cuatro modos en una sola interfaz, con reproductor global y biblioteca
 - ✅ **Música de la historia** — el proyecto compone su pista desde el guion y las escenas, se descarga sola (audio sin narración, reutilizable en redes) y opcionalmente se mezcla bajo la voz con ducking
 - ✅ **Cola con reintentos y parada** — los fallos transitorios se reintentan solos con espera creciente, y la generación se puede detener (lo que corre, la cola entera o las dos) desde la cabecera y desde las tres secciones
-- ⬜ Pendiente — plantillas `historia`/`drama-chisme`, empaquetado
+- ✅ **Plantilla `historia`** — un hecho real contado como relato: guion narrativo, voz grave y pausada, reparto y estilo de época sin personajes reconocibles. Tercer nicho junto a `curiosidades` y `drama`, y con ella se cierra la Fase 5
+- ⬜ Pendiente — empaquetado
 
 ## Imágenes
 

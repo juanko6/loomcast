@@ -11,6 +11,7 @@ from backend.schemas import (
     DescripcionLLM,
     EtiquetasLLM,
     GuionLLM,
+    GuionNarracionLLM,
     IdeasLLM,
     TituloLLM,
 )
@@ -62,6 +63,33 @@ def test_generar_guion_guarda_version_y_avanza_estado(session, fake_llm):
     session.expire_all()
     assert proyectos_repo.obtener(session, pid).estado == "GUION"
     assert json.loads(guiones_repo.ultimo(session, pid).contenido)["frases"] == ["Una.", "Dos."]
+
+
+def test_generar_guion_de_historia_usa_narracion_y_su_ritmo(session, fake_llm):
+    """`historia` cuenta un relato seguido, así que el guion no viene en frases:
+    la plantilla cambia el esquema que se le pide al LLM y la duración objetivo."""
+    tema = temas_repo.crear(session, "el Titanic", "historia")
+    session.flush()
+    idea = ideas_repo.crear(session, tema.id, "T", "G", "R")
+    session.flush()
+    proy = proyectos_repo.crear(session, idea.id, "proyecto-historia", "historia")
+    session.commit()
+    pid = proy.id
+    fake_llm.responder(GuionNarracionLLM, GuionNarracionLLM(
+        gancho="Un barco que no vuelve",
+        narracion="Y entonces, con la nieve hasta el pecho, siguieron.",
+        cta="Nadie volvió a buscarlos",
+        voz_instruct="voz",
+    ))
+
+    texto.generar_guion(pid)
+
+    assert fake_llm.llamadas[-1]["salida"] is GuionNarracionLLM
+    system = fake_llm.llamadas[-1]["system"]
+    assert "55 segundos" in system and "{duracion}" not in system
+    session.expire_all()
+    guion = json.loads(guiones_repo.ultimo(session, pid).contenido)
+    assert guion["narracion"].startswith("Y entonces")
 
 
 def test_generar_metadatos_encadena_titulo_descripcion_etiquetas(session, fake_llm):
