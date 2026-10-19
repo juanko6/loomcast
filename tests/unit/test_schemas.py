@@ -165,8 +165,30 @@ def test_plantilla_sin_campos_obligatorios():
             Plantilla.model_validate(datos)
 
 
-def test_las_plantillas_reales_son_validas():
+def _plantillas_del_repo():
+    """En tiempo de colección: parametriza con las plantillas que hay en disco,
+    así una nueva entra sola en el test en vez de quedarse sin cubrir."""
     from backend.repositories import plantillas
 
-    for nombre in plantillas.listar():
-        assert plantillas.cargar(nombre)["prompts"]
+    return plantillas.listar()
+
+
+# Los ocho prompts que el pipeline busca por nombre; si falta uno, la etapa
+# revienta a mitad de la generación en vez de al cargar la plantilla.
+PROMPTS_ESPERADOS = {
+    "ideas", "guion", "storyboard", "escena", "casting",
+    "titulo", "descripcion", "etiquetas",
+}
+
+
+@pytest.mark.parametrize("nombre", _plantillas_del_repo())
+def test_las_plantillas_reales_son_validas(nombre):
+    from backend.repositories import plantillas
+
+    pl = plantillas.cargar(nombre)
+    assert set(pl["prompts"]) == PROMPTS_ESPERADOS
+    # Los huecos que rellena texto.py: si la plantilla no los trae, el prompt
+    # llega al LLM pidiendo "{n_ideas} ideas" en vez de un número.
+    assert "{n_ideas}" in pl["prompts"]["ideas"]
+    for hueco in ("{duracion}", "{min_palabras}", "{max_palabras}"):
+        assert hueco in pl["prompts"]["guion"]

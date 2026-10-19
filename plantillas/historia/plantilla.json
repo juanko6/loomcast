@@ -1,0 +1,21 @@
+{
+  "nombre": "historia",
+  "descripcion": "Un hecho real contado como relato: una situación, una tensión que crece y un desenlace con consecuencia. Época reconstruida, sin personajes históricos identificables.",
+  "formato_guion": "narracion",
+  "voz": {
+    "instruct": "Voz masculina grave en español, adulta y serena, de narrador que cuenta un hecho real sin levantar la voz; ritmo pausado y sostenido, pausas largas entre los momentos de la historia, dicción nítida y gravedad contenida que crece hacia el desenlace.",
+    "language": "Spanish"
+  },
+  "estilo_visual": "cinematic period photography, natural available light, period-accurate costumes materials and architecture, muted earth-tone palette, weathered textures, soft haze, fine film grain, shallow depth of field, vertical composition",
+  "subtitulos": {
+    "max_palabras_por_bloque": 3,
+    "fuente": "Montserrat ExtraBold",
+    "color": "#F2E3C4",
+    "borde": "#000000"
+  },
+  "ritmo": {
+    "duracion_objetivo_s": 55,
+    "duracion_escena_s": 5,
+    "atempo": 1.0
+  }
+}
