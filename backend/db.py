@@ -58,6 +58,29 @@ def _migrar() -> None:
                 text("ALTER TABLE personajes ADD COLUMN tipo VARCHAR DEFAULT 'persona'")
             )
             c.commit()
+        # El reparto que ya existía se quedó con el default "persona", y ahí
+        # había objetos: un cofre, un Motorola DynaTAC, un robot, un mapa. Con
+        # ese tipo su referencia se seguiría generando con encuadre de retrato,
+        # o sea con una cara pintada encima, así que se reclasifican por su
+        # ficha. Solo las "persona": una "objeto" ya la decidió el casting.
+        # El import va aquí dentro porque el clasificador vive en el pipeline y
+        # a nivel de módulo sería un ciclo.
+        from .services.pipeline.casting import normalizar_tipo
+
+        recolocadas = [
+            fila[0]
+            for fila in c.execute(text(
+                "SELECT id, ficha FROM personajes WHERE tipo = 'persona'"
+            ))
+            if normalizar_tipo("persona", fila[1] or "") == "objeto"
+        ]
+        for pid in recolocadas:
+            c.execute(
+                text("UPDATE personajes SET tipo = 'objeto' WHERE id = :id"),
+                {"id": pid},
+            )
+        if recolocadas:
+            c.commit()
 
         cols = [r[1] for r in c.execute(text("PRAGMA table_info(imagenes_libres)"))]
         if "motor" not in cols:

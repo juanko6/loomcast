@@ -25,24 +25,59 @@ from ...repositories import proyectos as proyectos_repo
 from ...schemas import CastingLLM
 
 
-# Frases con las que una ficha dice, en sus propias palabras, que ahí no hay
-# nadie. Si el LLM marcó "persona" pero la ficha dice esto, manda la ficha: es
-# lo que pasó con un mapa táctico descrito con "no humans are visible", al que
-# el encuadre de retrato le pintaba una cara encima.
-_SIN_PERSONAS = (
-    "no humans", "no human", "no people", "no person", "no figures",
-    "no faces", "no face", "unpeopled",
+# De qué es la ficha: una persona o un objeto. El reparto admite las dos cosas a
+# propósito, pero su imagen de referencia se encuadra distinto, y pedirle cara,
+# cabeza y piel a un mapa le pinta una cara encima.
+#
+# **No se confía en lo que diga el LLM.** Se le pide el campo, pero mlx_lm ignora
+# el json_schema, así que llega vacío con la mitad de los servidores, y aun
+# cuando llega se equivoca: en la base de este proyecto había un cofre, un
+# Motorola DynaTAC, un robot y una entidad digital, los cuatro marcados
+# "persona". Lo que sí es fiable es la propia ficha, porque el prompt de casting
+# dicta qué lleva: para una persona, edad aparente, complexión, tono de piel,
+# color de pelo y de ojos; para un objeto, forma, material y desgaste. Un cofre
+# no tiene ojos y una viuda no está hecha de roble.
+_NEGADO = re.compile(r"\bno (?:humans?|people|person|figures?|faces?)\b")
+# Rasgos que solo se describen de alguien con cara.
+_RASGOS = re.compile(
+    r"\b(?:skin|hair|eyes?|beard|moustache|mustache|complexion|cheekbones|"
+    r"jawline|eyebrows|lips|freckles|wrinkles|stubble)\b"
 )
+# La edad aparente, que el prompt pide para toda persona.
+_EDAD = re.compile(r"\b(?:in (?:his|her|their)|years old|aged)\b")
+_SUSTANTIVO = re.compile(
+    r"\b(?:man|men|woman|women|boy|girl|male|female|child|children|person|"
+    r"lady|gentleman|teenager|baby)\b"
+)
+# La cláusula de ropa con la que el prompt obliga a cerrar la ficha de una
+# persona ("..., wearing a rumpled olive wool greatcoat"). Ninguna de las fichas
+# de objeto de este proyecto la lleva, y salva los retratos escuetos donde no se
+# describen rasgos.
+_ROPA = re.compile(r"\bwearing\b")
 
 
 def normalizar_tipo(tipo: str, ficha: str) -> str:
-    """persona | objeto. Ante la duda, persona, que es el caso común."""
-    if (tipo or "").strip().lower().startswith("obj"):
+    """persona | objeto, deducido de la ficha.
+
+    Las palabras completas importan: sin `\b`, "chair" trae "hair" y "human"
+    trae "man". Con dos señales o más es una persona; con ninguna, un objeto; y
+    con exactamente una (un retrato escueto, "a young diver in a wetsuit")
+    desempata lo que haya dicho el LLM, que para eso se le pregunta.
+    """
+    f = (ficha or "").lower()
+    if _NEGADO.search(f):
         return "objeto"
-    bajada = ficha.lower()
-    if any(frase in bajada for frase in _SIN_PERSONAS):
+    señales = (
+        len(set(_RASGOS.findall(f)))
+        + (1 if _EDAD.search(f) else 0)
+        + (1 if _SUSTANTIVO.search(f) else 0)
+        + (1 if _ROPA.search(f) else 0)
+    )
+    if señales >= 2:
+        return "persona"
+    if señales == 0:
         return "objeto"
-    return "persona"
+    return "objeto" if (tipo or "").strip().lower().startswith("obj") else "persona"
 
 
 def _limpiar_ficha(ficha: str) -> str:

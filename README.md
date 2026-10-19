@@ -445,9 +445,16 @@ puede ser el mismo, y aquí hubo un bug que se vio con la plantilla `historia`: 
 encuadre de persona pide cara, cabeza visible y textura de piel, así que a un
 mapa descrito con «no humans are visible» le pintaba un rostro encima — cinco
 términos pidiendo cara le ganan a una negación. Ahora cada miembro del reparto
-tiene su tipo, y lo decide el casting sin preguntar: se lo pide al LLM junto con
-la ficha y, si la ficha dice en sus propias palabras que ahí no hay nadie, manda
-la ficha. Un objeto se retrata con su propio encuadre (sujeto centrado, fondo
+tiene su tipo, y lo decide el casting sin preguntar: **leyendo la ficha**, no
+haciendo caso al LLM. Se le pide el campo, pero mlx_lm ignora el `json_schema` y
+aun cuando llega se equivoca —en este proyecto había un cofre, un Motorola
+DynaTAC, un robot y un mapa, los cuatro marcados «persona»—. La ficha sí es
+fiable, porque el prompt dicta qué lleva: para una persona, edad aparente,
+complexión, tono de piel, color de pelo y de ojos y una cláusula final
+`wearing ...`; para un objeto, forma, material y desgaste. Con dos de esas
+señales o más es una persona, con ninguna un objeto, y con una sola desempata lo
+que dijo el LLM. Las palabras van completas, que «chair» lleva «hair» dentro.
+Los repartos hechos antes de esto se recolocan solos al arrancar. Un objeto se retrata con su propio encuadre (sujeto centrado, fondo
 liso, sin nombrar nada humano y negándolo al final) y el prefijo que se le pasa
 al motor de escena habla de «subjects», no de «people». El tipo no se edita a
 mano: la tarjeta del reparto solo lo enseña, para que se entienda por qué ese
