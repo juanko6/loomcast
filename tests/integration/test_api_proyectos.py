@@ -202,6 +202,30 @@ def test_editar_casting_devuelve_cuantos_actualizo(client, session, proy):
     assert personajes_repo.por_proyecto(session, proy.id)[0].nombre == "Ana B"
 
 
+def test_editar_la_ficha_revisa_si_sigue_siendo_una_persona(client, session, proy):
+    """El tipo no se manda por la API —lo decide el casting— pero reescribir la
+    ficha con algo sin cara tiene que recolocarlo, o su retrato seguiría
+    pidiendo rostro."""
+    f.personaje(session, proy.id, tipo="persona")
+
+    client.put(f"/api/proyectos/{proy.id}/casting", json={"personajes": [
+        {"clave": "ANA", "nombre": "el mapa",
+         "ficha": "a large worn tactical map on a table, no humans are visible"}]})
+
+    session.expire_all()
+    assert personajes_repo.por_proyecto(session, proy.id)[0].tipo == "objeto"
+
+
+def test_el_tipo_no_se_puede_forzar_desde_la_api(client, session, proy):
+    f.personaje(session, proy.id, tipo="persona")
+    # Un `tipo` en el cuerpo se ignora: el esquema no lo tiene.
+    client.put(f"/api/proyectos/{proy.id}/casting", json={"personajes": [
+        {"clave": "ANA", "nombre": "Ana", "ficha": "a woman with red hair",
+         "tipo": "objeto"}]})
+    session.expire_all()
+    assert personajes_repo.por_proyecto(session, proy.id)[0].tipo == "persona"
+
+
 def test_retrato_get_y_post_validan_la_clave(client, session, proy, dirs_tmp, jobs_encolados):
     assert client.get(f"/api/proyectos/{proy.id}/personajes/ANA/retrato").status_code == 404
     assert client.post(f"/api/proyectos/{proy.id}/personajes/ANA/retrato", json={}).status_code == 404

@@ -263,8 +263,7 @@ class PersonajeRepetido(ValueError):
     pass
 
 
-def anadir_personaje(pid: int, clave: str, nombre: str, ficha: str,
-                     tipo: str = "persona") -> str:
+def anadir_personaje(pid: int, clave: str, nombre: str, ficha: str) -> str:
     """Mete un personaje al reparto a mano.
 
     Hace falta porque el casting se deja gente: alguien que sale en varias
@@ -287,7 +286,9 @@ def anadir_personaje(pid: int, clave: str, nombre: str, ficha: str,
         personajes_repo.crear(
             s, pid, clave, nombre.strip(), ficha.strip(),
             random.randint(0, 2**31 - 1),
-            casting.normalizar_tipo(tipo, ficha),
+            # Persona salvo que la ficha diga que ahí no hay nadie: el tipo no
+            # se pide por la API, se deduce de lo que se escribe.
+            casting.normalizar_tipo("persona", ficha),
         )
         s.commit()
     return clave

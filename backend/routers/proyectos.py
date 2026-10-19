@@ -114,12 +114,7 @@ def generar_casting(pid: int):
 def editar_casting(pid: int, body: PersonajesIn):
     try:
         cambios = {
-            x.clave: {
-                "nombre": x.nombre,
-                "ficha": x.ficha,
-                **({"tipo": x.tipo} if x.tipo else {}),
-            }
-            for x in body.personajes
+            x.clave: {"nombre": x.nombre, "ficha": x.ficha} for x in body.personajes
         }
         return {"actualizados": proyectos_service.editar_personajes(pid, cambios)}
     except proyectos_service.ProyectoNoExiste:
@@ -130,7 +125,7 @@ def editar_casting(pid: int, body: PersonajesIn):
 def anadir_personaje(pid: int, body: PersonajeNuevoIn):
     try:
         clave = proyectos_service.anadir_personaje(
-            pid, body.clave, body.nombre, body.ficha, body.tipo
+            pid, body.clave, body.nombre, body.ficha
         )
         return {"clave": clave}
     except proyectos_service.ProyectoNoExiste:

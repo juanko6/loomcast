@@ -63,16 +63,10 @@
 
   // Borrador local del reparto (mismo patrón que los prompts).
   let fichas = $state<Record<string, string>>({});
-  // El tipo de cada miembro del reparto (persona | objeto), editable aquí
-  // porque decide cómo se encuadra su retrato: a un objeto no se le pide cara.
-  let tipos = $state<Record<string, string>>({});
   $effect(() => {
     const f: Record<string, string> = {};
     for (const c of p.personajes) f[c.clave] = c.ficha;
     fichas = f;
-    const t: Record<string, string> = {};
-    for (const c of p.personajes) t[c.clave] = c.tipo ?? "persona";
-    tipos = t;
   });
 
   // Un casting ya generado que sale vacío es una respuesta válida (el guion no
@@ -100,7 +94,6 @@
         clave: c.clave,
         nombre: c.nombre,
         ficha: (fichas[c.clave] ?? "").trim(),
-        tipo: tipos[c.clave] ?? "persona",
       })),
     );
   }
@@ -220,13 +213,13 @@
                 title={c.retrato
                   ? "Genera otra versión distinta (seed nuevo)"
                   : "Genera la imagen de referencia a partir de la ficha"}>
-                {c.retrato ? (tipos[c.clave] === "objeto" ? "Otro" : "Otra cara") : "Retrato"}
+                {c.retrato ? (c.tipo === "objeto" ? "Otro" : "Otra cara") : "Retrato"}
               </Button>
               {#if c.retrato}
                 <Button size="sm" variant="ghost" disabled={busy}
                   onclick={() => ongenerarretrato(c.clave, false)}
                   title="Rehace el retrato con el mismo seed: solo cambia si editaste la ficha">
-                  {tipos[c.clave] === "objeto" ? "Igual" : "Misma cara"}
+                  {c.tipo === "objeto" ? "Igual" : "Misma cara"}
                 </Button>
               {/if}
             </div>
@@ -236,15 +229,14 @@
             <div class="mb-1 flex flex-wrap items-center gap-2">
               <Chip tone="accent">{"{" + c.clave + "}"}</Chip>
               <span class="text-xs text-muted">{c.nombre}</span>
-              <select
-                class="control h-7 w-auto py-0 text-xs"
-                bind:value={tipos[c.clave]}
-                title="Un objeto se retrata sin cara: a un barco o un mapa no se le pide rostro ni piel"
-                aria-label={`Qué es ${c.clave}`}
-              >
-                <option value="persona">persona</option>
-                <option value="objeto">objeto</option>
-              </select>
+              {#if c.tipo === "objeto"}
+                <span
+                  class="rounded-full bg-surface-3 px-2 py-0.5 text-xs text-dim"
+                  title="El casting lo marcó como objeto: su referencia se genera sin pedirle cara"
+                >
+                  objeto
+                </span>
+              {/if}
               <span class="ml-auto">
                 <IconButton
                   name="trash"

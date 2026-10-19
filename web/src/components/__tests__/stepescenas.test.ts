@@ -265,24 +265,27 @@ describe("reparto", () => {
     await userEvent.type(ficha, "  una mujer alta  ");
     await userEvent.click(screen.getByRole("button", { name: "Guardar reparto" }));
     expect(a.onguardarcasting).toHaveBeenCalledWith([
-      { clave: "ANA", nombre: "Nombre ANA", ficha: "una mujer alta", tipo: "persona" },
+      { clave: "ANA", nombre: "Nombre ANA", ficha: "una mujer alta" },
     ]);
   });
 
-  it("un miembro del reparto se puede marcar como objeto", async () => {
-    // Un objeto se retrata sin pedirle cara: con el encuadre de persona, a un
-    // mapa le pintaba un rostro encima.
-    const { a } = montar(proy({ personajes: [personaje("MAPA", { tipo: "persona" })] }));
-    await userEvent.selectOptions(screen.getByLabelText("Qué es MAPA"), "objeto");
-    await userEvent.click(screen.getByRole("button", { name: "Guardar reparto" }));
-    expect(a.onguardarcasting).toHaveBeenCalledWith([
-      expect.objectContaining({ clave: "MAPA", tipo: "objeto" }),
-    ]);
-  });
-
-  it("el tipo que viene del backend se respeta al pintar la tarjeta", () => {
+  it("un objeto del reparto se marca en su tarjeta y no se elige a mano", () => {
+    // Lo decide el casting: aquí solo se enseña, para que se entienda por qué
+    // su referencia se genera sin pedirle cara.
     montar(proy({ personajes: [personaje("BARCO", { tipo: "objeto" })] }));
-    expect((screen.getByLabelText("Qué es BARCO") as HTMLSelectElement).value).toBe("objeto");
+    expect(screen.getByText("objeto")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Qué es BARCO")).toBeNull();
+  });
+
+  it("una persona no lleva etiqueta de objeto", () => {
+    montar(proy({ personajes: [personaje("ANA", { tipo: "persona" })] }));
+    expect(screen.queryByText("objeto")).toBeNull();
+  });
+
+  it("los botones del retrato hablan de cara solo cuando hay cara", () => {
+    montar(proy({ personajes: [personaje("MAPA", { tipo: "objeto", retrato: true })] }));
+    expect(screen.getByRole("button", { name: "Otro" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Igual" })).toBeInTheDocument();
   });
 
   it("regenerar el reparto lo pide (y respeta 'busy')", async () => {

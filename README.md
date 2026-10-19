@@ -445,12 +445,13 @@ puede ser el mismo, y aquí hubo un bug que se vio con la plantilla `historia`: 
 encuadre de persona pide cara, cabeza visible y textura de piel, así que a un
 mapa descrito con «no humans are visible» le pintaba un rostro encima — cinco
 términos pidiendo cara le ganan a una negación. Ahora cada miembro del reparto
-tiene su tipo: el casting se lo pide al LLM, y si la ficha dice en sus propias
-palabras que ahí no hay nadie, manda la ficha. Un objeto se retrata con su propio
-encuadre (sujeto centrado, fondo liso, sin nombrar nada humano y negándolo al
-final) y el prefijo que se le pasa al motor de escena habla de «subjects», no de
-«people». En la tarjeta del reparto se puede corregir el tipo a mano, que es más
-rápido que regenerar el casting entero.
+tiene su tipo, y lo decide el casting sin preguntar: se lo pide al LLM junto con
+la ficha y, si la ficha dice en sus propias palabras que ahí no hay nadie, manda
+la ficha. Un objeto se retrata con su propio encuadre (sujeto centrado, fondo
+liso, sin nombrar nada humano y negándolo al final) y el prefijo que se le pasa
+al motor de escena habla de «subjects», no de «people». El tipo no se edita a
+mano: la tarjeta del reparto solo lo enseña, para que se entienda por qué ese
+miembro se retrata sin cara, y reescribir su ficha lo revisa.
 
 ### Cómo se usa el retrato
 

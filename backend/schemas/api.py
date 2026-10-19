@@ -74,9 +74,6 @@ class PersonajeIn(BaseModel):
     clave: str
     nombre: str
     ficha: str
-    # persona | objeto. Editable porque el LLM se equivoca a veces y el encuadre
-    # del retrato depende de esto; None conserva el que tuviera.
-    tipo: str | None = None
 
 
 class PersonajesIn(BaseModel):
@@ -89,8 +86,6 @@ class PersonajeNuevoIn(BaseModel):
     clave: str = Field(min_length=1, max_length=24)
     nombre: str = ""
     ficha: str = ""
-    # persona | objeto; decide cómo se encuadra su retrato de referencia.
-    tipo: str = "persona"
 
 
 class RegenerarImagenIn(BaseModel):
