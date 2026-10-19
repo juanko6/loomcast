@@ -10,9 +10,10 @@ from ...config import PROYECTOS_DIR, motor_i2v
 from ...db import get_session
 from ...repositories import escenas as escenas_repo
 from ...repositories import proyectos as proyectos_repo
-from .. import progreso
+from .. import cancelacion, progreso
 from . import clips as clips_mod
 from . import i2v as i2v_mod
+from ._ffmpeg import sin_restos
 
 MODOS = ("estatico", "kenburns", "i2v")
 
@@ -63,6 +64,7 @@ def generar_clips_mixto(proyecto_id: int, motor: str = "") -> str:
     ]
     hechas, cuenta = len(escenas) - len(pendientes), {}
     for i, (orden, modo) in enumerate(pendientes):
+        cancelacion.comprobar(f"quedaban {len(pendientes) - i} clips")
         progreso.lote(i, len(pendientes), "clip")
         regenerar_clip(proyecto_id, orden, modo, motor=motor)
         cuenta[modo] = cuenta.get(modo, 0) + 1
@@ -103,20 +105,24 @@ def regenerar_clip(proyecto_id: int, orden: int, modo: str = "",
     # El motor solo tiene sentido en i2v; en los otros modos queda vacío para no
     # dejar en la escena el rastro de un motor que no se ha usado.
     motor_usado = ""
-    if modo == "i2v":
-        motor_usado = motor_i2v(motor or None).id
-        try:
-            i2v_mod.clip_i2v(_imagen_para(base, orden, False), datos["prompt"],
-                             datos["seed"], datos["dur"], salida,
-                             motor=motor_usado)
-        finally:
-            from ...clients import comfy
-            comfy.liberar_memoria()
-    elif modo == "kenburns":
-        clips_mod.clip_ken_burns(_imagen_para(base, orden, True), orden,
-                                 datos["dur"], salida)
-    else:
-        clips_mod.clip_estatico(_imagen_para(base, orden, True), datos["dur"], salida)
+    # El clip anterior de esta escena ya no vale (se pidió rehacerlo), así que
+    # si la generación se corta no puede quedar el nuevo a medio escribir.
+    with sin_restos(salida):
+        if modo == "i2v":
+            motor_usado = motor_i2v(motor or None).id
+            try:
+                i2v_mod.clip_i2v(_imagen_para(base, orden, False), datos["prompt"],
+                                 datos["seed"], datos["dur"], salida,
+                                 motor=motor_usado)
+            finally:
+                from ...clients import comfy
+                comfy.liberar_memoria()
+        elif modo == "kenburns":
+            clips_mod.clip_ken_burns(_imagen_para(base, orden, True), orden,
+                                     datos["dur"], salida)
+        else:
+            clips_mod.clip_estatico(_imagen_para(base, orden, True), datos["dur"],
+                                    salida)
     tardo = time.time() - t0
 
     with get_session() as s:

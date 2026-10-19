@@ -30,7 +30,16 @@ export interface Job {
   id: number;
   tipo: string;
   estado: string;
+  // Intentos gastados: la cola reintenta sola los fallos transitorios, así que
+  // un 3 aquí quiere decir que lo de fuera falló tres veces.
+  intentos: number;
   progreso: ProgresoJob | null;
+}
+
+// Un job ya terminado, como lo devuelve /api/jobs/historial: "cancelado" es un
+// estado propio porque pararlo fue una decisión, no un fallo.
+export interface JobHistorial extends Job {
+  log: string;
 }
 
 export interface TemaResumen {

@@ -5,11 +5,29 @@ medios de Apple: muy poca CPU y más rápido. El software (libx264) da la mejor
 calidad por bit a costa de CPU. Los filtros (zoompan, overlay) siguen en CPU
 en ambos casos: no son acelerables por hardware.
 """
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
 from ... import procesos
 from ...config import VIDEO_BITRATE_MBPS, VIDEO_CRF, VIDEO_ENCODER
+
+
+@contextmanager
+def sin_restos(destino: Path):
+    """Borra el archivo a medio escribir si lo que lo generaba no termina.
+
+    Un clip o un montaje truncado existe en disco, así que las etapas que
+    deciden "¿está hecho?" mirando el archivo lo darían por bueno — y `ffmpeg
+    concat` se salta sin fallar el clip que no puede abrir, entregando un vídeo
+    al que le falta una escena. El proyecto ya prefiere rechazar un clip corrupto
+    a omitirlo en silencio; parar la generación no puede dejar uno ahí.
+    """
+    try:
+        yield
+    except BaseException:
+        destino.unlink(missing_ok=True)
+        raise
 
 
 def archivar_final(base: Path) -> str | None:

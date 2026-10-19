@@ -26,7 +26,7 @@ from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
 from ...repositories import personajes as personajes_repo
 from ...repositories import proyectos as proyectos_repo
-from .. import progreso
+from .. import cancelacion, progreso
 from .retratos import ruta_retrato
 
 # Lo que se le antepone al prompt de la escena cuando entra por referencias. El
@@ -112,6 +112,10 @@ def generar_imagenes(proyecto_id: int) -> str:
     con_retrato = 0
     try:
         for i, (e, refs) in enumerate(trabajos):
+            # La imagen no se escribe hasta que ComfyUI la entrega entera, así
+            # que cortar aquí no deja ningún PNG a medias: solo faltan las
+            # escenas que no llegaron a generarse.
+            cancelacion.comprobar(f"quedaban {len(trabajos) - i} imágenes")
             progreso.lote(i, len(trabajos), "imagen")
             t0 = time.time()
             con_retrato += _generar_una(e, slug, refs)

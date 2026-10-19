@@ -60,9 +60,16 @@ def _migrar() -> None:
             c.commit()
 
         cols = [r[1] for r in c.execute(text("PRAGMA table_info(jobs)"))]
-        if "params" not in cols:
-            c.execute(text("ALTER TABLE jobs ADD COLUMN params TEXT DEFAULT '{}'"))
-            c.commit()
+        nuevas = {
+            "params": "TEXT DEFAULT '{}'",
+            # Intentos del job: los de antes de los reintentos quedan en 0, que
+            # es lo que de verdad se sabe de ellos.
+            "intentos": "INTEGER DEFAULT 0",
+        }
+        for col, tipo in nuevas.items():
+            if col not in cols:
+                c.execute(text(f"ALTER TABLE jobs ADD COLUMN {col} {tipo}"))
+        c.commit()
 
         # Conditioning musical de ACE-Step 1.5 (las pistas de v1 se quedan con
         # estos valores por defecto; da igual, hay que regenerarlas de todos

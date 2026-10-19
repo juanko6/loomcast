@@ -9,6 +9,7 @@ import pytest
 from backend import procesos
 from backend.clients import rife
 from backend.services.pipeline import _ffmpeg, _masterizar
+from tests import fakes
 
 
 def test_ejecutar_devuelve_el_resultado():
@@ -33,16 +34,45 @@ def test_el_timeout_sin_nombre_usa_el_ejecutable():
         procesos.ejecutar([sys.executable, "-c", "import time; time.sleep(30)"], timeout=1)
 
 
+def test_terminar_actual_corta_el_proceso_en_marcha(monkeypatch):
+    """Parar un job tiene que alcanzar al ffmpeg (o ESRGAN, o RIFE) que corre.
+
+    El proceso se registra al lanzarlo, así que el hilo HTTP puede pedirle que
+    termine mientras el de la cola sigue bloqueado esperándolo.
+    """
+    import threading
+
+    arrancado = threading.Event()
+
+    def mirando():
+        while not procesos._vivos:
+            pass
+        arrancado.set()
+        procesos.terminar_actual()
+
+    threading.Thread(target=mirando, daemon=True).start()
+    with pytest.raises(procesos.ProcesoParado, match=r"ffmpeg \(prueba\) se paró"):
+        procesos.ejecutar([sys.executable, "-c", "import time; time.sleep(30)"],
+                          timeout=30, que="ffmpeg (prueba)")
+    assert arrancado.is_set()
+    # Y no queda rastro: ni procesos vivos ni pids marcados de la vez anterior.
+    assert not procesos._vivos and not procesos._parados
+
+
+def test_sin_procesos_en_marcha_terminar_actual_no_hace_nada():
+    assert procesos.terminar_actual() == 0
+
+
 @pytest.fixture
 def todo_se_cuelga(monkeypatch):
-    """Cualquier subprocess.run excede su tope; guarda los timeouts que se pidieron."""
+    """Cualquier proceso externo excede su tope; guarda los timeouts pedidos."""
     pedidos = []
 
     def colgado(cmd, **kw):
         pedidos.append(kw.get("timeout"))
         raise subprocess.TimeoutExpired(cmd, kw.get("timeout") or 0)
 
-    monkeypatch.setattr(subprocess, "run", colgado)
+    monkeypatch.setattr(subprocess, "Popen", fakes.popen_falso(colgado))
     return pedidos
 
 
@@ -120,7 +150,7 @@ def test_ejecutar_no_le_deja_la_terminal_al_proceso(monkeypatch):
         visto.update(kw)
         return subprocess.CompletedProcess(cmd, 0)
 
-    monkeypatch.setattr(subprocess, "run", falso_run)
+    monkeypatch.setattr(subprocess, "Popen", fakes.popen_falso(falso_run))
     procesos.ejecutar(["ffmpeg", "-i", "x"], timeout=10)
 
     assert visto["stdin"] is subprocess.DEVNULL

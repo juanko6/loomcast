@@ -17,8 +17,12 @@ class Job(Base):
     # Argumentos extra del handler, en JSON. ref_id no basta para jobs que
     # actúan sobre una parte del proyecto (p. ej. {"orden": 3, "modo": "i2v"}).
     params: Mapped[str] = mapped_column(Text, default="{}")
-    # pendiente | corriendo | ok | error
+    # pendiente | corriendo | ok | error | cancelado
     estado: Mapped[str] = mapped_column(default="pendiente")
+    # Intentos gastados. Un job que falla por algo transitorio se reintenta
+    # (ver workers/queue.py), y sin este número el historial no distinguiría
+    # "falló a la primera" de "falló tres veces seguidas".
+    intentos: Mapped[int] = mapped_column(default=0)
     log: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(default=now_utc)
     finished_at: Mapped[datetime | None] = mapped_column(default=None)

@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from ..models import Job
 
 ACTIVOS = ["pendiente", "corriendo"]
+# Los que ya no se van a mover: lo que ve el historial de la cabecera.
+TERMINADOS = ["ok", "error", "cancelado"]
 
 
 def crear(s: Session, tipo: str, ref_id: int, params: str = "{}") -> Job:
@@ -72,11 +74,44 @@ def escenas_en_cola(s: Session, pid: int) -> dict[int, str]:
     return out
 
 
-def marcar_corriendo(s: Session, job: Job) -> None:
+def corriendo(s: Session) -> Job | None:
+    """El job que el worker tiene entre manos. La cola es de un solo hilo, así
+    que como mucho hay uno."""
+    return s.query(Job).filter(Job.estado == "corriendo").order_by(Job.id).first()
+
+
+def pendientes(s: Session) -> list[Job]:
+    return s.query(Job).filter(Job.estado == "pendiente").order_by(Job.id).all()
+
+
+def historial(s: Session, limite: int = 20) -> list[Job]:
+    """Los últimos jobs terminados, del más reciente al más viejo."""
+    return (
+        s.query(Job)
+        .filter(Job.estado.in_(TERMINADOS))
+        .order_by(Job.id.desc())
+        .limit(limite)
+        .all()
+    )
+
+
+def marcar_corriendo(s: Session, job: Job, intento: int = 1) -> None:
     job.estado = "corriendo"
+    job.intentos = intento
 
 
 def finalizar(s: Session, job: Job, estado: str, log: str) -> None:
     job.estado = estado
     job.log = log
     job.finished_at = datetime.now(timezone.utc)
+
+
+def cancelar(s: Session, job: Job, motivo: str) -> None:
+    """Marca el job como cancelado.
+
+    Se usa igual para uno que esperaba su turno (el worker lo salta cuando le
+    llega) y para el que está corriendo (a quien además hay que cortarle el
+    trabajo; ver services/cancelacion.py). El estado es propio y no "error":
+    pararlo fue una decisión, no un fallo, y en el historial se lee distinto.
+    """
+    finalizar(s, job, "cancelado", motivo)

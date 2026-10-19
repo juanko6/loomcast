@@ -17,8 +17,8 @@ from ...db import get_session
 from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
 from ...repositories import proyectos as proyectos_repo
-from .. import progreso
-from ._ffmpeg import args_video, duracion
+from .. import cancelacion, progreso
+from ._ffmpeg import args_video, duracion, sin_restos
 from .clips import ALTO, ANCHO, pendientes_de_modo
 
 
@@ -104,10 +104,15 @@ def generar_i2v(proyecto_id: int, forzar: bool = False,
 
     try:
         for i, e in enumerate(pendientes):
+            # Entre escena y escena, que es lo que hace que parar un lote de
+            # doce no tire por la borda los clips ya animados.
+            cancelacion.comprobar(f"quedaban {len(pendientes) - i} clips")
             progreso.lote(i, len(pendientes), "clip")
             t0 = time.time()
-            clip_i2v(img_dir / f"{e['orden']:02d}.png", e["prompt"], e["seed"],
-                     e["dur"], clips_dir / f"{e['orden']:02d}.mp4", motor=m.id)
+            salida = clips_dir / f"{e['orden']:02d}.mp4"
+            with sin_restos(salida):
+                clip_i2v(img_dir / f"{e['orden']:02d}.png", e["prompt"], e["seed"],
+                         e["dur"], salida, motor=m.id)
             with get_session() as s:
                 escenas_repo.anotar_clip(s, proyecto_id, e["orden"], "i2v",
                                          time.time() - t0, motor=m.id)

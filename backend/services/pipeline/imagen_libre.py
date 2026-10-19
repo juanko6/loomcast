@@ -16,7 +16,7 @@ from ...config import GALERIA_DIR, PROMPTS_DIR
 from ...db import get_session
 from ...repositories import galeria as galeria_repo
 from ...schemas import ImagenLibrePromptLLM
-from .. import progreso
+from .. import cancelacion, progreso
 
 N_PREVIEWS = 4
 
@@ -85,6 +85,7 @@ def generar_previews(imagen_id: int) -> str:
     seeds = [random.randint(0, 2**31 - 1) for _ in range(N_PREVIEWS)]
     try:
         for i, seed in enumerate(seeds):
+            cancelacion.comprobar(f"quedaban {N_PREVIEWS - i} previews")
             progreso.lote(i, N_PREVIEWS, "preview")
             destino = ruta_preview(imagen_id, i)
             if tipo == "editar":
