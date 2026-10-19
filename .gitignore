@@ -26,6 +26,7 @@ referencias/*.mp4
 # macOS
 .DS_Store
 /voces/
+/reparto/
 
 # Frontend Astro (Loomcast Studio)
 web/node_modules/

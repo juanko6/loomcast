@@ -169,3 +169,47 @@ def test_el_casting_guarda_el_tipo_de_cada_miembro(session, dirs_tmp, fake_llm):
     tipos = {x.clave: x.tipo for x in personajes_repo.por_proyecto(session, p.id)}
     assert tipos == {"VIUDA": "persona", "MAPA": "objeto"}
     assert "MAPA (objeto)" in log
+
+
+def test_regenerar_el_casting_conserva_a_los_traidos_del_reparto(session, proy, fake_llm):
+    """Perderlos sería malo: el usuario los eligió a mano, su retrato ya está
+    copiado en el proyecto y su marcador puede estar escrito en los prompts."""
+    f.personaje(session, proy, clave="NARRADOR", nombre="El narrador",
+                ficha="a grey-haired man with a deep voice",
+                reparto_slug="el-narrador")
+    f.personaje(session, proy, clave="EXTRA", nombre="Un extra", ficha=FICHA)
+    fake_llm.responder(CastingLLM, {"personajes": [
+        {"clave": "LUIS", "nombre": "Luis", "ficha": FICHA}]})
+
+    log = casting.generar_casting(proy)
+
+    assert log == "2 personajes fijados (NARRADOR (del reparto), LUIS)"
+    session.expire_all()
+    ps = personajes_repo.por_proyecto(session, proy)
+    # El del reparto va primero y con su ficha intacta; el del casting anterior,
+    # que nació aquí, se fue como siempre.
+    assert [(p.clave, p.orden) for p in ps] == [("NARRADOR", 0), ("LUIS", 1)]
+    assert ps[0].ficha == "a grey-haired man with a deep voice"
+
+
+def test_el_del_reparto_gana_la_clave_al_que_acaba_de_escribir_el_llm(session, proy, fake_llm):
+    """Conservarlo no es a ciegas: si el LLM escribe a alguien con la misma
+    clave, manda el del reparto, porque su ficha es la que no deriva."""
+    f.personaje(session, proy, clave="ANA", ficha="a tall woman with red hair",
+                reparto_slug="ana-narradora")
+    fake_llm.responder(CastingLLM, {"personajes": [
+        {"clave": "ana", "nombre": "Ana", "ficha": "a short blonde teenager"},
+        {"clave": "luis", "nombre": "Luis", "ficha": FICHA}]})
+
+    assert casting.generar_casting(proy) == "2 personajes fijados (ANA (del reparto), LUIS)"
+
+    session.expire_all()
+    ps = personajes_repo.por_proyecto(session, proy)
+    assert [p.clave for p in ps] == ["ANA", "LUIS"]
+    assert ps[0].ficha == "a tall woman with red hair"
+
+
+def test_un_casting_vacio_no_se_lleva_a_los_del_reparto(session, proy, fake_llm):
+    f.personaje(session, proy, reparto_slug="ana-narradora")
+    fake_llm.responder(CastingLLM, {"personajes": []})
+    assert casting.generar_casting(proy) == "1 personajes fijados (ANA (del reparto))"

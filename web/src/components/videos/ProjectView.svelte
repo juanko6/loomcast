@@ -10,6 +10,7 @@
   import BotonParar from "../shell/BotonParar.svelte";
   import {
     ETAPA_VIDEO,
+    type MiembroReparto,
     type Paso,
     type ProyectoDetalle,
     type Voz,
@@ -19,12 +20,14 @@
   let {
     p,
     voces,
+    reparto = [],
     bust = 0,
     acciones,
     onver,
   }: {
     p: ProyectoDetalle;
     voces: Voz[];
+    reparto?: MiembroReparto[];
     bust?: number;
     // Todas las acciones del pipeline, inyectadas por el orquestador.
     acciones: Record<string, any>;
@@ -108,6 +111,7 @@
     {:else if activo === "escenas"}
       <StepEscenas
         {p}
+        {reparto}
         {busy}
         {bust}
         ongenerar={acciones.generarEscenas}
@@ -117,6 +121,10 @@
         ongenerarretrato={acciones.generarRetrato}
         onanadirpersonaje={acciones.anadirPersonaje}
         onborrarpersonaje={acciones.borrarPersonaje}
+        ontraerdelreparto={acciones.traerDelReparto}
+        onpromoveralreparto={acciones.promoverAlReparto}
+        onactualizarenreparto={acciones.actualizarEnReparto}
+        onborrardelreparto={acciones.borrarDelReparto}
         ongenerarimagenes={acciones.generarImagenes}
         onregenimagen={acciones.regenerarImagen}
         onregenclip={acciones.regenerarClip}

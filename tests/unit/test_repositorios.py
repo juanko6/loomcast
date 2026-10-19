@@ -76,6 +76,20 @@ def test_borrar_personaje_devuelve_filas(session):
     assert personajes_repo.borrar(session, p.id, "ANA") == 0
 
 
+def test_clave_libre_numera_en_vez_de_pisar(session):
+    p = f.proyecto(session)
+    assert personajes_repo.clave_libre(session, p.id, "ANA") == "ANA"
+    f.personaje(session, p.id, clave="ANA")
+    assert personajes_repo.clave_libre(session, p.id, "ANA") == "ANA_2"
+    f.personaje(session, p.id, clave="ANA_2")
+    f.personaje(session, p.id, clave="ANA_3")
+    assert personajes_repo.clave_libre(session, p.id, "ANA") == "ANA_4"
+    # Y el hueco del medio se reutiliza: lo que importa es no coincidir.
+    personajes_repo.borrar(session, p.id, "ANA_2")
+    session.commit()
+    assert personajes_repo.clave_libre(session, p.id, "ANA") == "ANA_2"
+
+
 # --- proyectos --------------------------------------------------------------
 
 def test_slug_existe_y_por_idea(session):
@@ -200,3 +214,17 @@ def test_voces_ruta_ref_y_borrado(session, dirs_tmp):
     voces_repo.borrar(session, v)
     session.commit()
     assert voces_repo.listar(session) == []
+
+
+def test_reparto_ruta_retrato_y_desvinculado(session, dirs_tmp):
+    from backend.repositories import reparto as reparto_repo
+
+    m = f.miembro_reparto(session)
+    p = f.proyecto(session)
+    f.personaje(session, p.id, reparto_slug=m.slug)
+    assert reparto_repo.ruta_retrato(m.slug) == (
+        dirs_tmp["reparto"] / "ana-narradora" / "retrato.png")
+    assert reparto_repo.desvincular(session, m.slug) == 1
+    session.commit()
+    session.expire_all()
+    assert personajes_repo.por_proyecto(session, p.id)[0].reparto_slug == ""

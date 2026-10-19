@@ -88,6 +88,22 @@ class PersonajeNuevoIn(BaseModel):
     ficha: str = ""
 
 
+class RepartoDesdeProyectoIn(BaseModel):
+    """Qué personaje de qué proyecto se guarda en el reparto propio.
+
+    El alta no es un formulario en blanco: se promueve a alguien que ya tiene
+    ficha y retrato buenos, que es cuando uno sabe que quiere conservarlo.
+    `nombre` vacío = se usa el que tenga en el proyecto.
+    """
+    proyecto_id: int
+    clave: str = Field(min_length=1, max_length=24)
+    nombre: str = ""
+
+
+class RepartoTraerIn(BaseModel):
+    proyecto_id: int
+
+
 class RegenerarImagenIn(BaseModel):
     # True = otra imagen distinta; False = mismo seed, solo cambia si se editó
     # el prompt.

@@ -245,6 +245,7 @@ MUSICA_PORTADA_PX: int = int(_musica.get("portada_px", 384))
 PROYECTOS_DIR: Path = ROOT / _cfg["paths"]["proyectos"]
 PLANTILLAS_DIR: Path = ROOT / _cfg["paths"]["plantillas"]
 VOCES_DIR: Path = ROOT / _cfg["paths"]["voces"]
+REPARTO_DIR: Path = ROOT / _cfg["paths"].get("reparto", "reparto")
 GALERIA_DIR: Path = ROOT / _cfg["paths"].get("galeria", "galeria")
 MUSICA_DIR: Path = ROOT / _cfg["paths"].get("musica", "musica")
 PROMPTS_DIR: Path = ROOT / "prompts"

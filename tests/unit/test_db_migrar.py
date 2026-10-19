@@ -57,8 +57,8 @@ def test_migrar_recoloca_el_reparto_que_quedo_marcado_persona(engine):
         ]):
             c.execute(text(
                 "INSERT INTO personajes (id, proyecto_id, orden, clave, nombre, ficha, "
-                "seed, tipo, created_at) VALUES (:id, 1, :orden, :clave, '', :ficha, 1, "
-                "'persona', '2026-01-01')"
+                "seed, tipo, reparto_slug, created_at) VALUES (:id, 1, :orden, :clave, "
+                "'', :ficha, 1, 'persona', '', '2026-01-01')"
             ), {"id": i + 1, "orden": i, "clave": clave, "ficha": ficha})
 
     db_mod._migrar()
@@ -74,9 +74,9 @@ def test_migrar_no_toca_un_objeto_ya_decidido(engine):
         c.execute(text("DELETE FROM personajes"))
         c.execute(text(
             "INSERT INTO personajes (id, proyecto_id, orden, clave, nombre, ficha, "
-            "seed, tipo, created_at) VALUES (1, 1, 0, 'RARO', '', 'a woman in her "
-            "forties with dark hair and green eyes, wearing a coat', 1, 'objeto', "
-            "'2026-01-01')"
+            "seed, tipo, reparto_slug, created_at) VALUES (1, 1, 0, 'RARO', '', "
+            "'a woman in her forties with dark hair and green eyes, wearing a coat', "
+            "1, 'objeto', '', '2026-01-01')"
         ))
 
     db_mod._migrar()

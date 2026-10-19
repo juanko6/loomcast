@@ -3,6 +3,7 @@ from backend.repositories import escenas as escenas_repo
 from backend.repositories import ideas as ideas_repo
 from backend.repositories import personajes as personajes_repo
 from backend.repositories import proyectos as proyectos_repo
+from backend.repositories import reparto as reparto_repo
 from backend.repositories import temas as temas_repo
 
 
@@ -36,6 +37,16 @@ def escenas(s, proyecto_id, n=2):
 
 
 def personaje(s, proyecto_id, clave="ANA", nombre="Ana",
-              ficha="a tall woman with red hair", tipo="persona"):
-    personajes_repo.crear(s, proyecto_id, clave, nombre, ficha, 1, tipo)
+              ficha="a tall woman with red hair", tipo="persona",
+              reparto_slug=""):
+    personajes_repo.crear(s, proyecto_id, clave, nombre, ficha, 1, tipo,
+                          reparto_slug=reparto_slug)
     s.commit()
+
+
+def miembro_reparto(s, slug="ana-narradora", nombre="Ana narradora",
+                    clave="ANA", ficha="a tall woman with red hair",
+                    tipo="persona", seed=7):
+    m = reparto_repo.crear(s, slug, nombre, clave, ficha, tipo, seed)
+    s.commit()
+    return m

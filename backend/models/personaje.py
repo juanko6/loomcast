@@ -35,4 +35,11 @@ class Personaje(Base):
     # Semilla propia: con el mismo sujeto y la misma seed las caras se parecen
     # más entre escenas, y es la que fijará el retrato de referencia.
     seed: Mapped[int] = mapped_column(default=0)
+    # Slug del miembro del reparto propio del que se trajo, o "" si nació aquí
+    # (del casting o de un alta a mano). No es una referencia viva: la ficha y
+    # el retrato ya están copiados y no cambian si el original cambia o se
+    # borra. Sirve para tres cosas que si no habría que adivinar: ofrecer
+    # "actualizar en el reparto" en vez de duplicarlo, saber a quién **no**
+    # tirar al regenerar el casting, y decir en la UI que esa cara es de la casa.
+    reparto_slug: Mapped[str] = mapped_column(default="")
     created_at: Mapped[datetime] = mapped_column(default=now_utc)

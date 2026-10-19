@@ -53,6 +53,14 @@ def _migrar() -> None:
         c.commit()
 
         cols = [r[1] for r in c.execute(text("PRAGMA table_info(personajes)"))]
+        # De qué miembro del reparto propio se trajo (vacío = nació en este
+        # proyecto). Los repartos de antes del reparto persistente se quedan en
+        # "", que es la verdad: ninguno venía de ningún sitio.
+        if "reparto_slug" not in cols:
+            c.execute(
+                text("ALTER TABLE personajes ADD COLUMN reparto_slug VARCHAR DEFAULT ''")
+            )
+            c.commit()
         if "tipo" not in cols:
             c.execute(
                 text("ALTER TABLE personajes ADD COLUMN tipo VARCHAR DEFAULT 'persona'")

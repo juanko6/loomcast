@@ -138,7 +138,7 @@ def parada_pedida():
 
 @pytest.fixture
 def dirs_tmp(monkeypatch, tmp_path):
-    """Redirige las carpetas de salida (proyectos/, voces/, galeria/, musica/) a un tmp.
+    """Redirige las carpetas de salida (proyectos/, voces/, reparto/, galeria/, musica/) a un tmp.
 
     Los módulos hacen `from ...config import PROYECTOS_DIR`, así que no basta
     con parchear config: se parchea el nombre en cada módulo de `backend` que
@@ -155,7 +155,8 @@ def dirs_tmp(monkeypatch, tmp_path):
 
     dirs = {}
     for nombre, carpeta in (("PROYECTOS_DIR", "proyectos"), ("VOCES_DIR", "voces"),
-                            ("GALERIA_DIR", "galeria"), ("MUSICA_DIR", "musica")):
+                            ("REPARTO_DIR", "reparto"), ("GALERIA_DIR", "galeria"),
+                            ("MUSICA_DIR", "musica")):
         destino = tmp_path / carpeta
         destino.mkdir()
         dirs[carpeta] = destino

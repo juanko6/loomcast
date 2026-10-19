@@ -505,6 +505,60 @@ que el tamaño de entrada sea divisible por el de salida y si no revienta con
 *"Adaptive pool MPS: input sizes must be divisible by output sizes"*. Sin el
 parche no hay edición con referencias en Mac, con 2511 ni con 2509.
 
+### Reparto propio (reutilizable entre vídeos)
+
+Todo lo de arriba fija a un personaje **dentro** de un vídeo. Pero el personaje
+cuelga de su proyecto y muere con él, así que un narrador que vuelve en diez
+vídeos había que describirlo y retratarlo diez veces, y salía distinto. El
+**reparto propio** es el almacén que sobrevive al vídeo: vive en
+`reparto/<slug>/retrato.png` (mismo patrón que `voces/<slug>/ref.wav`) y se
+maneja desde el desplegable «Reparto propio» del paso 4.
+
+Tres acciones, y el orden importa:
+
+- **Guardar en el reparto** promueve a alguien de un proyecto. El alta es así, y
+  no un formulario en blanco, porque el momento en que uno sabe que quiere
+  conservar a un personaje es cuando ya tiene la ficha afinada y una cara que
+  convence, y eso pasa dentro de un vídeo. Se le pone un nombre («Ana, la
+  narradora»), que es lo que lo distingue en el listado; viaja su ficha, su
+  `tipo` (persona u objeto, que decide el encuadre del retrato) y su seed, para
+  que rehacerle la cara «con el mismo seed» en otro vídeo dé la misma persona.
+- **Traer** lo mete en el proyecto abierto con la ficha y la cara ya puestas.
+- **Actualizar en el reparto** sube al almacén la versión que hay en un
+  proyecto. Hace falta porque **editar la ficha dentro de un proyecto no toca al
+  original**: un retoque para una escena concreta no puede cambiar al personaje
+  en todos los vídeos futuros.
+
+**El retrato se copia, no se referencia.** Los proyectos son autocontenidos en
+disco y eso ha salido bien: borrar del reparto no puede romper un vídeo ya hecho
+ni cambiar uno antiguo por detrás. Al traer a alguien, su `retrato.png` se copia
+a `proyectos/<slug>/personajes/<CLAVE>.png` y desde ahí el proyecto es dueño de
+su copia. Borrar del reparto solo borra su carpeta y hace que los personajes que
+venían de él olviden de dónde vinieron (mismo criterio que al borrar una voz del
+banco); su ficha y su cara siguen en el proyecto.
+
+Dos choques que había que resolver, y cómo quedaron:
+
+- **Regenerar el reparto reemplaza el reparto completo del proyecto**, y eso se
+  llevaría también a los traídos del almacén. Ahora **sobreviven**: perderlos
+  sería lo peor de las dos opciones, porque el usuario los eligió a mano, su
+  retrato ya está copiado y su marcador puede estar escrito en los prompts de
+  escena, que quedarían nombrando a nadie. Conservarlos no es a ciegas: si el
+  LLM acaba de escribir a alguien con la misma clave, **manda el del reparto** y
+  el del LLM se descarta, porque tener una ficha canónica que no deriva entre
+  vídeos es justo para lo que se guardó. El log de la etapa lo dice marcando a
+  cada uno con «(del reparto)», y la UI avisa antes de pulsar.
+- **Las claves son marcadores `{CLAVE}` ya escritos en los prompts.** Traer a
+  alguien cuya clave ya existe en el proyecto no puede pisar al que estaba ni
+  dejar dos con el mismo marcador, porque la sustitución es por texto y el
+  segundo se quedaría con la ficha del primero. Entra con la siguiente libre
+  (`ANA_2`, `ANA_3`…) y la UI avisa de con qué clave entró, que es la que hay
+  que escribir en los prompts.
+
+A diferencia del banco de voces, aquí no se encola nada: promover y traer son
+copiar un PNG y escribir una fila, sin GPU ni LLM, así que van en el hilo HTTP
+y la UI ve el resultado al instante.
+
 ## Ciclo de vida del LLM
 
 Solo cinco etapas usan el llama-server (ideas, guion, metadatos, reparto y prompts de escena); el resto del pipeline pelea por la misma memoria unificada. Por eso el modelo de texto no vive residente: Loomcast lo **carga al empezar una etapa de texto y lo descarga antes de cualquier etapa de voz/GPU**, igual que ya hacía con ComfyUI (`/free`) y Qwen3-TTS.
@@ -606,6 +660,7 @@ Voces reutilizables generadas con Qwen3-TTS VoiceDesign, guardadas en `voces/<sl
 - ✅ **Música de la historia** — el proyecto compone su pista desde el guion y las escenas, se descarga sola (audio sin narración, reutilizable en redes) y opcionalmente se mezcla bajo la voz con ducking
 - ✅ **Cola con reintentos y parada** — los fallos transitorios se reintentan solos con espera creciente, y la generación se puede detener (lo que corre, la cola entera o las dos) desde la cabecera y desde las tres secciones
 - ✅ **Plantilla `historia`** — un hecho real contado como relato: guion narrativo, voz grave y pausada, reparto y estilo de época sin personajes reconocibles. Tercer nicho junto a `curiosidades` y `drama`, y con ella se cierra la Fase 5
+- ✅ **Reparto propio** — personajes guardados aparte, con su ficha y su cara, que se traen a cualquier vídeo nuevo; la cara se copia al proyecto y editarla ahí no toca al original. Primera pieza de la Fase 6
 - ⬜ Pendiente — empaquetado
 
 ## Imágenes

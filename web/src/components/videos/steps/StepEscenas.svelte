@@ -4,10 +4,16 @@
   import IconButton from "../../primitives/IconButton.svelte";
   import { media } from "@/lib/api";
   import { tiraH } from "@/lib/tira";
-  import { NOMBRE_MODO, type Personaje, type ProyectoDetalle } from "@/lib/proyectos";
+  import {
+    NOMBRE_MODO,
+    type MiembroReparto,
+    type Personaje,
+    type ProyectoDetalle,
+  } from "@/lib/proyectos";
 
   let {
     p,
+    reparto = [],
     busy = false,
     bust = 0,
     ongenerar,
@@ -17,6 +23,10 @@
     ongenerarretrato,
     onanadirpersonaje,
     onborrarpersonaje,
+    ontraerdelreparto,
+    onpromoveralreparto,
+    onactualizarenreparto,
+    onborrardelreparto,
     ongenerarimagenes,
     onregenimagen,
     onregenclip,
@@ -24,6 +34,8 @@
     onver,
   }: {
     p: ProyectoDetalle;
+    // El reparto propio: lo que hay guardado para traer a este vídeo.
+    reparto?: MiembroReparto[];
     busy?: boolean;
     bust?: number;
     ongenerar: () => void;
@@ -33,6 +45,10 @@
     ongenerarretrato: (clave: string, nuevoSeed: boolean) => void;
     onanadirpersonaje: (clave: string, nombre: string, ficha: string) => void;
     onborrarpersonaje: (clave: string) => void;
+    ontraerdelreparto: (slug: string) => void;
+    onpromoveralreparto: (clave: string, nombre: string) => void;
+    onactualizarenreparto: (slug: string, clave: string) => void;
+    onborrardelreparto: (slug: string, nombre: string) => void;
     ongenerarimagenes: (e: { orden: number; prompt: string; prompt_movimiento: string | null }[]) => void;
     onregenimagen: (orden: number, nuevoSeed: boolean) => void;
     onregenclip: (orden: number, modo: string) => void;
@@ -134,6 +150,14 @@
   function urlRetrato(clave: string) {
     return `${media(`/proyectos/${p.id}/personajes/${clave}/retrato`)}?v=${bust}`;
   }
+
+  function urlRetratoGuardado(slug: string) {
+    return `${media(`/reparto/${slug}/retrato`)}?v=${bust}`;
+  }
+
+  // Nombre con el que se propondrá guardar a alguien en el reparto propio: el
+  // del guion si lo tiene, y si no su clave, que es lo único seguro que hay.
+  const nombreGuardado = (c: Personaje) => c.nombre?.trim() || c.clave;
 
   // Escenas que se generarán a partir de las caras del reparto en vez de solo
   // desde el texto: las que llevan un personaje que ya tiene retrato.
@@ -237,6 +261,14 @@
                   objeto
                 </span>
               {/if}
+              {#if c.reparto_slug}
+                <span
+                  class="rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent"
+                  title="Vino del reparto propio. Su ficha y su cara son copias: editarlas aquí no toca al original, y regenerar el reparto no se lo lleva."
+                >
+                  del reparto
+                </span>
+              {/if}
               <span class="ml-auto">
                 <IconButton
                   name="trash"
@@ -252,6 +284,30 @@
               bind:value={fichas[c.clave]}
               placeholder="Descripción física en inglés"
             ></textarea>
+            <!-- Guardar en el reparto propio es explícito, y actualizar también:
+                 un retoque para una escena no debe cambiar al personaje en
+                 todos los vídeos futuros. -->
+            <div class="mt-1 flex flex-wrap items-center gap-2">
+              {#if c.reparto_slug}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onclick={() => onactualizarenreparto(c.reparto_slug!, c.clave)}
+                  title="Sube esta ficha y esta cara al reparto propio. Los vídeos que ya lo trajeron no cambian."
+                >
+                  Actualizar en el reparto
+                </Button>
+              {:else}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onclick={() => onpromoveralreparto(c.clave, nombreGuardado(c))}
+                  title="Guárdalo en el reparto propio para traerlo a otros vídeos con esta misma cara"
+                >
+                  Guardar en el reparto
+                </Button>
+              {/if}
+            </div>
           </div>
         </div>
       {/each}
@@ -267,6 +323,12 @@
       {#if p.escenas.length}
         <span class="text-xs text-muted">
           Los prompts ya escritos no cambian solos: regenéralos para aplicar el reparto nuevo.
+        </span>
+      {/if}
+      {#if p.personajes.some((c) => c.reparto_slug)}
+        <span class="text-xs text-muted">
+          Regenerar el reparto conserva a los que trajiste del reparto propio, con su ficha
+          y su cara; si el LLM escribe a alguien con su misma clave, se descarta el del LLM.
         </span>
       {/if}
     </div>
@@ -324,6 +386,73 @@
       </div>
     </div>
   {/if}
+
+  <!-- Reparto propio: lo que sobrevive al vídeo. Va plegado y al final porque
+       es el almacén, no el reparto de este vídeo, igual que el banco de voces
+       vive plegado bajo la voz elegida. -->
+  <details class="mt-3 rounded-lg border border-line bg-surface p-3">
+    <summary class="cursor-pointer text-sm text-dim">
+      Reparto propio ({reparto.length})
+    </summary>
+    <p class="mt-2 text-xs text-muted">
+      Personajes guardados aparte, reutilizables entre vídeos. Al traer a uno, su ficha y su
+      cara se <strong>copian</strong> al proyecto: lo que edites aquí no cambia el original, y
+      borrar del reparto no toca a los vídeos ya hechos.
+    </p>
+    {#if reparto.length}
+      <div class="mt-3 space-y-2">
+        {#each reparto as m (m.slug)}
+          <div class="flex items-center gap-3 rounded-md bg-surface-2 p-2">
+            {#if m.retrato}
+              <img
+                src={urlRetratoGuardado(m.slug)}
+                alt={`retrato guardado de ${m.nombre}`}
+                class="w-12 shrink-0 rounded object-cover"
+                style="aspect-ratio:3/4"
+              />
+            {:else}
+              <div
+                class="grid w-12 shrink-0 place-items-center rounded bg-surface-3 text-center text-[10px] text-muted"
+                style="aspect-ratio:3/4"
+              >
+                sin cara
+              </div>
+            {/if}
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="truncate text-sm">{m.nombre}</span>
+                <Chip tone="accent">{"{" + m.clave + "}"}</Chip>
+                {#if m.tipo === "objeto"}
+                  <span class="rounded-full bg-surface-3 px-2 py-0.5 text-xs text-dim">objeto</span>
+                {/if}
+              </div>
+              <p class="truncate text-xs text-muted" title={m.ficha}>{m.ficha}</p>
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              onclick={() => ontraerdelreparto(m.slug)}
+              title={`Mete a ${m.nombre} en este vídeo con su ficha y su cara`}
+            >
+              Traer
+            </Button>
+            <IconButton
+              name="trash"
+              label={`Borrar a ${m.nombre} del reparto propio`}
+              size={14}
+              onclick={() => onborrardelreparto(m.slug, m.nombre)}
+              class="hover:bg-danger-soft hover:text-danger"
+            />
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <p class="mt-3 text-xs text-muted">
+        Todavía no hay nadie guardado. Cuando un personaje de un vídeo tenga la ficha afinada y
+        una cara que convenza, «Guardar en el reparto» lo deja aquí para los siguientes.
+      </p>
+    {/if}
+  </details>
 </section>
 
 {#if !p.escenas.length}
