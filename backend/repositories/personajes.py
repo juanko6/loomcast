@@ -63,7 +63,12 @@ def fichas(s: Session, proyecto_id: int) -> dict[str, str]:
 
 
 def actualizar(s: Session, proyecto_id: int, cambios: dict[str, dict]) -> int:
-    """Edita nombre, ficha y/o tipo de los personajes indicados, por clave."""
+    """Edita nombre y/o ficha de los personajes indicados, por clave.
+
+    El tipo (persona | objeto) no se toca aquí: lo decide el casting a partir de
+    lo que diga el LLM y de la propia ficha. Editar la ficha sí lo revisa, por
+    si pasa a describir algo sin cara.
+    """
     from ..services.pipeline.casting import normalizar_tipo
 
     n = 0
@@ -75,10 +80,6 @@ def actualizar(s: Session, proyecto_id: int, cambios: dict[str, dict]) -> int:
             p.nombre = campos["nombre"]
         if "ficha" in campos:
             p.ficha = campos["ficha"]
-        if "tipo" in campos:
-            # Se normaliza contra la ficha que queda guardada, no contra la
-            # anterior: si el usuario corrige la ficha y el tipo a la vez, manda
-            # lo que acaba de escribir.
-            p.tipo = normalizar_tipo(campos["tipo"], p.ficha)
+            p.tipo = normalizar_tipo(p.tipo, p.ficha)
         n += 1
     return n
