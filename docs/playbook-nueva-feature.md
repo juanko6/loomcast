@@ -175,7 +175,39 @@ checkpoint y tener `workflows/musica_api.json` (ya incluido). Cambiar `SaveAudio
 
 ---
 
-## 6. Convenciones del proyecto
+## 6. Cuando la suite falla de forma intermitente
+
+Pasó el 2026-10-19: una corrida dijo `2 failed, 599 passed` y las ocho siguientes
+quedaron en verde, incluidas cinco con la máquina cargada a propósito (14 cores
+quemando y 6 GB fijos, y luego bloques de 12 GB pidiéndose y soltándose de golpe,
+que es lo que hace un modelo al cargar y descargar). La corrida que falló tardó
+20 s en vez de 11,7, así que la lentitud se reprodujo; el fallo, no.
+
+Dos cosas que aprender de ahí, porque costaron tiempo:
+
+- **No filtres la salida de pytest a una línea.** `addopts = -ra` ya imprime el
+  resumen de fallos con sus nombres; un `| tail -1` lo tira justo cuando hace
+  falta. Si un fallo intermitente se pierde, no hay forma de recuperarlo.
+- **`.pytest_cache/v/cache/lastfailed` NO es prueba de qué falló.** pytest
+  reescribe las entradas de los tests que recolecta, pero **conserva las de los
+  que ya no existen**, así que mezcla corridas viejas con la última. En ese
+  incidente nombraba dos tests renombrados hacía días (uno en `52da77d`) y mandó
+  la investigación a dos ficheros que no tenían nada que ver. Antes de creerla,
+  comprueba que esos nombres se recolectan hoy:
+  `pytest --collect-only -q | grep <nombre>`.
+
+Si vuelve a pasar, el candidato con una fragilidad real es
+`test_armar_video_con_clip_corrupto_falla_en_vez_de_entregar_un_video_incompleto`:
+su `match` exige que la escena 1 sea la **única** corrupta, y `duracion()`
+devuelve 0.0 también cuando el `ffprobe` se pasa de `SONDEO_S` (30 s), con lo que
+un sondeo agotado en el clip bueno metería la escena 0 en el mensaje y el regex
+no casaría. Son 30 s para sondear un clip de 0,5 s, así que haría falta un swap
+muy severo; se deja escrito, no cambiado, porque relajar ese regex dejaría pasar
+justo el bug del que es regresión.
+
+---
+
+## 7. Convenciones del proyecto
 
 - Todo el código y los comentarios en **español**.
 - Commits: **solo el usuario como autor** (sin `Co-Authored-By`). Un commit por feature; si el
