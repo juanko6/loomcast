@@ -37,6 +37,21 @@ def slug_existe(s: Session, slug: str) -> bool:
     return s.query(Proyecto).filter(Proyecto.slug == slug).first() is not None
 
 
+def desvincular_musica(s: Session, musica_id: int) -> int:
+    """Deja sin música los proyectos que apuntaban a `musica_id` (al borrar esa
+    pista desde la sección de Música). Sin esto, un proyecto con la mezcla
+    activada se quedaría apuntando a una pista que ya no existe y el armado
+    fallaría. Devuelve cuántos se desvincularon."""
+    return (
+        s.query(Proyecto)
+        .filter(Proyecto.musica_id == musica_id)
+        .update(
+            {Proyecto.musica_id: None, Proyecto.musica_mezclar: False},
+            synchronize_session=False,
+        )
+    )
+
+
 def desvincular_voz(s: Session, voz_slug: str) -> int:
     """Deja sin voz los proyectos que usaban `voz_slug` (al borrar esa voz),
     para no dejar referencias colgadas. Devuelve cuántos se desvincularon."""

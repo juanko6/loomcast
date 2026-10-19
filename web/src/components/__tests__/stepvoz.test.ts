@@ -9,7 +9,7 @@ const proy = (extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle => ({
   id: 1, slug: "demo", estado: "GUION", plantilla: "curiosidades", voz: null, voz_instruct: "Voz grave y pausada",
   idea: null, guion: null, guion_version: 1, metadatos: null, voz_disponible: false, voz_version: 3,
   subtitulos: null, escenas: [], personajes: [], imagenes_completas: false, video_disponible: false,
-  versiones: [], jobs_activos: 0, job_activo: null, ...extra,
+  versiones: [], jobs_activos: 0, job_activo: null, musica: null, musica_mezclar: false, ...extra,
 });
 const voz = (slug: string, extra: Partial<Voz> = {}): Voz =>
   ({ slug, nombre: slug.toUpperCase(), instruct: `descripción de ${slug}`, estado: "lista", disponible: true, ...extra });

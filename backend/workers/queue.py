@@ -19,6 +19,7 @@ from ..services.pipeline import (
     imagen_libre,
     imagenes,
     musica,
+    musica_proyecto,
     quitar_fondo,
     retratos,
     subtitulos,
@@ -46,6 +47,7 @@ HANDLERS = {
     "quitar_fondo": quitar_fondo.quitar_fondo,
     "mejorar_prompt_musica": musica.mejorar_prompt,
     "generar_musica": musica.generar,
+    "generar_musica_proyecto": musica_proyecto.generar_musica_proyecto,
     "generar_portada_musica": musica.generar_portada,
     "regenerar_clip": escena_individual.regenerar_clip,
     "generar_clips_mixto": escena_individual.generar_clips_mixto,
@@ -67,6 +69,7 @@ JOBS_LLM = {
     "generar_escenas",
     "mejorar_prompt_imagen",
     "mejorar_prompt_musica",
+    "generar_musica_proyecto",
 }
 
 # Etapas que se disparan solas al terminar la anterior:
@@ -74,6 +77,9 @@ JOBS_LLM = {
 #  - Ken Burns: upscale → clips → armado
 #  - i2v: i2v → armado
 #  - música: pista generada → portada
+#    (la música del proyecto no está aquí: su job encola `generar_musica` él
+#     mismo, porque la cadena conserva el ref_id y ahí cambia de proyecto a
+#     pista)
 # Las escenas NO encadenan a imágenes: los prompts se revisan/editan primero.
 CADENA = {
     "generar_voz": "generar_subtitulos",

@@ -56,6 +56,24 @@ export interface Metadatos {
   tiktok: { descripcion: string };
 }
 
+// La pista de música del proyecto. Es una fila de la biblioteca de Música
+// (misma tabla que las pistas sueltas), así que se escucha y se descarga sola,
+// sin la narración: es el audio reutilizable en redes.
+export interface MusicaProyecto {
+  id: number;
+  idea: string;
+  tags: string | null;
+  lyrics: string | null;
+  duracion_s: number;
+  bpm: number;
+  keyscale: string;
+  estado: string;
+  tiene_audio: boolean;
+  tiene_portada: boolean;
+  // Hay un job de esta pista en la cola (brief, síntesis o portada).
+  ocupado: boolean;
+}
+
 export interface Version {
   nombre: string;
   fecha: string;
@@ -80,6 +98,11 @@ export interface ProyectoDetalle {
   escenas: Escena[];
   personajes: Personaje[];
   imagenes_completas: boolean;
+  // null = el proyecto no tiene música todavía.
+  musica: MusicaProyecto | null;
+  // Si el armado mezcla la pista bajo la narración. Tener música y mezclarla
+  // son dos decisiones distintas.
+  musica_mezclar: boolean;
   video_disponible: boolean;
   versiones: Version[];
   jobs_activos: number;
@@ -157,6 +180,22 @@ export const generarRetrato = (id: number, clave: string, nuevo_seed: boolean) =
   api<{ job_id: number }>(`/proyectos/${id}/personajes/${clave}/retrato`, {
     method: "POST",
     body: { nuevo_seed },
+  });
+
+// Escribe el brief musical desde la historia y encola la pista.
+export const generarMusicaProyecto = (id: number) =>
+  api<{ job_id: number }>(`/proyectos/${id}/musica`, { method: "POST" });
+
+// Engancha una pista de la biblioteca (o la suelta con musica_id = null) y
+// decide si el armado la mezcla.
+export const fijarMusicaProyecto = (
+  id: number,
+  musica_id: number | null,
+  mezclar: boolean,
+) =>
+  api<{ ok: boolean }>(`/proyectos/${id}/musica`, {
+    method: "PUT",
+    body: { musica_id, mezclar },
   });
 
 export const generarEscenas = (id: number) =>
@@ -266,6 +305,7 @@ export const ETAPA_VIDEO: Record<string, string> = {
   generar_casting: "Fijando el reparto…",
   generar_retrato: "Retratando al personaje…",
   generar_escenas: "Proponiendo las escenas…",
+  generar_musica_proyecto: "Escribiendo la música de la historia…",
   generar_imagenes: "Generando las imágenes…",
   armar_estatico: "Armando vídeo estático…",
   generar_upscale: "Reescalando imágenes (ESRGAN)…",

@@ -363,3 +363,65 @@ def test_servir_archivos_404_hasta_que_existen(client, proy, dirs_tmp, ruta, par
 
 def test_servir_archivo_de_proyecto_inexistente_404(client):
     assert client.get("/api/proyectos/99/video").status_code == 404
+
+
+# --- música del proyecto ----------------------------------------------------
+
+def _pista(session, idea="banda sonora", estado="generada"):
+    from backend.repositories import musica as musica_repo
+
+    m = musica_repo.crear(session, "instrumental", idea, "tags", "[Intro]",
+                          30, 90, "E minor", "4", "en")
+    m.estado = estado
+    session.commit()
+    return m.id
+
+
+def test_detalle_sin_musica(client, proy):
+    d = client.get(f"/api/proyectos/{proy.id}").json()
+    assert d["musica"] is None and d["musica_mezclar"] is False
+
+
+def test_generar_musica_encola_el_brief(client, proy, jobs_encolados):
+    r = client.post(f"/api/proyectos/{proy.id}/musica")
+    assert r.status_code == 200 and r.json()["job_id"]
+    assert ("generar_musica_proyecto", proy.id) in jobs_encolados
+
+
+def test_fijar_una_pista_de_la_biblioteca_y_activar_la_mezcla(client, session, proy, dirs_tmp):
+    mid = _pista(session)
+
+    assert client.put(f"/api/proyectos/{proy.id}/musica",
+                      json={"musica_id": mid, "mezclar": True}).status_code == 200
+
+    d = client.get(f"/api/proyectos/{proy.id}").json()
+    assert d["musica"]["id"] == mid and d["musica"]["idea"] == "banda sonora"
+    assert d["musica"]["tiene_audio"] is False  # la fila existe, el audio no
+    assert d["musica_mezclar"] is True
+
+
+def test_soltar_la_pista_apaga_la_mezcla(client, session, proy, dirs_tmp):
+    mid = _pista(session)
+    client.put(f"/api/proyectos/{proy.id}/musica", json={"musica_id": mid, "mezclar": True})
+
+    client.put(f"/api/proyectos/{proy.id}/musica", json={"musica_id": None, "mezclar": True})
+
+    d = client.get(f"/api/proyectos/{proy.id}").json()
+    assert d["musica"] is None and d["musica_mezclar"] is False
+
+
+def test_fijar_una_pista_que_no_existe_404(client, proy):
+    r = client.put(f"/api/proyectos/{proy.id}/musica", json={"musica_id": 99, "mezclar": True})
+    assert r.status_code == 404
+
+
+def test_borrar_la_pista_desengancha_el_proyecto(client, session, proy, dirs_tmp):
+    """Si no, el proyecto quedaría apuntando a una pista fantasma y el armado
+    con mezcla fallaría."""
+    mid = _pista(session)
+    client.put(f"/api/proyectos/{proy.id}/musica", json={"musica_id": mid, "mezclar": True})
+
+    assert client.delete(f"/api/musica/{mid}").json()["proyectos_desvinculados"] == 1
+
+    d = client.get(f"/api/proyectos/{proy.id}").json()
+    assert d["musica"] is None and d["musica_mezclar"] is False

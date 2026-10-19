@@ -14,7 +14,8 @@ function proyecto(extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle {
     idea: { titulo: "Un título", gancho: "g", resumen: "r" },
     guion: null, guion_version: 0, metadatos: null, voz_disponible: false, voz_version: 0,
     subtitulos: null, escenas: [], personajes: [], imagenes_completas: false,
-    video_disponible: false, versiones: [], jobs_activos: 0, job_activo: null, ...extra,
+    video_disponible: false, versiones: [], jobs_activos: 0, job_activo: null,
+    musica: null, musica_mezclar: false, ...extra,
   };
 }
 
@@ -252,5 +253,34 @@ describe("ProjectView: qué paso se muestra", () => {
     await userEvent.click(screen.getByRole("button", { name: /Guion/ }));
     await userEvent.click(screen.getByRole("button", { name: "Guardar guion" }));
     expect(guardarGuion).toHaveBeenCalledWith({ gancho: "Hola", frases: ["Uno", "Dos"], cta: "Suscríbete" });
+  });
+});
+
+describe("ProjectView: el paso de Música", () => {
+  const acciones = new Proxy({}, { get: () => vi.fn() }) as Record<string, any>;
+  const montar = (p: ProyectoDetalle) => render(ProjectView, { p, voces: [], acciones, onver: vi.fn() });
+  const activo = () => screen.getByRole("button", { current: "step" }).textContent!.replace(/^\s*\S+\s*/, "").trim();
+  const paso = () => screen.getByRole("button", { name: /Música/ });
+
+  it("se desbloquea con el guion: la música se escribe desde la historia", async () => {
+    const { rerender } = montar(proyecto());
+    expect(paso()).toBeDisabled();
+    await rerender({ p: proyecto({ guion: GUION_FRASES }), voces: [], acciones, onver: vi.fn() });
+    expect(paso()).toBeEnabled();
+  });
+
+  it("es opcional: no se sugiere sola aunque esté pendiente", () => {
+    montar(proyecto({
+      guion: GUION_FRASES, voz_disponible: true, subtitulos: "x", metadatos: {} as never,
+      imagenes_completas: true, video_disponible: true,
+    }));
+    expect(activo()).toBe("Vídeo final");
+  });
+
+  it("se entra a mano y ofrece generar la música", async () => {
+    montar(proyecto({ guion: GUION_FRASES }));
+    await userEvent.click(paso());
+    expect(activo()).toBe("Música");
+    expect(screen.getByRole("button", { name: "Generar la música" })).toBeEnabled();
   });
 });

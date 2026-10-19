@@ -9,6 +9,7 @@ import shutil
 from ..db import get_session
 from ..repositories import jobs as jobs_repo
 from ..repositories import musica as musica_repo
+from ..repositories import proyectos as proyectos_repo
 from ..services.pipeline import musica as musica_pipeline
 from ..workers import queue
 from .musica_combos import (
@@ -195,6 +196,9 @@ def borrar(musica_id: int) -> dict:
         m = musica_repo.obtener(s, musica_id)
         if m is None:
             raise MusicaNoExiste(musica_id)
+        # Un proyecto puede estar usándola como su banda sonora: se queda sin
+        # música (y sin mezcla) en vez de apuntar a una pista que ya no existe.
+        desvinculados = proyectos_repo.desvincular_musica(s, musica_id)
         musica_repo.borrar(s, m)
         s.commit()
     car = musica_pipeline.carpeta(musica_id)
@@ -202,4 +206,5 @@ def borrar(musica_id: int) -> dict:
     if car.exists():
         archivos = sum(1 for _ in car.rglob("*") if _.is_file())
         shutil.rmtree(car)
-    return {"borrada": musica_id, "archivos": archivos}
+    return {"borrada": musica_id, "archivos": archivos,
+            "proyectos_desvinculados": desvinculados}

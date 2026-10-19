@@ -95,6 +95,16 @@
     {/if}
   </div>
 
+  <p class="text-xs text-dim">
+    {#if p.musica_mezclar && p.musica}
+      La pista «{p.musica.idea}» se mezclará por debajo de la narración.
+    {:else if p.musica?.tiene_audio}
+      Hay música generada, pero no se mezclará: actívalo en el paso de Música.
+    {:else}
+      El vídeo sale con voz y subtítulos. Para añadir música, pasa por el paso de Música.
+    {/if}
+  </p>
+
   {#if p.video_disponible}
     <div class="space-y-2">
       <video

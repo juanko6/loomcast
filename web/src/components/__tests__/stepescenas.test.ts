@@ -17,7 +17,8 @@ const proy = (extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle => ({
   id: 1, slug: "demo", estado: "ESCENAS", plantilla: "curiosidades", voz: null, voz_instruct: "", idea: null,
   guion: null, guion_version: 1, metadatos: null, voz_disponible: true, voz_version: 0, subtitulos: "x",
   escenas: [escena(0), escena(1), escena(2)], personajes: [], imagenes_completas: false,
-  video_disponible: false, versiones: [], jobs_activos: 0, job_activo: null, ...extra,
+  video_disponible: false, versiones: [], jobs_activos: 0, job_activo: null,
+  musica: null, musica_mezclar: false, ...extra,
 });
 
 const acciones = () => ({

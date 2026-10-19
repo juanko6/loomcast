@@ -15,6 +15,8 @@ def test_migrar_anade_columnas_a_una_bd_antigua(engine):
     with engine.connect() as c:
         cols = [r[1] for r in c.execute(text("PRAGMA table_info(proyectos)"))]
         assert "voz" in cols
+        # La música del proyecto: su pista y si el armado la mezcla.
+        assert "musica_id" in cols and "musica_mezclar" in cols
         assert c.execute(text("SELECT slug FROM proyectos")).scalar() == "viejo"
 
 

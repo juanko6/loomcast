@@ -189,6 +189,9 @@
         return;
       await tras(API.borrarPersonaje(pid(), clave));
     },
+    generarMusica: () => tras(API.generarMusicaProyecto(pid())),
+    fijarMusica: (musicaId: number | null, mezclar: boolean) =>
+      tras(API.fijarMusicaProyecto(pid(), musicaId, mezclar)),
     generarEscenas: () => tras(API.generarEscenas(pid())),
     guardarEscenas: (e: Parameters<typeof API.guardarEscenas>[1]) =>
       tras(API.guardarEscenas(pid(), e)),

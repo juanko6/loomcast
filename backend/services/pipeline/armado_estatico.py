@@ -13,8 +13,9 @@ from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
+from . import _mezcla
 from . import _subtitulos_render as subs
-from ._ffmpeg import archivar_final, args_video
+from ._ffmpeg import archivar_final, args_video, duracion
 
 
 def armar_estatico(proyecto_id: int) -> str:
@@ -40,6 +41,7 @@ def armar_estatico(proyecto_id: int) -> str:
         raise ValueError(f"Faltan imágenes de las escenas {faltantes}")
     if not (base / "voz.wav").exists() or not (base / "subtitulos.srt").exists():
         raise ValueError("Faltan voz.wav o subtitulos.srt")
+    musica = _mezcla.pista_a_mezclar(proyecto_id)
 
     pl = plantillas_repo.cargar(plantilla)
     sub_cfg = pl["subtitulos"]
@@ -105,13 +107,21 @@ def armar_estatico(proyecto_id: int) -> str:
     # la última palabra.
     objetivo = dur_audio + VIDEO_COLA_FINAL_S
     archivada = archivar_final(base)
+    # Con música, la cadena de audio pasa a filter_complex (la voz entra como
+    # 1:a y la cama como 2:a); sin ella se queda el `-af apad` de siempre.
+    entradas = ["-i", str(musica)] if musica else []
+    if musica:
+        audio_args = ["-filter_complex", _mezcla.cadena(1, 2, objetivo, duracion(musica)),
+                      "-map", "0:v", "-map", "[aout]"]
+    else:
+        audio_args = ["-af", "apad"]
     r = procesos.ejecutar(
         ["ffmpeg", "-loglevel", "error", "-y",
          "-f", "concat", "-safe", "0", "-i", "estatico_concat.txt",
-         "-i", "voz.wav", "-vf", "fps=30",
+         "-i", "voz.wav", *entradas, "-vf", "fps=30",
          *args_video(),
          "-c:a", "aac", "-b:a", "192k",
-         "-af", "apad", "-t", f"{objetivo:.3f}", "final.mp4"],
+         *audio_args, "-t", f"{objetivo:.3f}", "final.mp4"],
         timeout=procesos.MONTAJE_S, que="ffmpeg (montaje estático)",
         cwd=base, capture_output=True, text=True,
     )
@@ -123,5 +133,6 @@ def armar_estatico(proyecto_id: int) -> str:
         avanzar_estado(p, "FINAL")
         s.commit()
     guardado = f"; el anterior queda en versiones/{archivada}" if archivada else ""
+    con_musica = f"; con música ({musica.parent.name})" if musica else ""
     return (f"Video (estático): {len(escenas)} escenas, {objetivo:.1f}s "
-            f"({VIDEO_COLA_FINAL_S:.1f}s tras la voz) → final.mp4{guardado}")
+            f"({VIDEO_COLA_FINAL_S:.1f}s tras la voz) → final.mp4{con_musica}{guardado}")

@@ -2,7 +2,8 @@
 
 Concatena los clips (60fps), superpone los subtítulos rasterizados a PNG
 transparentes (Pillow) con el filtro `overlay` de ffmpeg (cada uno activo en
-su ventana de tiempo) y añade la narración.
+su ventana de tiempo) y añade la narración. Si el proyecto tiene la mezcla de
+música activada, la cama entra por debajo de la voz con ducking (ver _mezcla).
 """
 
 from ... import procesos
@@ -12,6 +13,7 @@ from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
+from . import _mezcla
 from . import _subtitulos_render as subs
 from ._ffmpeg import archivar_final, args_video, duracion
 
@@ -42,6 +44,9 @@ def armar_video(proyecto_id: int) -> str:
         raise ValueError(f"Faltan clips de las escenas {faltantes}")
     if not (base / "voz.wav").exists() or not (base / "subtitulos.srt").exists():
         raise ValueError("Faltan voz.wav o subtitulos.srt")
+    # Se resuelve antes de rasterizar subtítulos: si la mezcla está activada y
+    # la pista no está, mejor fallar ya que tras varios minutos de render.
+    musica = _mezcla.pista_a_mezclar(proyecto_id)
     # ffmpeg sale con código 0 aunque el concat no consiga abrir un clip (corrupto
     # o a medio escribir): lo salta y entrega un video al que le falta esa escena.
     # Se comprueba antes que cada clip tenga duración legible.
@@ -75,6 +80,9 @@ def armar_video(proyecto_id: int) -> str:
         cmd += ["-loop", "1", "-i", f"subs/{i:03d}.png"]
     cmd += ["-i", "voz.wav"]
     idx_audio = len(bloques) + 1
+    idx_musica = idx_audio + 1
+    if musica:
+        cmd += ["-i", str(musica)]
 
     cadena, prev = [], "[0:v]"
     for i, b in enumerate(bloques):
@@ -92,15 +100,23 @@ def armar_video(proyecto_id: int) -> str:
     dur_clips = sum(duracion(base / "clips" / f"{o:02d}.mp4") for o in ordenes)
     objetivo = max(dur_clips, dur_audio + VIDEO_COLA_FINAL_S)
     cadena.append(f"{prev}tpad=stop_mode=clone:stop_duration={objetivo:.3f}[vout]")
+
+    # Sin música: la voz se mapea directa y `-af apad` la rellena con silencio
+    # hasta el final del video. Con música, toda la cadena de audio vive en el
+    # filter_complex (ffmpeg no admite `-af` sobre un stream que sale de ahí) y
+    # el apad va dentro.
+    if musica:
+        cadena.append(_mezcla.cadena(idx_audio, idx_musica, objetivo, duracion(musica)))
+        audio, af = "[aout]", []
+    else:
+        audio, af = f"{idx_audio}:a", ["-af", "apad"]
     filtro = ";".join(cadena)
 
     cmd += ["-filter_complex", filtro,
-            "-map", "[vout]", "-map", f"{idx_audio}:a",
+            "-map", "[vout]", "-map", audio,
             *args_video(), "-r", "60",
             "-c:a", "aac", "-b:a", "192k",
-            # apad + -t: el audio se rellena con silencio hasta el final del
-            # video, para que no quede un stream de audio más corto.
-            "-af", "apad", "-t", f"{objetivo:.3f}", "final.mp4"]
+            *af, "-t", f"{objetivo:.3f}", "final.mp4"]
 
     archivada = archivar_final(base)
     r = procesos.ejecutar(cmd, timeout=procesos.MONTAJE_S, que="ffmpeg (montaje)",
@@ -114,5 +130,6 @@ def armar_video(proyecto_id: int) -> str:
         s.commit()
     cola = objetivo - dur_audio
     guardado = f"; el anterior queda en versiones/{archivada}" if archivada else ""
+    con_musica = f"; con música ({musica.parent.name})" if musica else ""
     return (f"Video (movimiento): {len(ordenes)} escenas, {objetivo:.1f}s "
-            f"({cola:.1f}s tras la voz) → final.mp4{guardado}")
+            f"({cola:.1f}s tras la voz) → final.mp4{con_musica}{guardado}")

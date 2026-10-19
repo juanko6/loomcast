@@ -12,11 +12,13 @@ from ..repositories import guiones as guiones_repo
 from ..repositories import ideas as ideas_repo
 from ..repositories import jobs as jobs_repo
 from ..repositories import metadatos as metadatos_repo
+from ..repositories import musica as musica_repo
 from ..repositories import personajes as personajes_repo
 from ..repositories import plantillas as plantillas_repo
 from ..repositories import proyectos as proyectos_repo
 from ..repositories import voces as voces_repo
 from ..services.pipeline import escenas as escenas_pipeline
+from ..services.pipeline import musica as musica_pipeline
 from ..services.pipeline import retratos
 from ..workers import queue
 
@@ -26,6 +28,15 @@ TIPOS_JOB_PROYECTO = [
     "generar_escenas", "generar_imagenes", "generar_upscale", "generar_clips",
     "generar_i2v", "armar_video", "armar_estatico",
     "regenerar_imagen", "regenerar_clip", "generar_clips_mixto",
+    "generar_musica_proyecto",
+]
+
+# Jobs de la cola que trabajan sobre una pista de música (su ref_id es el id de
+# la pista, no del proyecto): lo que hace falta para saber si la música del
+# proyecto está en marcha.
+TIPOS_JOB_MUSICA = [
+    "generar_musica_proyecto", "generar_musica", "generar_portada_musica",
+    "mejorar_prompt_musica",
 ]
 
 # El estado del proyecto NO retrocede, pero editar escenas invalida imágenes
@@ -41,6 +52,10 @@ class VozNoDisponible(ValueError):
 
 
 class PersonajeNoExiste(LookupError):
+    pass
+
+
+class MusicaNoExiste(LookupError):
     pass
 
 
@@ -82,6 +97,39 @@ def _escena_dict(e, base_dir, en_cola=None) -> dict:
         # 'imagen' | 'clip' si esta escena tiene una regeneración esperando en
         # la cola; None si no.
         "en_cola": (en_cola or {}).get(e.orden),
+    }
+
+
+def _musica_dict(s, p) -> dict | None:
+    """La pista del proyecto, tal como la ve el paso de Música.
+
+    Es una fila de `musicas` como cualquier otra de la biblioteca: lo que la
+    hace del proyecto es que este la apunte. Por eso aquí no se duplica nada,
+    se lee de allí.
+    """
+    if p.musica_id is None:
+        return None
+    m = musica_repo.obtener(s, p.musica_id)
+    if m is None:
+        # La pista se borró desde la sección de Música; el proyecto se queda
+        # sin ella en la siguiente escritura (ver desvincular_musica).
+        return None
+    ocupado = any(
+        j.ref_id == m.id and j.tipo in TIPOS_JOB_MUSICA
+        for j in jobs_repo.activos(s)
+    )
+    return {
+        "id": m.id,
+        "idea": m.idea,
+        "tags": m.tags,
+        "lyrics": m.lyrics,
+        "duracion_s": m.duracion_s,
+        "bpm": m.bpm,
+        "keyscale": m.keyscale,
+        "estado": m.estado,
+        "tiene_audio": musica_pipeline.ruta_audio(m.id) is not None,
+        "tiene_portada": musica_pipeline.ruta_portada(m.id) is not None,
+        "ocupado": ocupado,
     }
 
 
@@ -138,6 +186,8 @@ def detalle(pid: int) -> dict:
             "escenas": escenas,
             "personajes": personajes,
             "imagenes_completas": todas_imagenes,
+            "musica": _musica_dict(s, p),
+            "musica_mezclar": p.musica_mezclar,
             "video_disponible": (base_dir / "final.mp4").exists(),
             "versiones": _versiones(base_dir),
             "jobs_activos": activos,
@@ -171,6 +221,24 @@ def seleccionar_voz(pid: int, voz_slug: str) -> None:
         if voces_repo.por_slug(s, voz_slug) is None:
             raise VozNoDisponible(voz_slug)
         p.voz = voz_slug
+        s.commit()
+
+
+def fijar_musica(pid: int, musica_id: int | None, mezclar: bool) -> None:
+    """Engancha una pista al proyecto y decide si el armado la mezcla.
+
+    Sirve para las dos cosas que el usuario puede querer: reutilizar una pista
+    que ya está en la biblioteca, y activar o desactivar la mezcla sin tocar la
+    pista. Sin pista no hay mezcla que activar.
+    """
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        if musica_id is not None and musica_repo.obtener(s, musica_id) is None:
+            raise MusicaNoExiste(musica_id)
+        p.musica_id = musica_id
+        p.musica_mezclar = bool(mezclar) and musica_id is not None
         s.commit()
 
 

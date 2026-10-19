@@ -8,7 +8,7 @@ más una biblioteca con todo lo hecho:
 
 | | qué hace |
 |---|---|
-| **Vídeos** | El pipeline completo: tema → ideas → guion → metadatos → voz (Qwen3-TTS) → subtítulos (Whisper) → imágenes → clips → montaje. Formato corto 9:16 (30–60 s) para Shorts y TikTok, con tres modos de montaje (estático, Ken Burns e image-to-video). |
+| **Vídeos** | El pipeline completo: tema → ideas → guion → metadatos → voz (Qwen3-TTS) → subtítulos (Whisper) → imágenes → clips → montaje, más la música de la historia. Formato corto 9:16 (30–60 s) para Shorts y TikTok, con tres modos de montaje (estático, Ken Burns e image-to-video). |
 | **Imágenes** | Generar desde texto, editar por instrucciones y quitar el fondo, con varios motores elegibles. |
 | **Música** | Pistas instrumentales y canciones con voz cantada y letra, con ACE-Step 1.5 XL Turbo. |
 | **Biblioteca** | Todo lo creado en una sola vista. |
@@ -161,10 +161,33 @@ arrancaría la barra por la mitad.
 
 ## Flujo de creación (UI)
 
-Tema → ideas → seleccionar/aprobar → y ya en el proyecto, los cinco pasos del
-stepper: **1** guion (editar/regenerar) → **2** voz (elegir del banco o crear nueva → generar narración) → **3** metadatos → **4** escenas (reparto → generar prompts → editarlos → aceptar y generar imágenes) → **5** armar video final.
+Tema → ideas → seleccionar/aprobar → y ya en el proyecto, los pasos del
+stepper: **1** guion (editar/regenerar) → **2** voz (elegir del banco o crear nueva → generar narración) → **3** metadatos → **4** escenas (reparto → generar prompts → editarlos → aceptar y generar imágenes) → **música** (opcional, se entra a mano) → **5** armar video final.
 
 Puntos de revisión humana: selección de ideas, guion, elección de voz, reparto, y **prompts de escena antes de gastar GPU en las imágenes**.
+
+### Música de la historia
+
+El paso de **Música** compone la banda sonora de *ese* vídeo: el LLM lee el
+guion y los planos de las escenas y escribe el brief para ACE-Step (estilo en
+prosa, tempo, tonalidad y guion de secciones), con la duración que dura la
+narración. Dos detalles del prompt son los que hacen que sirva: la música sale
+del tema y la emoción de la historia, y se escribe como cama para una voz
+(nada cantado, medios despejados, sin melodía que compita).
+
+La pista **no se queda dentro del vídeo**: nace como una pista más de la
+biblioteca de Música, así que se escucha, se descarga suelta —sin narración— y
+se reutiliza en redes. En el mismo paso se puede enganchar una pista que ya
+tengas en la biblioteca en lugar de generar otra.
+
+Mezclarla en el vídeo final es un interruptor aparte. Al activarlo, el armado
+(los dos modos) la mete por debajo de la voz con `sidechaincompress`: la cama
+baja sola cuando se habla y sube en los silencios, con fades de entrada y
+salida. El nivel y los fades se ajustan en `[video]` de `config.toml`
+(`musica_db`, `musica_fade_s`); el ducking en sí vive en
+`backend/services/pipeline/_mezcla.py`. Hay que rehacer el vídeo para oírla, y
+si la mezcla está activada sin pista lista el armado falla en vez de entregar
+un vídeo en silencio.
 
 ### Reparto (consistencia de personajes)
 
@@ -346,7 +369,8 @@ Voces reutilizables generadas con Qwen3-TTS VoiceDesign, guardadas en `voces/<sl
 - ✅ **Imágenes** — galería propia con generar, editar y quitar fondo, y motores elegibles (Z-Image, Qwen-Image-Edit, FLUX.2 Klein)
 - ✅ **Música** — instrumentales y canciones con ACE-Step 1.5 XL Turbo, con conditioning musical, guion de secciones y masterizado EBU R128
 - ✅ **Estudio en Astro + Svelte** — los cuatro modos en una sola interfaz, con reproductor global y biblioteca
-- ⬜ Pendiente — plantillas `historia`/`drama-chisme`, mezclar la música bajo la narración con ducking, empaquetado
+- ✅ **Música de la historia** — el proyecto compone su pista desde el guion y las escenas, se descarga sola (audio sin narración, reutilizable en redes) y opcionalmente se mezcla bajo la voz con ducking
+- ⬜ Pendiente — plantillas `historia`/`drama-chisme`, reintentos en la cola, empaquetado
 
 ## Imágenes
 

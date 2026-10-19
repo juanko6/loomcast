@@ -204,6 +204,17 @@ crf = 18
 # corte en seco sobre la última palabra. Si los clips ya duran más que la voz,
 # manda su duración y esta cola no se aplica. 0 = cortar con el audio.
 cola_final_s = 1.5
+# Mezcla de la música del proyecto en el video final. Solo se aplica si el paso
+# de Música tiene la mezcla activada; la pista siempre se puede descargar sola.
+#
+# Nivel al que entra la cama, en dB respecto a la pista original (que sale
+# masterizada a -14 LUFS). Con -16 dB se oye bajo la narración sin pelearse con
+# ella; súbelo hacia -10 para música más protagonista. Encima de esto actúa el
+# ducking (sidechaincompress), que la baja sola mientras se habla.
+musica_db = -16.0
+# Fades de entrada y salida de la cama, en segundos. El de salida se coloca
+# donde acaba la música, no donde acaba el video.
+musica_fade_s = 2.0
 
 [i2v]
 # Modo image-to-video (movimiento generado por IA). Agnóstico al motor: cada uno
