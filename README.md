@@ -439,6 +439,19 @@ mejor cara dé y no el más rápido: `[personajes].motor` en `config.toml` apunt
 por defecto a `zimage_retrato`, el mismo Z-Image con 16 pasos en vez de 8
 (~80 s en el M3 Max).
 
+**Persona u objeto.** El reparto admite objetos a propósito: un barco, un mapa o
+una máquina que vuelve en varias escenas tampoco debe mutar. Pero el encuadre no
+puede ser el mismo, y aquí hubo un bug que se vio con la plantilla `historia`: el
+encuadre de persona pide cara, cabeza visible y textura de piel, así que a un
+mapa descrito con «no humans are visible» le pintaba un rostro encima — cinco
+términos pidiendo cara le ganan a una negación. Ahora cada miembro del reparto
+tiene su tipo: el casting se lo pide al LLM, y si la ficha dice en sus propias
+palabras que ahí no hay nadie, manda la ficha. Un objeto se retrata con su propio
+encuadre (sujeto centrado, fondo liso, sin nombrar nada humano y negándolo al
+final) y el prefijo que se le pasa al motor de escena habla de «subjects», no de
+«people». En la tarjeta del reparto se puede corregir el tipo a mano, que es más
+rápido que regenerar el casting entero.
+
 ### Cómo se usa el retrato
 
 En la etapa de imágenes cada escena va por uno de dos caminos, según lo que

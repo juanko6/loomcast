@@ -39,6 +39,9 @@ export interface Personaje {
   clave: string;
   nombre: string;
   ficha: string;
+  // "persona" | "objeto". El reparto admite objetos recurrentes (un barco, un
+  // mapa) y su imagen de referencia se encuadra sin pedir cara.
+  tipo?: string;
   // Si ya tiene retrato de referencia generado: es la cara con la que se
   // generarán sus escenas.
   retrato: boolean;

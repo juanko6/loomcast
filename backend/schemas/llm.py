@@ -61,6 +61,12 @@ class PersonajeLLM(BaseModel):
     # mayúsculas al guardarlo, así que aquí basta con exigir que venga algo.
     clave: str = Field(min_length=1, max_length=24)
     nombre: str = Field(min_length=1, max_length=60)
+    # "persona" o "objeto". El reparto admite las dos cosas a propósito (un
+    # barco o un mapa que vuelve en varias escenas también tiene que no mutar),
+    # pero su retrato de referencia se encuadra distinto: pedirle cara, pelo y
+    # piel a un mapa le pinta una cara encima. Por defecto persona, que es el
+    # caso común; el valor se normaliza en casting.py.
+    tipo: str = "persona"
     # Descripción física en inglés, concreta y visual. Es lo que se sustituye
     # palabra por palabra en cada prompt donde salga el personaje.
     ficha: str = Field(min_length=20)

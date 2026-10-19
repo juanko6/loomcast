@@ -4,7 +4,7 @@ import pytest
 
 from backend.repositories import guiones as guiones_repo
 from backend.repositories import personajes as personajes_repo
-from backend.schemas import CastingLLM
+from backend.schemas import CastingLLM, PersonajeLLM
 from backend.services.pipeline import casting
 from tests import factories as f
 
@@ -85,3 +85,46 @@ def test_casting_con_plantilla_sin_prompt_de_casting(session, proy, fake_llm, mo
     with pytest.raises(ValueError, match="casting.md"):
         casting.generar_casting(proy)
     assert fake_llm.llamadas == []
+
+
+# --- persona u objeto ------------------------------------------------------
+# El reparto admite objetos a propósito, pero el encuadre del retrato era de
+# persona para todos: a un mapa descrito con "no humans are visible" le pintaba
+# una cara encima, que es lo que se vio el 2026-10-19 con la plantilla historia.
+
+FICHA_MAPA = (
+    "a large worn tactical map spread on a wooden table with faded blue lines, "
+    "black ink dots marking villages and smudged pencil corrections showing "
+    "erased street names, no humans are visible"
+)
+
+
+@pytest.mark.parametrize("tipo_llm,ficha,esperado", [
+    ("objeto", "a wooden fishing boat with torn sails", "objeto"),
+    ("persona", "a woman in her forties with weathered hands, wearing wool", "persona"),
+    # El LLM se equivoca y lo marca como persona: manda lo que dice la ficha.
+    ("persona", FICHA_MAPA, "objeto"),
+    # Tipo ausente o raro: persona, que es el caso común.
+    ("", "a tall man with a grey beard, wearing a leather apron", "persona"),
+    ("cosa", "a tall man with a grey beard, wearing a leather apron", "persona"),
+])
+def test_normalizar_tipo(tipo_llm, ficha, esperado):
+    assert casting.normalizar_tipo(tipo_llm, ficha) == esperado
+
+
+def test_el_casting_guarda_el_tipo_de_cada_miembro(session, dirs_tmp, fake_llm):
+    p = f.proyecto(session)
+    guiones_repo.crear(session, p.id, {"gancho": "G", "frases": ["f"], "cta": "C"})
+    session.commit()
+    fake_llm.responder(CastingLLM, CastingLLM(personajes=[
+        PersonajeLLM(clave="VIUDA", nombre="la viuda", tipo="persona",
+                     ficha="a woman in her fifties with grey hair, wearing black wool"),
+        PersonajeLLM(clave="MAPA", nombre="el mapa", tipo="persona", ficha=FICHA_MAPA),
+    ]))
+
+    log = casting.generar_casting(p.id)
+
+    session.expire_all()
+    tipos = {x.clave: x.tipo for x in personajes_repo.por_proyecto(session, p.id)}
+    assert tipos == {"VIUDA": "persona", "MAPA": "objeto"}
+    assert "MAPA (objeto)" in log

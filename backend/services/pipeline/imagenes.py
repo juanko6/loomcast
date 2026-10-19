@@ -32,11 +32,17 @@ from .retratos import ruta_retrato
 
 # Lo que se le antepone al prompt de la escena cuando entra por referencias. El
 # nodo numera las imágenes como "Picture 1", "Picture 2"…, así que se le puede
-# hablar de ellas; lo que hay que dejar claro es que la cara y la ropa vienen de
-# ahí y no de lo que diga el texto.
+# hablar de ellas; lo que hay que dejar claro es que el aspecto viene de ahí y
+# no de lo que diga el texto.
+#
+# Habla de "subjects" y no de "people" porque una referencia puede ser un objeto
+# del reparto (un barco, un mapa): pedirle "keep each person's face and hair"
+# con un mapa delante es pedirle una cara, y la pintaba.
 PREFIJO_REFERENCIA = (
-    "The people shown in the reference pictures appear in this scene. Keep each "
-    "person's face, hair and clothing exactly as in their picture. Scene: "
+    "The subjects shown in the reference pictures appear in this scene. Keep "
+    "each subject exactly as in its picture: a person's face, hair and "
+    "clothing; an object's shape, materials and wear. Do not add people who are "
+    "not in the reference pictures. Scene: "
 )
 
 

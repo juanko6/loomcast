@@ -27,6 +27,9 @@ class Personaje(Base):
     clave: Mapped[str] = mapped_column()
     # Cómo se le llama en el guion, para que la UI sea legible.
     nombre: Mapped[str] = mapped_column(default="")
+    # persona | objeto. Decide cómo se encuadra su retrato de referencia (ver
+    # services/pipeline/retratos.py) y cómo se le habla al motor de escena.
+    tipo: Mapped[str] = mapped_column(default="persona")
     # Descripción física en inglés que se sustituye tal cual en el prompt.
     ficha: Mapped[str] = mapped_column(Text, default="")
     # Semilla propia: con el mismo sujeto y la misma seed las caras se parecen

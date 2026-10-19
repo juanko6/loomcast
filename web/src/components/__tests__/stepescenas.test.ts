@@ -264,7 +264,25 @@ describe("reparto", () => {
     await userEvent.clear(ficha);
     await userEvent.type(ficha, "  una mujer alta  ");
     await userEvent.click(screen.getByRole("button", { name: "Guardar reparto" }));
-    expect(a.onguardarcasting).toHaveBeenCalledWith([{ clave: "ANA", nombre: "Nombre ANA", ficha: "una mujer alta" }]);
+    expect(a.onguardarcasting).toHaveBeenCalledWith([
+      { clave: "ANA", nombre: "Nombre ANA", ficha: "una mujer alta", tipo: "persona" },
+    ]);
+  });
+
+  it("un miembro del reparto se puede marcar como objeto", async () => {
+    // Un objeto se retrata sin pedirle cara: con el encuadre de persona, a un
+    // mapa le pintaba un rostro encima.
+    const { a } = montar(proy({ personajes: [personaje("MAPA", { tipo: "persona" })] }));
+    await userEvent.selectOptions(screen.getByLabelText("Qué es MAPA"), "objeto");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar reparto" }));
+    expect(a.onguardarcasting).toHaveBeenCalledWith([
+      expect.objectContaining({ clave: "MAPA", tipo: "objeto" }),
+    ]);
+  });
+
+  it("el tipo que viene del backend se respeta al pintar la tarjeta", () => {
+    montar(proy({ personajes: [personaje("BARCO", { tipo: "objeto" })] }));
+    expect((screen.getByLabelText("Qué es BARCO") as HTMLSelectElement).value).toBe("objeto");
   });
 
   it("regenerar el reparto lo pide (y respeta 'busy')", async () => {

@@ -27,11 +27,11 @@ def reemplazar_todos(s: Session, proyecto_id: int,
 
 
 def crear(s: Session, proyecto_id: int, clave: str, nombre: str,
-          ficha: str, seed: int) -> Personaje:
+          ficha: str, seed: int, tipo: str = "persona") -> Personaje:
     """Añade un personaje al reparto, detrás de los que ya hay."""
     orden = 1 + max((p.orden for p in por_proyecto(s, proyecto_id)), default=-1)
     fila = Personaje(proyecto_id=proyecto_id, orden=orden, clave=clave,
-                     nombre=nombre, ficha=ficha, seed=seed)
+                     nombre=nombre, ficha=ficha, seed=seed, tipo=tipo)
     s.add(fila)
     return fila
 
@@ -63,7 +63,9 @@ def fichas(s: Session, proyecto_id: int) -> dict[str, str]:
 
 
 def actualizar(s: Session, proyecto_id: int, cambios: dict[str, dict]) -> int:
-    """Edita nombre y/o ficha de los personajes indicados, por clave."""
+    """Edita nombre, ficha y/o tipo de los personajes indicados, por clave."""
+    from ..services.pipeline.casting import normalizar_tipo
+
     n = 0
     for p in por_proyecto(s, proyecto_id):
         campos = cambios.get(p.clave)
@@ -73,5 +75,10 @@ def actualizar(s: Session, proyecto_id: int, cambios: dict[str, dict]) -> int:
             p.nombre = campos["nombre"]
         if "ficha" in campos:
             p.ficha = campos["ficha"]
+        if "tipo" in campos:
+            # Se normaliza contra la ficha que queda guardada, no contra la
+            # anterior: si el usuario corrige la ficha y el tipo a la vez, manda
+            # lo que acaba de escribir.
+            p.tipo = normalizar_tipo(campos["tipo"], p.ficha)
         n += 1
     return n
