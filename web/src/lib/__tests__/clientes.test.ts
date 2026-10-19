@@ -212,6 +212,22 @@ describe("proyectos", () => {
     expect(formMock.mock.calls[1][0]).toBe("/voces/clonar");
   });
 
+  it("reparto propio: listar, promover, traer, actualizar y borrar", async () => {
+    await p.listarReparto();
+    expect(ultima()).toEqual(["/reparto"]);
+    await p.promoverAlReparto(3, "ANA", "Ana narradora");
+    expect(ultima()).toEqual(["/reparto", {
+      method: "POST", body: { proyecto_id: 3, clave: "ANA", nombre: "Ana narradora" }}]);
+    await p.traerDelReparto("ana-narradora", 3);
+    expect(ultima()).toEqual(["/reparto/ana-narradora/traer", {
+      method: "POST", body: { proyecto_id: 3 }}]);
+    await p.actualizarEnReparto("ana-narradora", 3, "ANA");
+    expect(ultima()).toEqual(["/reparto/ana-narradora", {
+      method: "PUT", body: { proyecto_id: 3, clave: "ANA" }}]);
+    await p.borrarDelReparto("ana-narradora");
+    expect(ultima()).toEqual(["/reparto/ana-narradora", { method: "DELETE" }]);
+  });
+
   it("cada modo de vídeo tiene nombre legible y etapa", () => {
     const ids = p.MODOS_VIDEO.map((m) => m.id);
     expect(ids).toEqual(["estatico", "kenburns", "i2v", "mixto"]);

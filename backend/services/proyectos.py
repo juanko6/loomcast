@@ -155,6 +155,10 @@ def detalle(pid: int) -> dict:
                 "nombre": x.nombre,
                 "ficha": x.ficha,
                 "tipo": x.tipo or "persona",
+                # Slug del miembro del reparto propio del que se trajo ("" si
+                # nació aquí): la UI ofrece actualizarlo allí en vez de volver a
+                # promoverlo, y avisa de que esa cara sobrevive al regenerar.
+                "reparto_slug": x.reparto_slug or "",
                 "retrato": retratos.ruta_retrato(p.slug, x.clave).exists(),
             }
             for x in personajes_repo.por_proyecto(s, pid)

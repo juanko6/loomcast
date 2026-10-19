@@ -33,6 +33,7 @@ const proyecto = (extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle => ({
 beforeEach(() => {
   m.listarPlantillas.mockResolvedValue(["curiosidades", "drama"]);
   m.listarVoces.mockResolvedValue([]);
+  m.listarReparto.mockResolvedValue([]);
   m.listarTemas.mockResolvedValue([{ id: 1, texto: "misterios del mar", n_ideas: 3, n_aprobadas: 1 }]);
   m.listarProyectos.mockResolvedValue([{ id: 1, titulo: "Mi proyecto", slug: "demo", estado: "GUION" }]);
   m.ideasDeTema.mockResolvedValue([
@@ -328,5 +329,112 @@ describe("refrescos automáticos", () => {
     await montar();
     const panel = screen.getByText("Proyectos").parentElement!;
     expect(within(panel).getByText("Mi proyecto")).toBeInTheDocument();
+  });
+});
+
+describe("reparto propio", () => {
+  // El paso de escenas, que es donde vive el reparto, pide subtítulos hechos.
+  const conReparto = (extra: Partial<ProyectoDetalle> = {}) =>
+    proyecto({
+      estado: "ESCENAS", voz_disponible: true, subtitulos: "1\nhola",
+      metadatos: { youtube: { titulo: "t", descripcion: "d", etiquetas: [] },
+                   tiktok: { descripcion: "d" } },
+      personajes: [{ clave: "ANA", nombre: "Ana", ficha: "a tall woman", tipo: "persona",
+                     retrato: false }],
+      ...extra,
+    });
+
+  const abrir = async (p = conReparto()) => {
+    m.detalleProyecto.mockResolvedValue(p);
+    await montar();
+    await userEvent.click(await screen.findByText("Mi proyecto"));
+    await screen.findByText("Reparto");
+  };
+
+  it("traer a alguien lo mete en el proyecto abierto y recarga el detalle", async () => {
+    m.listarReparto.mockResolvedValue([
+      { slug: "ana-narradora", nombre: "Ana narradora", clave: "ANA", ficha: "f",
+        tipo: "persona", retrato: true }]);
+    m.traerDelReparto.mockResolvedValue({ clave: "ANA_2", renombrado: false, retrato: true });
+    await abrir();
+    m.detalleProyecto.mockClear();
+
+    await userEvent.click(screen.getByRole("button", { name: "Traer" }));
+
+    await waitFor(() => expect(m.traerDelReparto).toHaveBeenCalledWith("ana-narradora", 1));
+    await waitFor(() => expect(m.detalleProyecto).toHaveBeenCalledWith(1));
+  });
+
+  it("si su clave estaba ocupada, avisa con la clave que sí entró", async () => {
+    const avisar = vi.fn();
+    vi.stubGlobal("alert", avisar);
+    m.listarReparto.mockResolvedValue([
+      { slug: "ana-narradora", nombre: "Ana narradora", clave: "ANA", ficha: "f",
+        tipo: "persona", retrato: false }]);
+    m.traerDelReparto.mockResolvedValue({ clave: "ANA_2", renombrado: true, retrato: false });
+    await abrir();
+
+    await userEvent.click(screen.getByRole("button", { name: "Traer" }));
+
+    await waitFor(() => expect(avisar).toHaveBeenCalledWith(expect.stringContaining("{ANA_2}")));
+  });
+
+  it("guardar en el reparto pregunta el nombre y lo manda", async () => {
+    vi.stubGlobal("prompt", vi.fn().mockReturnValue("  Ana narradora  "));
+    m.promoverAlReparto.mockResolvedValue({ slug: "ana-narradora", nombre: "Ana narradora", retrato: true });
+    await abrir();
+    m.listarReparto.mockClear();
+
+    await userEvent.click(screen.getByRole("button", { name: "Guardar en el reparto" }));
+
+    await waitFor(() => expect(m.promoverAlReparto).toHaveBeenCalledWith(1, "ANA", "Ana narradora"));
+    await waitFor(() => expect(m.listarReparto).toHaveBeenCalled());
+  });
+
+  it("cancelar el nombre no guarda nada", async () => {
+    vi.stubGlobal("prompt", vi.fn().mockReturnValue(null));
+    await abrir();
+    await userEvent.click(screen.getByRole("button", { name: "Guardar en el reparto" }));
+    expect(m.promoverAlReparto).not.toHaveBeenCalled();
+  });
+
+  it("actualizar en el reparto pide confirmación y dice que los vídeos hechos no cambian", async () => {
+    const confirmar = vi.fn().mockReturnValue(true);
+    vi.stubGlobal("confirm", confirmar);
+    m.actualizarEnReparto.mockResolvedValue({ slug: "ana-narradora", nombre: "Ana", retrato: true });
+    await abrir(conReparto({
+      personajes: [{ clave: "ANA", nombre: "Ana", ficha: "a tall woman", tipo: "persona",
+                     retrato: true, reparto_slug: "ana-narradora" }],
+    }));
+
+    await userEvent.click(screen.getByRole("button", { name: "Actualizar en el reparto" }));
+
+    expect(confirmar).toHaveBeenCalledWith(expect.stringContaining("NO cambian"));
+    await waitFor(() => expect(m.actualizarEnReparto).toHaveBeenCalledWith("ana-narradora", 1, "ANA"));
+  });
+
+  it("borrar del reparto pide confirmación y refresca el listado", async () => {
+    m.listarReparto.mockResolvedValue([
+      { slug: "ana-narradora", nombre: "Ana narradora", clave: "ANA", ficha: "f",
+        tipo: "persona", retrato: false }]);
+    m.borrarDelReparto.mockResolvedValue({ slug: "ana-narradora", personajes_desvinculados: 2 });
+    await abrir();
+    m.listarReparto.mockClear();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Borrar a Ana narradora del reparto propio" }));
+
+    await waitFor(() => expect(m.borrarDelReparto).toHaveBeenCalledWith("ana-narradora"));
+    await waitFor(() => expect(m.listarReparto).toHaveBeenCalled());
+  });
+
+  it("si traer falla, el error se ve", async () => {
+    m.listarReparto.mockResolvedValue([
+      { slug: "ana-narradora", nombre: "Ana narradora", clave: "ANA", ficha: "f",
+        tipo: "persona", retrato: false }]);
+    m.traerDelReparto.mockRejectedValue(new Error("HTTP 404"));
+    await abrir();
+    await userEvent.click(screen.getByRole("button", { name: "Traer" }));
+    expect(await screen.findByText("HTTP 404")).toBeInTheDocument();
   });
 });

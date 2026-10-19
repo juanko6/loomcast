@@ -10,13 +10,14 @@
   import { jobs, jobsDrenados, refrescarJobs, seleccionPendiente } from "@/lib/stores";
   import { currentTrack } from "@/lib/player";
   import * as API from "@/lib/proyectos";
-  import type { Idea, ProyectoDetalle, Voz } from "@/lib/proyectos";
+  import type { Idea, MiembroReparto, ProyectoDetalle, Voz } from "@/lib/proyectos";
   import type { ProyectoResumen, TemaResumen } from "@/lib/types";
 
   // --- estado ---
   let temas = $state<TemaResumen[]>([]);
   let proyectos = $state<ProyectoResumen[]>([]);
   let voces = $state<Voz[]>([]);
+  let reparto = $state<MiembroReparto[]>([]);
   let plantillas = $state<string[]>([]);
 
   // Vista actual: un tema (sus ideas) o un proyecto (el pipeline).
@@ -171,6 +172,70 @@
       await tras(API.clonarVoz(nombre, audio, "", inicio, fin));
       voces = await API.listarVoces();
     },
+    // --- reparto propio ---
+    // Traer y promover tocan a la vez el proyecto y el almacén, así que se
+    // recargan los dos. El backend no encola nada (copiar un PNG), por eso se
+    // ve el resultado sin esperar a la cola.
+    traerDelReparto: async (slug: string) => {
+      try {
+        const { clave, renombrado } = await API.traerDelReparto(slug, pid());
+        if (renombrado)
+          alert(
+            `Su clave ya estaba ocupada en este vídeo, así que entró como {${clave}}.\n\n` +
+              "Ese es el marcador que hay que escribir en los prompts de escena.",
+          );
+        await cargarVista();
+      } catch (e) {
+        fallo(e);
+      }
+    },
+    promoverAlReparto: async (clave: string, nombre: string) => {
+      const puesto = prompt(
+        "¿Con qué nombre lo guardas en el reparto propio?\n\n" +
+          "Es lo que lo distinguirá en el listado.",
+        nombre,
+      );
+      if (puesto === null || !puesto.trim()) return;
+      try {
+        await API.promoverAlReparto(pid(), clave, puesto.trim());
+        reparto = await API.listarReparto();
+        await cargarVista();
+      } catch (e) {
+        fallo(e);
+      }
+    },
+    actualizarEnReparto: async (slug: string, clave: string) => {
+      if (
+        !confirm(
+          `¿Subir la ficha y la cara de «${clave}» al reparto propio?\n\n` +
+            "Los vídeos que ya lo trajeron NO cambian: cada uno tiene su copia.",
+        )
+      )
+        return;
+      try {
+        await API.actualizarEnReparto(slug, pid(), clave);
+        reparto = await API.listarReparto();
+        await cargarVista();
+      } catch (e) {
+        fallo(e);
+      }
+    },
+    borrarDelReparto: async (slug: string, nombre: string) => {
+      if (
+        !confirm(
+          `¿Borrar a «${nombre}» del reparto propio?\n\n` +
+            "Los vídeos que ya lo trajeron se quedan igual: su ficha y su cara son copias.",
+        )
+      )
+        return;
+      try {
+        await API.borrarDelReparto(slug);
+        reparto = await API.listarReparto();
+        await cargarVista();
+      } catch (e) {
+        fallo(e);
+      }
+    },
     borrarVoz: async (slug: string, nombre: string) => {
       if (!confirm(`¿Borrar la voz «${nombre}»?\n\nLos proyectos que la usaban quedarán sin voz.`))
         return;
@@ -242,6 +307,9 @@
       refrescarListas();
       cargarVista();
       API.listarVoces().then((v) => (voces = v)).catch(() => {});
+      // El retrato de un miembro del reparto puede acabar de generarse en el
+      // proyecto del que se promovió, y la miniatura del almacén lo refleja.
+      API.listarReparto().then((r) => (reparto = r)).catch(() => {});
     }
   });
 
@@ -274,7 +342,9 @@
 
   onMount(async () => {
     try {
-      [plantillas, voces] = await Promise.all([API.listarPlantillas(), API.listarVoces()]);
+      [plantillas, voces, reparto] = await Promise.all([
+        API.listarPlantillas(), API.listarVoces(), API.listarReparto(),
+      ]);
       temaPlantilla = plantillas[0] ?? "";
     } catch (e) {
       fallo(e);
@@ -392,7 +462,7 @@
         />
       </div>
     {:else if proyecto}
-      <ProjectView p={proyecto} {voces} {bust} {acciones} onver={abrirVisor} />
+      <ProjectView p={proyecto} {voces} {reparto} {bust} {acciones} onver={abrirVisor} />
     {:else}
       <div class="grid flex-1 place-items-center">
         <span class="size-6 animate-spin rounded-full border-2 border-line border-t-accent"></span>

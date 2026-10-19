@@ -461,6 +461,8 @@ espera_s = 20
 proyectos = "proyectos"
 plantillas = "plantillas"
 voces = "voces"
+# Reparto propio: los personajes reutilizables entre vídeos, con su retrato.
+reparto = "reparto"
 galeria = "galeria"
 musica = "musica"
 db = "loomcast.db"

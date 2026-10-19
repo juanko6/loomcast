@@ -1,5 +1,5 @@
-// Cliente del modo Vídeos: temas, ideas, proyectos y voces.
-// Refleja backend/routers/{temas,ideas,proyectos,voces,sistema}.py
+// Cliente del modo Vídeos: temas, ideas, proyectos, voces y reparto propio.
+// Refleja backend/routers/{temas,ideas,proyectos,voces,reparto,sistema}.py
 import { api, apiForm } from "./api";
 import type { ProyectoResumen, TemaResumen } from "./types";
 
@@ -44,6 +44,22 @@ export interface Personaje {
   tipo?: string;
   // Si ya tiene retrato de referencia generado: es la cara con la que se
   // generarán sus escenas.
+  retrato: boolean;
+  // Slug del miembro del reparto propio del que se trajo, o "" si nació en este
+  // proyecto. No es una referencia viva: su ficha y su retrato son copias.
+  reparto_slug?: string;
+}
+
+// Alguien guardado en el reparto propio: una ficha y una cara que sobreviven al
+// vídeo y se traen a cualquier proyecto nuevo.
+export interface MiembroReparto {
+  slug: string;
+  nombre: string;
+  // Marcador que propone al traerlo. Si en el proyecto ya está ocupado, entra
+  // con la siguiente libre (ANA_2) en vez de pisar al que estaba.
+  clave: string;
+  ficha: string;
+  tipo: string;
   retrato: boolean;
 }
 
@@ -268,6 +284,38 @@ export function clonarVoz(nombre: string, audio: File, descripcion: string, inic
 export const borrarVoz = (slug: string) => api(`/voces/${slug}`, { method: "DELETE" });
 
 export const listarPlantillas = () => api<string[]>("/plantillas");
+
+// --- reparto propio ---
+export const listarReparto = () => api<MiembroReparto[]>("/reparto");
+
+// Guarda en el reparto a un personaje que ya quedó bien en este proyecto: se
+// promueve, no se rellena un formulario en blanco.
+export const promoverAlReparto = (proyecto_id: number, clave: string, nombre: string) =>
+  api<{ slug: string; nombre: string; retrato: boolean }>("/reparto", {
+    method: "POST",
+    body: { proyecto_id, clave, nombre },
+  });
+
+// Pisa al miembro con la versión de este proyecto. Hace falta porque editar la
+// ficha dentro del proyecto NO toca al original.
+export const actualizarEnReparto = (slug: string, proyecto_id: number, clave: string) =>
+  api<{ slug: string; nombre: string; retrato: boolean }>(`/reparto/${slug}`, {
+    method: "PUT",
+    body: { proyecto_id, clave },
+  });
+
+// `renombrado` = su clave estaba ocupada y entró con otra, que es la que hay
+// que escribir en los prompts.
+export const traerDelReparto = (slug: string, proyecto_id: number) =>
+  api<{ clave: string; renombrado: boolean; retrato: boolean }>(
+    `/reparto/${slug}/traer`,
+    { method: "POST", body: { proyecto_id } },
+  );
+
+export const borrarDelReparto = (slug: string) =>
+  api<{ slug: string; personajes_desvinculados: number }>(`/reparto/${slug}`, {
+    method: "DELETE",
+  });
 
 // Modos de generación de vídeo (los describe la UI, los ejecuta el backend).
 export const MODOS_VIDEO = [

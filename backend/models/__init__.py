@@ -10,11 +10,12 @@ from .metadatos import Metadatos
 from .musica import Musica
 from .personaje import Personaje
 from .proyecto import ORDEN_ESTADOS, Proyecto, avanzar_estado
+from .reparto import MiembroReparto
 from .tema import Tema
 from .voz import REF_TEXT, Voz
 
 __all__ = [
     "Ajuste", "Base", "Escena", "Guion", "Idea", "ImagenLibre", "Job",
-    "Metadatos", "Musica", "ORDEN_ESTADOS", "Personaje", "Proyecto", "REF_TEXT",
-    "Tema", "Voz", "avanzar_estado",
+    "Metadatos", "MiembroReparto", "Musica", "ORDEN_ESTADOS", "Personaje",
+    "Proyecto", "REF_TEXT", "Tema", "Voz", "avanzar_estado",
 ]

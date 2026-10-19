@@ -8,7 +8,17 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
 from .db import init_db
-from .routers import galeria, ideas, jobs, musica, proyectos, sistema, temas, voces
+from .routers import (
+    galeria,
+    ideas,
+    jobs,
+    musica,
+    proyectos,
+    reparto,
+    sistema,
+    temas,
+    voces,
+)
 from .services import llm_runtime
 from .workers import queue
 
@@ -55,6 +65,7 @@ app.include_router(sistema.router)
 app.include_router(temas.router)
 app.include_router(ideas.router)
 app.include_router(voces.router)
+app.include_router(reparto.router)
 app.include_router(proyectos.router)
 app.include_router(jobs.router)
 app.include_router(galeria.router)

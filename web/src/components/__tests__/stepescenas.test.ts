@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import type { Escena, Personaje, ProyectoDetalle } from "@/lib/proyectos";
+import type { Escena, MiembroReparto, Personaje, ProyectoDetalle } from "@/lib/proyectos";
 import StepEscenas from "../videos/steps/StepEscenas.svelte";
 
 const escena = (orden: number, extra: Partial<Escena> = {}): Escena => ({
@@ -21,9 +21,15 @@ const proy = (extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle => ({
   musica: null, musica_mezclar: false, ...extra,
 });
 
+const miembro = (slug: string, extra: Partial<MiembroReparto> = {}): MiembroReparto =>
+  ({ slug, nombre: `Nombre ${slug}`, clave: slug.toUpperCase(), ficha: `ficha de ${slug}`,
+     tipo: "persona", retrato: false, ...extra });
+
 const acciones = () => ({
   ongenerar: vi.fn(), onguardar: vi.fn(), ongenerarcasting: vi.fn(), onguardarcasting: vi.fn(),
   ongenerarretrato: vi.fn(), onanadirpersonaje: vi.fn(), onborrarpersonaje: vi.fn(),
+  ontraerdelreparto: vi.fn(), onpromoveralreparto: vi.fn(), onactualizarenreparto: vi.fn(),
+  onborrardelreparto: vi.fn(),
   ongenerarimagenes: vi.fn(), onregenimagen: vi.fn(), onregenclip: vi.fn(), onfijarmodos: vi.fn(), onver: vi.fn(),
 });
 const montar = (p: ProyectoDetalle, a = acciones(), extra = {}) => ({ ...render(StepEscenas, { p, ...a, ...extra }), a });
@@ -392,6 +398,83 @@ describe("reparto", () => {
       montar(proy({ personajes: [personaje("ANA")] }));
       await userEvent.click(screen.getByRole("button", { name: "Añadir personaje" }));
       expect(screen.getByPlaceholderText("ESCRITOR")).toBeInTheDocument();
+    });
+  });
+});
+
+describe("reparto propio", () => {
+  it("vacío, explica cómo se llena", () => {
+    montar(proy({ personajes: [personaje("ANA")] }));
+    expect(screen.getByText("Reparto propio (0)")).toBeInTheDocument();
+    expect(screen.getByText(/Todavía no hay nadie guardado/)).toBeInTheDocument();
+  });
+
+  it("lista a cada miembro con su clave y su ficha, y lo trae por slug", async () => {
+    const a = acciones();
+    montar(proy(), a, { reparto: [miembro("ana"), miembro("barco", { tipo: "objeto" })] });
+    expect(screen.getByText("Reparto propio (2)")).toBeInTheDocument();
+    expect(screen.getByText("Nombre ana")).toBeInTheDocument();
+    expect(screen.getByText("{BARCO}")).toBeInTheDocument();
+    expect(screen.getByText("ficha de ana")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTitle("Mete a Nombre ana en este vídeo con su ficha y su cara"));
+    expect(a.ontraerdelreparto).toHaveBeenCalledWith("ana");
+  });
+
+  it("quien tiene cara guardada la enseña; quien no, un hueco", () => {
+    montar(proy(), acciones(), {
+      reparto: [miembro("ana", { retrato: true }), miembro("luis")],
+      bust: 9,
+    });
+    expect(screen.getByAltText("retrato guardado de Nombre ana")).toHaveAttribute(
+      "src", "/api/reparto/ana/retrato?v=9");
+    expect(screen.getByText("sin cara")).toBeInTheDocument();
+  });
+
+  it("borrar del reparto propio lo pide con su nombre", async () => {
+    const a = acciones();
+    montar(proy(), a, { reparto: [miembro("ana")] });
+    await userEvent.click(screen.getByRole("button", { name: "Borrar a Nombre ana del reparto propio" }));
+    expect(a.onborrardelreparto).toHaveBeenCalledWith("ana", "Nombre ana");
+  });
+
+  it("deja claro que traer copia, para que borrar no dé miedo", () => {
+    montar(proy(), acciones(), { reparto: [miembro("ana")] });
+    expect(screen.getByText(/no cambia el original/)).toBeInTheDocument();
+  });
+
+  describe("guardar y actualizar desde el proyecto", () => {
+    it("un personaje que nació aquí se ofrece guardar, con su nombre del guion", async () => {
+      const { a } = montar(proy({ personajes: [personaje("ANA")] }));
+      expect(screen.queryByRole("button", { name: "Actualizar en el reparto" })).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "Guardar en el reparto" }));
+      expect(a.onpromoveralreparto).toHaveBeenCalledWith("ANA", "Nombre ANA");
+    });
+
+    it("sin nombre en el guion se propone la clave, que es lo único seguro", async () => {
+      const { a } = montar(proy({ personajes: [personaje("ANA", { nombre: "  " })] }));
+      await userEvent.click(screen.getByRole("button", { name: "Guardar en el reparto" }));
+      expect(a.onpromoveralreparto).toHaveBeenCalledWith("ANA", "ANA");
+    });
+
+    it("uno traído del reparto se marca y se ofrece actualizar, no duplicar", async () => {
+      const { a } = montar(proy({
+        personajes: [personaje("ANA", { reparto_slug: "ana-narradora" })],
+      }));
+      expect(screen.getByText("del reparto")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Guardar en el reparto" })).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "Actualizar en el reparto" }));
+      expect(a.onactualizarenreparto).toHaveBeenCalledWith("ana-narradora", "ANA");
+    });
+
+    it("con alguien del reparto dentro, se avisa de qué pasa al regenerar", () => {
+      montar(proy({ personajes: [personaje("ANA", { reparto_slug: "ana-narradora" })] }));
+      expect(screen.getByText(/Regenerar el reparto conserva a los que trajiste/)).toBeInTheDocument();
+    });
+
+    it("sin nadie del reparto, ese aviso no aparece", () => {
+      montar(proy({ personajes: [personaje("ANA")] }));
+      expect(screen.queryByText(/Regenerar el reparto conserva/)).toBeNull();
     });
   });
 });

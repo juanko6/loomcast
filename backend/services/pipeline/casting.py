@@ -138,12 +138,22 @@ def generar_casting(proyecto_id: int) -> str:
         })
 
     with get_session() as s:
-        personajes_repo.reemplazar_todos(s, proyecto_id, filas)
+        # Los traídos del reparto propio sobreviven a la regeneración y la clave
+        # que ya ocupan descarta la del LLM que coincida (ver
+        # repositories/personajes.reemplazar_todos). Por eso el log se escribe
+        # del reparto resultante y no de lo que acabó de responder el LLM.
+        resultado = [
+            {"clave": p.clave, "tipo": p.tipo, "propio": bool(p.reparto_slug)}
+            for p in personajes_repo.reemplazar_todos(s, proyecto_id, filas)
+        ]
         s.commit()
 
-    if not filas:
+    if not resultado:
         return "Sin personajes recurrentes: las escenas irán sin reparto fijo"
     nombres = ", ".join(
-        f["clave"] + (" (objeto)" if f["tipo"] == "objeto" else "") for f in filas
+        p["clave"]
+        + (" (objeto)" if p["tipo"] == "objeto" else "")
+        + (" (del reparto)" if p["propio"] else "")
+        for p in resultado
     )
-    return f"{len(filas)} personajes fijados ({nombres})"
+    return f"{len(resultado)} personajes fijados ({nombres})"
