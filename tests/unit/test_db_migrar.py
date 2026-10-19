@@ -41,3 +41,45 @@ def test_migrar_anade_los_intentos_a_los_jobs_viejos(engine):
 def test_migrar_es_idempotente(engine):
     db_mod._migrar()
     db_mod._migrar()
+
+
+def test_migrar_recoloca_el_reparto_que_quedo_marcado_persona(engine):
+    """Las filas anteriores al tipo se quedaron con el default "persona", y
+    entre ellas había objetos: con ese tipo su referencia se seguiría generando
+    con encuadre de retrato, o sea con una cara pintada encima."""
+    with engine.begin() as c:
+        c.execute(text("DELETE FROM personajes"))
+        for i, (clave, ficha) in enumerate([
+            ("COFRE", "an 18th-century wooden treasure chest, constructed from dark "
+                      "weathered oak planks with rusted iron hinges"),
+            ("ANA", "a woman in her forties with pale skin, dark hair and green eyes, "
+                    "wearing a grey coat"),
+        ]):
+            c.execute(text(
+                "INSERT INTO personajes (id, proyecto_id, orden, clave, nombre, ficha, "
+                "seed, tipo, created_at) VALUES (:id, 1, :orden, :clave, '', :ficha, 1, "
+                "'persona', '2026-01-01')"
+            ), {"id": i + 1, "orden": i, "clave": clave, "ficha": ficha})
+
+    db_mod._migrar()
+
+    with engine.connect() as c:
+        tipos = dict(c.execute(text("SELECT clave, tipo FROM personajes")).all())
+    assert tipos == {"COFRE": "objeto", "ANA": "persona"}
+
+
+def test_migrar_no_toca_un_objeto_ya_decidido(engine):
+    """Un "objeto" lo puso el casting: la migración no lo revisa."""
+    with engine.begin() as c:
+        c.execute(text("DELETE FROM personajes"))
+        c.execute(text(
+            "INSERT INTO personajes (id, proyecto_id, orden, clave, nombre, ficha, "
+            "seed, tipo, created_at) VALUES (1, 1, 0, 'RARO', '', 'a woman in her "
+            "forties with dark hair and green eyes, wearing a coat', 1, 'objeto', "
+            "'2026-01-01')"
+        ))
+
+    db_mod._migrar()
+
+    with engine.connect() as c:
+        assert c.execute(text("SELECT tipo FROM personajes")).scalar() == "objeto"

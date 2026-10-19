@@ -99,14 +99,55 @@ FICHA_MAPA = (
 )
 
 
+# Fichas tal cual las escribió el LLM en este proyecto, con el tipo que el
+# modelo les puso: "persona" a todas, incluidas las cuatro que no lo son. Son el
+# caso real que hay que acertar sin hacerle caso.
+FICHAS_REALES = [
+    ("ARTHUR", "a gaunt British intelligence officer in his late thirties with pale "
+     "anxious skin, short cropped dark brown hair, tired grey eyes and ink-stained "
+     "fingertips, wearing a rumpled olive wool greatcoat", "persona"),
+    ("MAPA", FICHA_MAPA, "objeto"),
+    # Sin piel, pelo ni ojos: lo salvan "male" y la edad aparente.
+    ("BUZO", "a rugged spanish male diver in his late thirties with a sturdy build, "
+     "wearing a professional matte black scuba suit with reinforced padding", "persona"),
+    ("COFRE", "an 18th-century wooden treasure chest, rectangular and waist-high, "
+     "constructed from dark weathered oak planks with rusted iron hinges and straps, "
+     "featuring a prominent brass lock", "objeto"),
+    ("CODIGO", "a translucent and ethereal digital entity, composed of shimmering neon "
+     "green and electric blue binary code fragments, flickering with glitchy "
+     "distortions", "objeto"),
+    ("MOTOROLA", "a bulky beige early 1980s brick mobile phone with a thick rectangular "
+     "body, a small red LED numeric display, a black antenna and a row of dark rubber "
+     "buttons", "objeto"),
+    ("ROBOT", "a vintage 1970s industrial research robot with a boxy metallic chassis, "
+     "exposed internal wiring and visible cables", "objeto"),
+]
+
+
+@pytest.mark.parametrize("clave,ficha,esperado", FICHAS_REALES)
+def test_el_tipo_sale_de_la_ficha_aunque_el_llm_diga_persona(clave, ficha, esperado):
+    assert casting.normalizar_tipo("persona", ficha) == esperado
+
+
 @pytest.mark.parametrize("tipo_llm,ficha,esperado", [
     ("objeto", "a wooden fishing boat with torn sails", "objeto"),
     ("persona", "a woman in her forties with weathered hands, wearing wool", "persona"),
-    # El LLM se equivoca y lo marca como persona: manda lo que dice la ficha.
     ("persona", FICHA_MAPA, "objeto"),
-    # Tipo ausente o raro: persona, que es el caso común.
+    # Tipo ausente o raro con una ficha de persona clara: persona.
     ("", "a tall man with a grey beard, wearing a leather apron", "persona"),
     ("cosa", "a tall man with a grey beard, wearing a leather apron", "persona"),
+    # Palabras completas: "chair" lleva "hair" dentro y "human" lleva "man".
+    ("", "a wooden chair with a woven straw seat", "objeto"),
+    ("", "a bronze bust of a human figure, green with age", "objeto"),
+    # Una sola señal: ahí sí desempata el LLM, que para eso se le pregunta.
+    ("objeto", "a weathered ship's figurehead carved as a woman", "objeto"),
+    ("persona", "a diver wearing a black wetsuit", "persona"),
+    # Sin edad, sin rasgos, sin género y sin ropa no hay de dónde agarrarse: el
+    # prompt obliga a describir esas cosas en una persona, así que una ficha que
+    # no las trae se trata como objeto.
+    ("persona", "a diver in a black wetsuit", "objeto"),
+    # Sin ficha no hay nada que leer.
+    ("", "", "objeto"),
 ])
 def test_normalizar_tipo(tipo_llm, ficha, esperado):
     assert casting.normalizar_tipo(tipo_llm, ficha) == esperado
