@@ -3,7 +3,7 @@
 // componente se suscriba sin pasar props en cadena.
 import { writable, get } from "svelte/store";
 import { api } from "./api";
-import type { Salud, ModeloLLM, Job, StudioMode } from "./types";
+import type { Salud, ModeloLLM, Job, JobHistorial, StudioMode } from "./types";
 
 export const modo = writable<StudioMode>("videos");
 
@@ -61,6 +61,32 @@ export async function refrescarJobs(): Promise<void> {
   } catch {
     /* ignorar caídas puntuales del polling */
   }
+}
+
+/** Cancela un job: si espera turno se descarta, y si corre se corta en caliente. */
+export async function cancelarJob(id: number): Promise<void> {
+  await api(`/jobs/${id}/cancelar`, { method: "POST" });
+  await refrescarJobs();
+}
+
+/**
+ * Para la generación. Por defecto todo: lo que corre y lo que espera.
+ * Con `{ pendientes: false }` solo corta la etapa en curso, y con
+ * `{ corriendo: false }` vacía la cola dejándola terminar.
+ */
+export async function pararCola(
+  opciones: { corriendo?: boolean; pendientes?: boolean } = {},
+): Promise<void> {
+  await api("/jobs/parar", {
+    method: "POST",
+    body: { corriendo: true, pendientes: true, ...opciones },
+  });
+  await refrescarJobs();
+}
+
+/** Los últimos trabajos terminados (hechos, con error o parados). */
+export async function historialJobs(limite = 8): Promise<JobHistorial[]> {
+  return api<JobHistorial[]>(`/jobs/historial?limite=${limite}`);
 }
 
 let timerSalud: ReturnType<typeof setInterval> | null = null;

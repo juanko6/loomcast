@@ -4,6 +4,7 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
+from backend import parada
 from backend.clients import llm
 
 
@@ -12,19 +13,32 @@ class Salida(BaseModel):
     n: int = 0
 
 
-def _respuesta(contenido: str, status: int = 200) -> httpx.Response:
-    return httpx.Response(
-        status, json={"choices": [{"message": {"content": contenido}}]}
-    )
+def _sse(*trozos: str, fin: str = "stop") -> httpx.Response:
+    """La respuesta tal como la manda el servidor: SSE, un `data:` por trozo.
+
+    El cliente pide `stream: true` para poder parar entre trozos (ver
+    `llm._completar`), así que los dobles tienen que hablar ese formato.
+    """
+    lineas = [
+        "data: " + json.dumps({"choices": [{"delta": {"content": x}}]}) for x in trozos
+    ]
+    lineas.append("data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": fin}]}))
+    # El trozo final de recuento que mandan algunos servidores, sin `choices`.
+    lineas.append("data: " + json.dumps({"choices": [], "usage": {"total_tokens": 9}}))
+    lineas.append("data: [DONE]")
+    return httpx.Response(200, text="\n\n".join(lineas) + "\n\n",
+                          headers={"content-type": "text/event-stream"})
+
+
+def _respuesta(contenido: str) -> httpx.Response:
+    # Troceado como lo trocearía el modelo, para que se note que se junta bien.
+    mitad = len(contenido) // 2
+    return _sse(contenido[:mitad], contenido[mitad:])
 
 
 def _cortada(contenido: str) -> httpx.Response:
     """Lo que devuelve el servidor cuando se agotan los max_tokens."""
-    return httpx.Response(
-        200,
-        json={"choices": [{"message": {"content": contenido},
-                           "finish_reason": "length"}]},
-    )
+    return _sse(contenido, fin="length")
 
 
 # --- _extract_json ----------------------------------------------------------
@@ -48,6 +62,37 @@ def test_extract_json_sin_json_valido_lanza_llmerror(texto):
 
 
 # --- chat -------------------------------------------------------------------
+
+def test_chat_pide_streaming_para_poder_pararse(http_mock):
+    """Sin streaming, el hilo de la cola se queda bloqueado hasta que el modelo
+    termina y pulsar "Parar" no lo toca."""
+    vistas = http_mock(lambda r: _respuesta('{"titulo": "hola"}'))
+
+    llm.chat("sys", "usr", Salida)
+
+    assert json.loads(vistas[0].content)["stream"] is True
+
+
+def test_chat_abandona_la_generacion_si_se_pide_parar(http_mock, parada_pedida):
+    """Se corta entre trozos y se cierra la conexión, para que el servidor
+    abandone la generación en vez de seguir ocupando el modelo."""
+    vistas = http_mock(lambda r: _respuesta('{"titulo": "un guion larguísimo"}'))
+
+    with pytest.raises(parada.Parado, match="generando texto"):
+        llm.chat("s", "u", Salida)
+
+    assert len(vistas) == 1      # y no se reintenta sin schema
+
+
+def test_chat_un_trozo_que_no_es_json_se_dice_claro(http_mock):
+    http_mock(lambda r: httpx.Response(
+        200, text="data: esto no es json\n\n",
+        headers={"content-type": "text/event-stream"},
+    ))
+
+    with pytest.raises(llm.LLMError, match="no es JSON"):
+        llm.chat("s", "u", Salida)
+
 
 def test_chat_camino_feliz_valida_contra_el_esquema(http_mock):
     vistas = http_mock(lambda r: _respuesta('{"titulo": "hola", "n": 3}'))

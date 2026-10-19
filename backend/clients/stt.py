@@ -15,6 +15,7 @@ los 30-60 s de una voz.
 import threading
 from pathlib import Path
 
+from .. import parada
 from ..config import STT_COMPUTE_TYPE, STT_DISPOSITIVO, STT_IDIOMA, STT_MODELO
 
 _modelo = None
@@ -49,14 +50,22 @@ def transcribir(audio: Path, *, palabras: bool = False) -> dict:
     se enteren del cambio de motor. Sin `palabras`, la lista viene vacía y se
     ahorra el alineado por atención, que no es gratis.
     """
+    parada.comprobar("antes de transcribir")
     modelo = _cargar()
     # `segments` es un generador perezoso: la transcripción no ocurre hasta que
     # se recorre. Materializarla aquí es lo que hace que los errores salgan en
     # esta llamada y no más tarde, en medio de la etapa que la pidió.
-    segmentos, _info = modelo.transcribe(
+    #
+    # Y recorrerlo a mano, en vez de con list(), es lo que permite parar: cada
+    # vuelta decodifica un segmento, así que entre uno y otro se puede mirar la
+    # bandera y abandonar sin haber escrito nada todavía.
+    generador, _info = modelo.transcribe(
         str(audio), language=STT_IDIOMA, word_timestamps=palabras
     )
-    segmentos = list(segmentos)
+    segmentos = []
+    for s in generador:
+        parada.comprobar("transcribiendo")
+        segmentos.append(s)
 
     texto = "".join(s.text for s in segmentos).strip()
     sueltas = [

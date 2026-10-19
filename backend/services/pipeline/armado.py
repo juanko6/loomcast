@@ -15,7 +15,7 @@ from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
 from . import _mezcla
 from . import _subtitulos_render as subs
-from ._ffmpeg import archivar_final, args_video, duracion
+from ._ffmpeg import archivar_final, args_video, duracion, sin_restos
 
 
 def _rasterizar_transparente(texto, fuente, color, borde, destino):
@@ -119,10 +119,15 @@ def armar_video(proyecto_id: int) -> str:
             *af, "-t", f"{objetivo:.3f}", "final.mp4"]
 
     archivada = archivar_final(base)
-    r = procesos.ejecutar(cmd, timeout=procesos.MONTAJE_S, que="ffmpeg (montaje)",
-                          cwd=base, capture_output=True, text=True)
-    if r.returncode != 0:
-        raise RuntimeError(f"ffmpeg falló: {r.stderr[-800:]}")
+    # El montaje escribe sobre final.mp4 y el anterior ya está archivado: si se
+    # corta a medias, lo que queda ahí es un vídeo truncado que la UI ofrecería
+    # como el final. Se borra y el proyecto vuelve a estar "sin vídeo", con sus
+    # versiones anteriores intactas.
+    with sin_restos(base / "final.mp4"):
+        r = procesos.ejecutar(cmd, timeout=procesos.MONTAJE_S, que="ffmpeg (montaje)",
+                              cwd=base, capture_output=True, text=True)
+        if r.returncode != 0:
+            raise RuntimeError(f"ffmpeg falló: {r.stderr[-800:]}")
 
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)

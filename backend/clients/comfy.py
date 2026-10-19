@@ -508,6 +508,29 @@ def generar_musica(
         return _descargar_primer_audio(c, entry, destino)
 
 
+def interrumpir() -> None:
+    """Corta el workflow que ComfyUI tenga en marcha y vacía su cola.
+
+    Es la única vía de parar una generación de imagen, clip o pista: el trabajo
+    corre dentro de ComfyUI y aquí solo se está esperando su `/history`. Tras el
+    corte, ComfyUI marca ese prompt como fallido y `_encolar_y_esperar` sube un
+    ComfyError, que es lo que hace que la etapa salga en vez de seguir esperando
+    los 1800 s de su tope.
+
+    `/queue` con `clear` va además del `/interrupt` porque una etapa por lotes
+    puede haber dejado prompts encolados: interrumpir solo el actual haría que
+    ComfyUI empezara el siguiente.
+
+    Los errores se tragan: si ComfyUI no responde, no hay nada que interrumpir.
+    """
+    try:
+        with httpx.Client(timeout=15) as c:
+            c.post(f"{COMFY_URL}/queue", json={"clear": True})
+            c.post(f"{COMFY_URL}/interrupt")
+    except httpx.HTTPError:
+        pass
+
+
 def liberar_memoria() -> None:
     """Descarga los modelos de ComfyUI de la memoria unificada."""
     try:

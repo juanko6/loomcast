@@ -15,7 +15,7 @@ from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
 from . import _mezcla
 from . import _subtitulos_render as subs
-from ._ffmpeg import archivar_final, args_video, duracion
+from ._ffmpeg import archivar_final, args_video, duracion, sin_restos
 
 
 def armar_estatico(proyecto_id: int) -> str:
@@ -115,18 +115,21 @@ def armar_estatico(proyecto_id: int) -> str:
                       "-map", "0:v", "-map", "[aout]"]
     else:
         audio_args = ["-af", "apad"]
-    r = procesos.ejecutar(
-        ["ffmpeg", "-loglevel", "error", "-y",
-         "-f", "concat", "-safe", "0", "-i", "estatico_concat.txt",
-         "-i", "voz.wav", *entradas, "-vf", "fps=30",
-         *args_video(),
-         "-c:a", "aac", "-b:a", "192k",
-         *audio_args, "-t", f"{objetivo:.3f}", "final.mp4"],
-        timeout=procesos.MONTAJE_S, que="ffmpeg (montaje estático)",
-        cwd=base, capture_output=True, text=True,
-    )
-    if r.returncode != 0:
-        raise RuntimeError(f"ffmpeg falló: {r.stderr[-800:]}")
+    # Igual que en el montaje con movimiento: un final.mp4 truncado no puede
+    # quedarse donde la UI lo da por el vídeo terminado.
+    with sin_restos(base / "final.mp4"):
+        r = procesos.ejecutar(
+            ["ffmpeg", "-loglevel", "error", "-y",
+             "-f", "concat", "-safe", "0", "-i", "estatico_concat.txt",
+             "-i", "voz.wav", *entradas, "-vf", "fps=30",
+             *args_video(),
+             "-c:a", "aac", "-b:a", "192k",
+             *audio_args, "-t", f"{objetivo:.3f}", "final.mp4"],
+            timeout=procesos.MONTAJE_S, que="ffmpeg (montaje estático)",
+            cwd=base, capture_output=True, text=True,
+        )
+        if r.returncode != 0:
+            raise RuntimeError(f"ffmpeg falló: {r.stderr[-800:]}")
 
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)

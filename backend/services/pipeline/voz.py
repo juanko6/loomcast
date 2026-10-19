@@ -15,7 +15,7 @@ import json
 
 import numpy as np
 
-from ... import procesos
+from ... import parada, procesos
 from ...clients import tts
 from ...config import PROYECTOS_DIR
 from ...db import get_session
@@ -53,6 +53,12 @@ def generar_voz(proyecto_id: int, modo: str = "clon", instruct: str | None = Non
 
     base_dir = PROYECTOS_DIR / slug
     base_dir.mkdir(parents=True, exist_ok=True)
+
+    # Último punto donde esta etapa se puede cortar: la síntesis es una sola
+    # llamada a PyTorch sin puntos de control, así que una parada que llegue
+    # después no la toca (y se paga entera). Ver SIN_CORTE en
+    # services/cancelacion.py y el aviso del botón de parada.
+    parada.comprobar("antes de sintetizar la voz")
 
     if modo == "design":
         # Prioridad: instruct de la UI > el que sugirió el guion para esta

@@ -70,6 +70,11 @@ LLM_LOGS_DIR: Path = ROOT / "logs"
 COMFY_URL: str = _cfg["comfy"]["url"].rstrip("/")
 COMFY_TIMEOUT_S: float = _cfg["comfy"].get("timeout_s", 1800)
 
+# Cola de jobs: reintentos de lo que falla por algo transitorio.
+_cola = _cfg.get("cola", {})
+COLA_INTENTOS: int = _cola.get("intentos", 3)
+COLA_ESPERA_S: float = _cola.get("espera_s", 20)
+
 _stt = _cfg.get("stt", {})
 STT_MODELO: str = _stt.get("modelo", "turbo")
 STT_DISPOSITIVO: str = _stt.get("dispositivo", "auto")

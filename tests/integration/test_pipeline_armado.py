@@ -9,6 +9,7 @@ from backend import procesos
 from backend.repositories import escenas as escenas_repo
 from backend.repositories import proyectos as proyectos_repo
 from backend.services.pipeline import _ffmpeg, _subtitulos_render as subs, armado, armado_estatico
+from tests import fakes
 from tests import factories as f
 
 pytestmark = [
@@ -215,15 +216,13 @@ def test_armar_video_con_clip_corrupto_falla_en_vez_de_entregar_un_video_incompl
 def test_armar_video_colgado_se_cancela(session, proy, base, monkeypatch):
     _voz(base)
     _clips(base)
-    real = subprocess.run
-
     def montaje_colgado(cmd, **kw):
         if cmd[0] == "ffmpeg" and "concat" in cmd:   # solo el montaje; ffprobe sigue real
             assert kw["timeout"] == procesos.MONTAJE_S
             raise subprocess.TimeoutExpired(cmd, kw["timeout"])
-        return real(cmd, **kw)
+        return fakes.correr_de_verdad(cmd, **kw)
 
-    monkeypatch.setattr(subprocess, "run", montaje_colgado)
+    monkeypatch.setattr(subprocess, "Popen", fakes.popen_falso(montaje_colgado))
     with pytest.raises(procesos.ProcesoTimeout, match="montaje"):
         armado.armar_video(proy)
 
@@ -303,7 +302,7 @@ def test_armar_estatico_colgado_se_cancela(session, proy, base, monkeypatch):
         assert kw["timeout"] == procesos.MONTAJE_S
         raise subprocess.TimeoutExpired(cmd, kw["timeout"])
 
-    monkeypatch.setattr(subprocess, "run", colgado)
+    monkeypatch.setattr(subprocess, "Popen", fakes.popen_falso(colgado))
     with pytest.raises(procesos.ProcesoTimeout, match="montaje estático"):
         armado_estatico.armar_estatico(proy)
     session.expire_all()

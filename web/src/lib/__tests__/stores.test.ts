@@ -27,7 +27,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const job = (id: number) => ({ id, tipo: "generar_voz", estado: "corriendo", progreso: null });
+const job = (id: number) =>
+  ({ id, tipo: "generar_voz", estado: "corriendo", intentos: 1, sin_corte: null, progreso: null });
 
 describe("navegación", () => {
   it("abrirEn fija la selección pendiente y cambia de modo", () => {
@@ -122,6 +123,54 @@ describe("cola de jobs", () => {
     expect(s.hayCola()).toBe(false);
     s.jobs.set([job(1)]);
     expect(s.hayCola()).toBe(true);
+  });
+});
+
+describe("parar la generación", () => {
+  it("cancelar un job avisa al backend y refresca la cola", async () => {
+    apiMock.mockClear();     // el beforeEach ya ha consultado la cola una vez
+    apiMock.mockResolvedValueOnce(undefined).mockResolvedValueOnce([]);
+    s.jobs.set([job(4)]);
+
+    await s.cancelarJob(4);
+
+    expect(apiMock.mock.calls.map((c) => c[0])).toEqual(["/jobs/4/cancelar", "/jobs"]);
+    expect(get(s.jobs)).toEqual([]);
+  });
+
+  it("parar sin opciones se lleva lo que corre y lo que espera", async () => {
+    apiMock.mockClear();
+    apiMock.mockResolvedValue([]);
+
+    await s.pararCola();
+
+    expect(apiMock).toHaveBeenCalledWith("/jobs/parar", {
+      method: "POST",
+      body: { corriendo: true, pendientes: true },
+    });
+  });
+
+  it("se puede parar solo lo que corre, o solo vaciar la cola", async () => {
+    apiMock.mockClear();
+    apiMock.mockResolvedValue([]);
+
+    await s.pararCola({ pendientes: false });
+    await s.pararCola({ corriendo: false });
+
+    const cuerpos = apiMock.mock.calls
+      .filter((c) => c[0] === "/jobs/parar")
+      .map((c) => (c[1] as { body: unknown }).body);
+    expect(cuerpos).toEqual([
+      { corriendo: true, pendientes: false },
+      { corriendo: false, pendientes: true },
+    ]);
+  });
+
+  it("el historial se pide acotado", async () => {
+    apiMock.mockClear();
+    apiMock.mockResolvedValueOnce([]);
+    await s.historialJobs(3);
+    expect(apiMock).toHaveBeenCalledWith("/jobs/historial?limite=3");
   });
 });
 

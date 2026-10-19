@@ -142,7 +142,7 @@ cd web && pnpm dev
 
 ## Arquitectura del backend
 
-Capas (de HTTP hacia abajo): `routers/` (controllers: validación y JSON, cero lógica) → `services/` (reglas de negocio; `services/pipeline/` son las etapas de generación) → `repositories/` (consultas a SQLite y carga de plantillas) → `models.py` (ORM + máquina de estados). Transversales: `clients/` (adaptadores a llama-server y Qwen3-TTS), `workers/queue.py` (cola de jobs en un hilo, uno a la vez, con encadenado y recuperación), `services/progreso.py` (por dónde va el job en curso), `schemas.py` (contratos Pydantic de la API).
+Capas (de HTTP hacia abajo): `routers/` (controllers: validación y JSON, cero lógica) → `services/` (reglas de negocio; `services/pipeline/` son las etapas de generación) → `repositories/` (consultas a SQLite y carga de plantillas) → `models.py` (ORM + máquina de estados). Transversales: `clients/` (adaptadores a llama-server y Qwen3-TTS), `workers/queue.py` (cola de jobs en un hilo, uno a la vez, con encadenado, recuperación y reintentos), `services/progreso.py` (por dónde va el job en curso), `parada.py` + `services/cancelacion.py` (la bandera de parada y el corte en caliente del job que corre), `schemas.py` (contratos Pydantic de la API).
 
 ### Progreso de la cola
 
@@ -158,6 +158,80 @@ de "se colgó".
 El contador cuenta sobre el trabajo que ese job va a hacer de verdad: los bucles
 reanudables saltan lo que ya estaba hecho, y contar sobre el total del proyecto
 arrancaría la barra por la mitad.
+
+### Reintentos
+
+Un job que se cae por algo de fuera —ComfyUI que todavía no responde, un proceso
+externo que se pasa de su tope, el llama-server reiniciándose— se reintenta solo,
+con espera creciente, hasta `[cola].intentos` de `config.toml` (3 por defecto,
+esperando 20 s y luego 40 s). El job conserva su fila y su cuenta de intentos, y
+la etapa encadenada sale una sola vez, tras el intento bueno.
+
+Lo que **no** se reintenta es lo que no se arregla repitiendo: los `ValueError`
+de las validaciones de cada etapa («Faltan clips de las escenas…», «No hay
+escenas», «La mezcla de música está activada pero el proyecto no tiene pista…»),
+un archivo o un binario que no está, un ffmpeg que sale con error, y cualquier
+bug nuestro. Tampoco se reintenta un job cuyo proyecto o pista se borró mientras
+fallaba. El criterio, excepción por excepción, está comentado en
+`backend/workers/queue.py` (`TRANSITORIOS`).
+
+### Parar la generación
+
+Endpoints: `POST /api/jobs/{id}/cancelar` (uno), `POST /api/jobs/parar` (con
+`{"corriendo": bool, "pendientes": bool}`) y `GET /api/jobs/historial`.
+
+El botón rojo de la cabecera (y el de cada sección: Vídeos, Música e Imágenes)
+para lo que se está generando y vacía la cola; el chip de la cola abre un panel
+con la etapa en curso, lo que espera, los dos modos de parada —solo lo actual, o
+todo— y los últimos trabajos con su resultado. Pide confirmación, como los
+borrados: **se conserva todo lo ya terminado** (las imágenes, los clips y las
+pistas completas) y **se descarta lo que estuviera a medio hacer**.
+
+Un job que todavía espera turno se cancela sin más: se marca `cancelado` y el
+worker lo salta cuando le llega. El que está corriendo hay que cortarlo de
+verdad, y cada familia de etapa espera en un sitio distinto, así que se corta por
+todas (`backend/services/cancelacion.py` orquesta; la bandera vive en
+`backend/parada.py`, abajo, porque la miran también los `clients/*`):
+
+1. **ComfyUI** (imágenes, upscale, clips i2v, música): `POST /interrupt` más un
+   `POST /queue {clear}`. El trabajo corre dentro de ComfyUI y aquí solo se
+   sondea su `/history`; sin el interrupt habría que esperar los 1800 s del tope.
+2. **Procesos externos** (ffmpeg, ESRGAN, RIFE): todos pasan por
+   `backend/procesos.py`, que guarda el que está en marcha. Se le manda SIGTERM
+   —así ffmpeg cierra el archivo que estaba escribiendo— y SIGKILL al que no
+   muera en 5 s, para que parar no deje la cola esperando a un proceso sordo.
+3. **Los bucles por lotes** (una imagen o un clip por escena): miran la bandera
+   entre elemento y elemento y salen limpios. Lo ya generado se queda hecho;
+   cortar solo el elemento en curso haría que la etapa empezara el siguiente.
+4. **El LLM** (ideas, guion, metadatos, reparto, prompts de escena, brief
+   musical): `clients/llm.py` pide la respuesta **en streaming** y mira la
+   bandera entre trozos. No es por enseñar el texto mientras sale —ninguna etapa
+   lo aprovecha—: con la respuesta de un tirón el hilo se queda bloqueado dentro
+   de httpx hasta que el modelo termina el guion entero, y pulsar Parar no lo
+   tocaría. Al salir se cierra la conexión y el servidor abandona la generación.
+   Lo que no se puede partir es la lectura del prompt, antes del primer trozo.
+5. **Whisper** (subtítulos, y el `ref_text` del clonado): `clients/stt.py`
+   recorre los segmentos a mano en vez de con `list()`, porque el generador de
+   faster-whisper decodifica uno por vuelta: entre uno y otro se puede abandonar
+   sin haber escrito nada.
+
+**La síntesis de voz no se puede cortar por dentro**: Qwen3-TTS es una sola
+llamada a PyTorch sin puntos de control. Esas etapas (`generar_voz`, `crear_voz`
+y la transcripción de `clonar_voz`) se paran antes de empezar, y si ya estaban en
+marcha terminan: el audio vale, no se encadena la etapa siguiente y el log del
+job lo dice. La UI tampoco promete lo que no puede hacer: el job expone
+`sin_corte` (de `cancelacion.SIN_CORTE`) y el botón avisa en la confirmación de
+que esa etapa se parará en cuanto acabe.
+
+Un job parado **no encadena** la etapa siguiente, ni siquiera si el handler llegó
+a terminar justo antes del corte: encadenar sería lo contrario de lo que se
+pidió. Y el archivo a medio escribir se borra (`_ffmpeg.sin_restos`): un clip o
+un `final.mp4` truncado existe en disco, y el resto del pipeline lo daría por
+hecho —`ffmpeg concat` se salta sin fallar el clip que no puede abrir y
+entregaría un vídeo al que le falta una escena—. En el historial, `cancelado` es
+un estado propio y se lee «Parado», distinto de «Error»: pararlo fue una
+decisión, no un fallo.
+
 
 ## Flujo de creación (UI)
 
@@ -370,7 +444,8 @@ Voces reutilizables generadas con Qwen3-TTS VoiceDesign, guardadas en `voces/<sl
 - ✅ **Música** — instrumentales y canciones con ACE-Step 1.5 XL Turbo, con conditioning musical, guion de secciones y masterizado EBU R128
 - ✅ **Estudio en Astro + Svelte** — los cuatro modos en una sola interfaz, con reproductor global y biblioteca
 - ✅ **Música de la historia** — el proyecto compone su pista desde el guion y las escenas, se descarga sola (audio sin narración, reutilizable en redes) y opcionalmente se mezcla bajo la voz con ducking
-- ⬜ Pendiente — plantillas `historia`/`drama-chisme`, reintentos en la cola, empaquetado
+- ✅ **Cola con reintentos y parada** — los fallos transitorios se reintentan solos con espera creciente, y la generación se puede detener (lo que corre, la cola entera o las dos) desde la cabecera y desde las tres secciones
+- ⬜ Pendiente — plantillas `historia`/`drama-chisme`, empaquetado
 
 ## Imágenes
 

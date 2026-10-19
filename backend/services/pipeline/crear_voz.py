@@ -3,7 +3,7 @@
 
 import numpy as np
 
-from ... import procesos
+from ... import parada, procesos
 from ...clients import stt, tts
 from ...config import VOCES_DIR
 from ...db import get_session
@@ -23,6 +23,10 @@ def crear_voz(voz_id: int) -> str:
         if voz is None:
             raise ValueError(f"Voz {voz_id} no existe")
         slug, instruct, ref_text = voz.slug, voz.instruct, voz.ref_text
+
+    # La síntesis del clip de referencia tampoco se puede partir; esto es lo
+    # último que se puede cortar.
+    parada.comprobar("antes de sintetizar la voz de referencia")
 
     try:
         design = tts.cargar_modelo(tts.MODELO_DESIGN)
@@ -67,6 +71,10 @@ def clonar_voz(voz_id: int, inicio: float = 0.0, fin: float | None = None) -> st
 
     try:
         ref = voces_repo.ruta_ref(slug)
+        # El recorte va por procesos.py (se le puede mandar SIGTERM) y la
+        # transcripción mira la bandera entre segmentos; el `except` de abajo
+        # deja la voz en "error" también si se paró, que es lo honesto: no está
+        # lista.
         procesos.ejecutar(
             ["ffmpeg", "-loglevel", "error", "-y", "-ss", f"{inicio}",
              "-i", str(origenes[0]), "-t", f"{dur}",

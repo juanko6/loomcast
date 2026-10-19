@@ -7,6 +7,7 @@ import pytest
 from backend.repositories import escenas as escenas_repo
 from backend.repositories import proyectos as proyectos_repo
 from backend.services.pipeline import _ffmpeg, clips, escena_individual, i2v
+from tests import fakes
 from tests import factories as f
 
 pytestmark = pytest.mark.integration
@@ -276,6 +277,25 @@ def test_archivar_final(tmp_path):
     assert not final.exists() and (tmp_path / "versiones" / nombre).read_bytes() == b"v1"
 
 
+def test_sin_restos_borra_el_archivo_a_medias(tmp_path):
+    """Un clip truncado existe en disco y el armado lo daría por hecho."""
+    from backend import parada
+
+    medias = tmp_path / "03.mp4"
+    with pytest.raises(parada.Parado):
+        with _ffmpeg.sin_restos(medias):
+            medias.write_bytes(b"mitad de un clip")
+            raise parada.Parado("parado")
+    assert not medias.exists()
+
+
+def test_sin_restos_no_toca_el_archivo_si_todo_va_bien(tmp_path):
+    hecho = tmp_path / "03.mp4"
+    with _ffmpeg.sin_restos(hecho):
+        hecho.write_bytes(b"clip entero")
+    assert hecho.read_bytes() == b"clip entero"
+
+
 def test_args_video_segun_el_encoder(monkeypatch):
     monkeypatch.setattr(_ffmpeg, "VIDEO_ENCODER", "software")
     assert "libx264" in _ffmpeg.args_video() and "-crf" in _ffmpeg.args_video()
@@ -327,6 +347,6 @@ def test_clip_que_excede_el_tiempo_se_cancela(tmp_path, monkeypatch):
         assert kw["timeout"] == clips.TIMEOUT_CLIP_S
         raise subprocess.TimeoutExpired(cmd, kw["timeout"])
 
-    monkeypatch.setattr(subprocess, "run", colgado)
+    monkeypatch.setattr(subprocess, "Popen", fakes.popen_falso(colgado))
     with pytest.raises(RuntimeError, match="no terminó"):
         clips.clip_estatico(img, 0.2, tmp_path / "c.mp4")

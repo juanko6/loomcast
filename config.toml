@@ -426,6 +426,22 @@ true_peak = -1.0
 # 12 s, y se ve como miniatura de 48 px en la lista.
 portada_px = 384
 
+[cola]
+# Reintentos de un job que se cae por algo transitorio: ComfyUI que todavía no
+# responde, un proceso externo que se pasa de su tope, el llama-server
+# reiniciándose. Lo que no se arregla repitiendo (faltan escenas, falta la pista
+# de música, el workflow no existe) sigue fallando al primer intento.
+#
+# Intentos TOTALES, contando el primero. Tres porque los fallos que se curan
+# solos lo hacen en el primer reintento, y cada intento de una etapa de GPU
+# puede costar lo que diga [comfy].timeout_s: con más, un lote de doce escenas
+# se pasaría media hora fallando antes de avisar.
+intentos = 3
+# Espera antes de reintentar, en segundos; se dobla en cada intento (20 s, luego
+# 40 s). Crece porque lo que suele fallar es un servicio que está arrancando o
+# recuperándose, y volver a llamarlo de inmediato lo encuentra igual de ocupado.
+espera_s = 20
+
 [paths]
 proyectos = "proyectos"
 plantillas = "plantillas"

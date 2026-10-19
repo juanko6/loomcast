@@ -13,8 +13,9 @@ from ...models import avanzar_estado
 from ... import procesos
 from ...repositories import escenas as escenas_repo
 from ...repositories import proyectos as proyectos_repo
+from ... import parada
 from .. import progreso
-from ._ffmpeg import args_video
+from ._ffmpeg import args_video, sin_restos
 
 FPS = 60
 ANCHO, ALTO = 1080, 1920
@@ -141,10 +142,16 @@ def generar_clips(proyecto_id: int, forzar: bool = False) -> str:
         return f"Los {len(escenas)} clips Ken Burns ya estaban hechos"
 
     for i, e in enumerate(pendientes):
+        # Entre clip y clip: cortar aquí deja hechos los anteriores y ninguno a
+        # medias, que es lo que el armado necesita para no dar por válido un
+        # vídeo incompleto.
+        parada.comprobar(f"quedaban {len(pendientes) - i} clips")
         progreso.lote(i, len(pendientes), "clip")
         t0 = time.time()
-        clip_ken_burns(up_dir / f"{e['orden']:02d}.png", e["orden"], e["dur"],
-                       clips_dir / f"{e['orden']:02d}.mp4")
+        salida = clips_dir / f"{e['orden']:02d}.mp4"
+        with sin_restos(salida):
+            clip_ken_burns(up_dir / f"{e['orden']:02d}.png", e["orden"], e["dur"],
+                           salida)
         with get_session() as s:
             escenas_repo.anotar_clip(s, proyecto_id, e["orden"], "kenburns",
                                      time.time() - t0)

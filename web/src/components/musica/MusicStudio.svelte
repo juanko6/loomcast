@@ -4,6 +4,7 @@
   import MusicConfig from "./MusicConfig.svelte";
   import TrackDetail from "./TrackDetail.svelte";
   import Button from "../primitives/Button.svelte";
+  import BotonParar from "../shell/BotonParar.svelte";
   import { jobsDrenados, refrescarJobs, seleccionPendiente } from "@/lib/stores";
   import { currentTrack } from "@/lib/player";
   import {
@@ -150,9 +151,14 @@
       <span class="text-xs font-medium tracking-wide text-muted">
         {tracks.length} {tracks.length === 1 ? "pista" : "pistas"}
       </span>
-      <Button size="sm" variant={selectedId === null ? "secondary" : "primary"} onclick={newTrack}>
-        + Nueva pista
-      </Button>
+      <div class="flex items-center gap-2">
+        <!-- Generar una pista son minutos de GPU: el botón de parada va donde
+             se está mirando mientras trabaja, no solo en la cabecera. -->
+        <BotonParar />
+        <Button size="sm" variant={selectedId === null ? "secondary" : "primary"} onclick={newTrack}>
+          + Nueva pista
+        </Button>
+      </div>
     </div>
     <div class="min-h-0 flex-1 space-y-2 overflow-y-auto p-4" style={reservaPlayer}>
       {#if error}

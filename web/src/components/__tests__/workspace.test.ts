@@ -8,7 +8,8 @@ import type { Job } from "@/lib/types";
 import { jobs, modo } from "@/lib/stores";
 import Workspace from "../shell/Workspace.svelte";
 
-const job = (id: number, progreso: Job["progreso"] = null): Job => ({ id, tipo: "generar_imagenes", estado: "corriendo", progreso });
+const job = (id: number, progreso: Job["progreso"] = null): Job =>
+  ({ id, tipo: "generar_imagenes", estado: "corriendo", intentos: 1, sin_corte: null, progreso });
 const progreso = (extra = {}) => ({ job_id: 1, transcurrido_s: 12, fase: "", hecho: 0, total: 0, pct: null, eta_s: null, ...extra });
 
 beforeEach(() => {

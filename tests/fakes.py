@@ -4,6 +4,7 @@ Cada fake registra sus llamadas en `.llamadas` y escribe archivos mínimos pero
 válidos donde el cliente real los dejaría, para que las etapas del pipeline
 puedan seguir leyéndolos. Se instalan con las fixtures de conftest.py.
 """
+import subprocess
 from pathlib import Path
 
 from PIL import Image
@@ -200,3 +201,71 @@ class FakeTTS:
 
     def liberar(self, modelo):
         self.liberados += 1
+
+
+class ProcesoFalso:
+    """Lo que `procesos.ejecutar` necesita de un Popen, sin lanzar nada.
+
+    Se construye desde una función con la firma de `subprocess.run`
+    (`f(cmd, **kw) -> CompletedProcess`, o que lance `TimeoutExpired`), que es
+    como están escritos los dobles de los tests: `procesos.ejecutar` pasó de
+    `run` a `Popen` para poder cortar el proceso cuando se para un job, y este
+    puente evita reescribirlos todos.
+    """
+
+    def __init__(self, cmd, correr, kw):
+        self.args, self._correr, self._kw = cmd, correr, kw
+        self.pid = id(self)
+        self.returncode = None
+        self._corrido = False
+
+    def communicate(self, timeout=None):
+        # `procesos.ejecutar` vuelve a llamar aquí tras matar un proceso que se
+        # pasó de tiempo, para recoger lo que dejó. El doble solo corre una vez:
+        # si no, el que lanza TimeoutExpired lo lanzaría dos veces.
+        if self._corrido:
+            return None, None
+        self._corrido = True
+        r = self._correr(self.args, timeout=timeout, **self._kw)
+        self.returncode = r.returncode
+        return r.stdout, r.stderr
+
+    def poll(self):
+        return self.returncode
+
+    def terminate(self):
+        self.returncode = -15
+
+    def kill(self):
+        self.returncode = -9
+
+
+def popen_falso(correr):
+    """Doble para `monkeypatch.setattr(subprocess, "Popen", popen_falso(f))`.
+
+    Devuelve una clase y no una función porque, con el doble puesto, cualquier
+    módulo que se importe después anota `subprocess.Popen | None` (lo hace
+    llm_runtime) y una función no admite el `|` de las uniones de tipos.
+    """
+
+    class PopenFalso(ProcesoFalso):
+        def __init__(self, cmd, **kw):
+            super().__init__(cmd, correr, kw)
+
+    return PopenFalso
+
+
+# Capturado al importar, antes de que ningún test ponga su doble.
+_POPEN_REAL = subprocess.Popen
+
+
+def correr_de_verdad(cmd, timeout=None, **kw):
+    """Ejecuta el proceso con el Popen auténtico aunque haya un doble puesto.
+
+    Para los tests que solo quieren falsear un comando concreto: `subprocess.run`
+    no sirve de escape, porque busca `Popen` en su módulo y encontraría el doble,
+    llamando al doble otra vez (y otra).
+    """
+    p = _POPEN_REAL(cmd, **kw)
+    salida, error = p.communicate(timeout=timeout)
+    return subprocess.CompletedProcess(cmd, p.returncode, salida, error)

@@ -7,6 +7,14 @@ class TemaIn(BaseModel):
     plantilla: str = "curiosidades"
 
 
+class ParadaIn(BaseModel):
+    """Qué se para. Separados porque no es lo mismo tirar los minutos de GPU de
+    la etapa en curso que vaciar lo que todavía no ha empezado."""
+
+    corriendo: bool = True
+    pendientes: bool = True
+
+
 class EstadoIdeaIn(BaseModel):
     estado: str  # propuesta | aprobada | descartada
 

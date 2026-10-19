@@ -125,6 +125,18 @@ def fake_tts(monkeypatch):
 
 
 @pytest.fixture
+def parada_pedida():
+    """Deja la bandera de parada encendida, como si el usuario ya hubiera
+    pulsado el botón mientras este job corría."""
+    from backend import parada
+
+    parada.iniciar(1)
+    parada.marcar(1)
+    yield
+    parada.limpiar()
+
+
+@pytest.fixture
 def dirs_tmp(monkeypatch, tmp_path):
     """Redirige las carpetas de salida (proyectos/, voces/, galeria/, musica/) a un tmp.
 

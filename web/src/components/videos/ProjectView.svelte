@@ -7,6 +7,7 @@
   import StepMusica from "./steps/StepMusica.svelte";
   import StepVideo from "./steps/StepVideo.svelte";
   import Chip from "../primitives/Chip.svelte";
+  import BotonParar from "../shell/BotonParar.svelte";
   import {
     ETAPA_VIDEO,
     type Paso,
@@ -80,6 +81,9 @@
         <span class="size-4 animate-spin rounded-full border-2 border-line border-t-accent"></span>
         {etapa}
       </span>
+      <!-- Junto a la etapa en curso: es lo que se está mirando cuando un lote
+           de doce escenas lleva veinte minutos y uno decide que ya no. -->
+      <BotonParar />
     {/if}
   </header>
 

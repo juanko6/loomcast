@@ -4,6 +4,7 @@
   import ImageConfig from "./ImageConfig.svelte";
   import ImageDetail from "./ImageDetail.svelte";
   import Button from "../primitives/Button.svelte";
+  import BotonParar from "../shell/BotonParar.svelte";
   import { jobsDrenados, refrescarJobs, seleccionPendiente } from "@/lib/stores";
   import { currentTrack } from "@/lib/player";
   import {
@@ -176,9 +177,12 @@
       <span class="text-xs font-medium tracking-wide text-muted">
         {items.length} {items.length === 1 ? "imagen" : "imágenes"}
       </span>
-      <Button size="sm" variant={selectedId === null ? "secondary" : "primary"} onclick={newImage}>
-        + Nueva imagen
-      </Button>
+      <div class="flex items-center gap-2">
+        <BotonParar />
+        <Button size="sm" variant={selectedId === null ? "secondary" : "primary"} onclick={newImage}>
+          + Nueva imagen
+        </Button>
+      </div>
     </div>
     <div class="min-h-0 flex-1 space-y-2 overflow-y-auto p-4" style={reservaPlayer}>
       {#if error}
