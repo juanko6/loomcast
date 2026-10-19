@@ -6,6 +6,7 @@ en puntuación fuerte o pausas largas).
 """
 import json
 
+from ... import parada
 from ...clients import stt
 from ...config import PROYECTOS_DIR
 from ...db import get_session
@@ -65,6 +66,10 @@ def generar_subtitulos(proyecto_id: int) -> str:
     if not voz.exists():
         raise ValueError("No hay voz.wav; genera la voz primero")
 
+    # Whisper se puede cortar entre segmentos (ver clients/stt.py): si se para,
+    # sale por aquí sin haber escrito palabras.json ni el SRT, así que la etapa
+    # no deja a medias nada que luego se dé por bueno.
+    parada.comprobar("antes de transcribir la narración")
     palabras = stt.transcribir(voz, palabras=True)["palabras"]
     if not palabras:
         raise ValueError("Whisper no devolvió palabras")

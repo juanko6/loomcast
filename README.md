@@ -142,7 +142,7 @@ cd web && pnpm dev
 
 ## Arquitectura del backend
 
-Capas (de HTTP hacia abajo): `routers/` (controllers: validación y JSON, cero lógica) → `services/` (reglas de negocio; `services/pipeline/` son las etapas de generación) → `repositories/` (consultas a SQLite y carga de plantillas) → `models.py` (ORM + máquina de estados). Transversales: `clients/` (adaptadores a llama-server y Qwen3-TTS), `workers/queue.py` (cola de jobs en un hilo, uno a la vez, con encadenado, recuperación y reintentos), `services/progreso.py` (por dónde va el job en curso), `services/cancelacion.py` (cortar en caliente el job que corre), `schemas.py` (contratos Pydantic de la API).
+Capas (de HTTP hacia abajo): `routers/` (controllers: validación y JSON, cero lógica) → `services/` (reglas de negocio; `services/pipeline/` son las etapas de generación) → `repositories/` (consultas a SQLite y carga de plantillas) → `models.py` (ORM + máquina de estados). Transversales: `clients/` (adaptadores a llama-server y Qwen3-TTS), `workers/queue.py` (cola de jobs en un hilo, uno a la vez, con encadenado, recuperación y reintentos), `services/progreso.py` (por dónde va el job en curso), `parada.py` + `services/cancelacion.py` (la bandera de parada y el corte en caliente del job que corre), `schemas.py` (contratos Pydantic de la API).
 
 ### Progreso de la cola
 
@@ -189,8 +189,9 @@ pistas completas) y **se descarta lo que estuviera a medio hacer**.
 
 Un job que todavía espera turno se cancela sin más: se marca `cancelado` y el
 worker lo salta cuando le llega. El que está corriendo hay que cortarlo de
-verdad, y se hace por las tres vías por las que puede estar esperando (ver
-`backend/services/cancelacion.py`):
+verdad, y cada familia de etapa espera en un sitio distinto, así que se corta por
+todas (`backend/services/cancelacion.py` orquesta; la bandera vive en
+`backend/parada.py`, abajo, porque la miran también los `clients/*`):
 
 1. **ComfyUI** (imágenes, upscale, clips i2v, música): `POST /interrupt` más un
    `POST /queue {clear}`. El trabajo corre dentro de ComfyUI y aquí solo se
@@ -200,9 +201,27 @@ verdad, y se hace por las tres vías por las que puede estar esperando (ver
    —así ffmpeg cierra el archivo que estaba escribiendo— y SIGKILL al que no
    muera en 5 s, para que parar no deje la cola esperando a un proceso sordo.
 3. **Los bucles por lotes** (una imagen o un clip por escena): miran la bandera
-   de cancelación entre elemento y elemento y salen limpios. Lo ya generado se
-   queda hecho; cortar solo el elemento en curso haría que la etapa empezara el
-   siguiente.
+   entre elemento y elemento y salen limpios. Lo ya generado se queda hecho;
+   cortar solo el elemento en curso haría que la etapa empezara el siguiente.
+4. **El LLM** (ideas, guion, metadatos, reparto, prompts de escena, brief
+   musical): `clients/llm.py` pide la respuesta **en streaming** y mira la
+   bandera entre trozos. No es por enseñar el texto mientras sale —ninguna etapa
+   lo aprovecha—: con la respuesta de un tirón el hilo se queda bloqueado dentro
+   de httpx hasta que el modelo termina el guion entero, y pulsar Parar no lo
+   tocaría. Al salir se cierra la conexión y el servidor abandona la generación.
+   Lo que no se puede partir es la lectura del prompt, antes del primer trozo.
+5. **Whisper** (subtítulos, y el `ref_text` del clonado): `clients/stt.py`
+   recorre los segmentos a mano en vez de con `list()`, porque el generador de
+   faster-whisper decodifica uno por vuelta: entre uno y otro se puede abandonar
+   sin haber escrito nada.
+
+**La síntesis de voz no se puede cortar por dentro**: Qwen3-TTS es una sola
+llamada a PyTorch sin puntos de control. Esas etapas (`generar_voz`, `crear_voz`
+y la transcripción de `clonar_voz`) se paran antes de empezar, y si ya estaban en
+marcha terminan: el audio vale, no se encadena la etapa siguiente y el log del
+job lo dice. La UI tampoco promete lo que no puede hacer: el job expone
+`sin_corte` (de `cancelacion.SIN_CORTE`) y el botón avisa en la confirmación de
+que esa etapa se parará en cuanto acabe.
 
 Un job parado **no encadena** la etapa siguiente, ni siquiera si el handler llegó
 a terminar justo antes del corte: encadenar sería lo contrario de lo que se
@@ -213,9 +232,6 @@ entregaría un vídeo al que le falta una escena—. En el historial, `cancelado
 un estado propio y se lee «Parado», distinto de «Error»: pararlo fue una
 decisión, no un fallo.
 
-Lo único que no se puede cortar por dentro es la **síntesis de voz**: es una sola
-llamada a PyTorch sin puntos de control. Ese job se para en cuanto la síntesis
-termina, antes de posprocesar el audio y antes de encadenar los subtítulos.
 
 ## Flujo de creación (UI)
 

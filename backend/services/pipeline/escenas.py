@@ -34,7 +34,8 @@ from ...repositories import personajes as personajes_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
 from ...schemas import EscenaLLM, PlanoLLM, StoryboardLLM
-from .. import cancelacion, progreso
+from ... import parada
+from .. import progreso
 
 # Cierre de cada mensaje. Un servidor que no aplica el json_schema (mlx_lm)
 # deja al modelo libre, y si lo último que lee es un plano que empieza por
@@ -311,7 +312,7 @@ def generar_escenas(proyecto_id: int) -> str:
     casting = _bloque_casting(fichas)
     escenas = []
     for i, seg in enumerate(segmentos):
-        cancelacion.comprobar(f"quedaban {len(segmentos) - i} escenas")
+        parada.comprobar(f"quedaban {len(segmentos) - i} escenas")
         progreso.lote(i + 1, total, "escena")
         user = (
             f"Full video context:\n```markdown\n{titulo}\n{guion_texto}\n```\n\n"

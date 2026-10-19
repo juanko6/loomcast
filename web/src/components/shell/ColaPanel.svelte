@@ -120,6 +120,11 @@
               <span class="text-warn"> · intento {enCurso.intentos}</span>
             {/if}
           </p>
+          {#if enCurso.sin_corte}
+            <p class="text-xs text-warn">
+              {enCurso.sin_corte} no se puede cortar a mitad: se para en cuanto termine.
+            </p>
+          {/if}
         {:else}
           <p class="text-sm text-dim">Nada en marcha.</p>
         {/if}

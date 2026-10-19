@@ -23,11 +23,22 @@
   let error = $state("");
 
   const esperando = $derived($jobs.filter((j) => j.estado === "pendiente").length);
+  // Lo que la etapa en curso no puede cortar a mitad (la síntesis de voz), para
+  // no prometer en el aviso algo que no va a pasar.
+  const sinCorte = $derived($jobs.find((j) => j.estado === "corriendo")?.sin_corte ?? null);
+
+  const tarde = $derived(
+    sinCorte
+      ? `Ojo: ${sinCorte} ya está en marcha y no se puede cortar a mitad. ` +
+        "Se para en cuanto termine, sin seguir con la etapa siguiente.\n\n"
+      : "",
+  );
 
   function aviso(): string {
     if (soloCorriendo) {
       return (
         "¿Detener lo que se está generando?\n\n" +
+        tarde +
         "Se corta la etapa en curso y no se encadena la siguiente. " +
         "Lo que ya estaba terminado se conserva; lo que esté a medio hacer se descarta y hay que repetirlo.\n\n" +
         (esperando
@@ -37,6 +48,7 @@
     }
     return (
       "¿Parar la generación y vaciar la cola?\n\n" +
+      tarde +
       "Se corta lo que se está generando" +
       (esperando ? ` y se descartan los ${esperando} trabajos que esperan.` : ".") +
       "\n\nSe conserva todo lo ya terminado (las imágenes, los clips y las pistas completas); " +
@@ -64,9 +76,11 @@
     {size}
     disabled={parando}
     onclick={parar}
-    title={soloCorriendo
-      ? "Detener la etapa en curso"
-      : "Detener la generación y vaciar la cola"}
+    title={sinCorte
+      ? `${sinCorte} no se puede cortar a mitad: se para en cuanto termine`
+      : soloCorriendo
+        ? "Detener la etapa en curso"
+        : "Detener la generación y vaciar la cola"}
   >
     {parando ? "Parando…" : etiqueta}
   </Button>

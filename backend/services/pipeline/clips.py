@@ -13,7 +13,8 @@ from ...models import avanzar_estado
 from ... import procesos
 from ...repositories import escenas as escenas_repo
 from ...repositories import proyectos as proyectos_repo
-from .. import cancelacion, progreso
+from ... import parada
+from .. import progreso
 from ._ffmpeg import args_video, sin_restos
 
 FPS = 60
@@ -144,7 +145,7 @@ def generar_clips(proyecto_id: int, forzar: bool = False) -> str:
         # Entre clip y clip: cortar aquí deja hechos los anteriores y ninguno a
         # medias, que es lo que el armado necesita para no dar por válido un
         # vídeo incompleto.
-        cancelacion.comprobar(f"quedaban {len(pendientes) - i} clips")
+        parada.comprobar(f"quedaban {len(pendientes) - i} clips")
         progreso.lote(i, len(pendientes), "clip")
         t0 = time.time()
         salida = clips_dir / f"{e['orden']:02d}.mp4"

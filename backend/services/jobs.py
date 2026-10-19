@@ -8,8 +8,9 @@ Cancelar tiene dos mitades muy distintas:
     en la `Queue` desde el hilo HTTP mientras el worker tira de ella es pedir
     una carrera por nada).
   - **Corriendo**: además hay que cortarle el trabajo de verdad, que es lo que
-    hace `cancelacion.pedir` (ComfyUI, el proceso externo y la bandera de los
-    bucles por lotes).
+    hace `cancelacion.pedir`: ComfyUI, el proceso externo y la bandera que miran
+    los bucles por lotes, el cliente del LLM entre trozos y el de Whisper entre
+    segmentos.
 """
 from ..db import get_session
 from ..repositories import jobs as jobs_repo
@@ -30,8 +31,12 @@ def _progreso_de(job_id: int) -> dict | None:
 
 
 def _a_dict(j, con_log: bool = False) -> dict:
+    # `sin_corte` nombra lo que no se puede cortar a mitad (la síntesis de voz),
+    # y es null en todo lo demás. Lo decide el backend y no la UI para que el
+    # botón de parada no prometa lo que esta etapa no puede hacer.
     d = {"id": j.id, "tipo": j.tipo, "ref_id": j.ref_id, "estado": j.estado,
-         "intentos": j.intentos, "progreso": _progreso_de(j.id)}
+         "intentos": j.intentos, "sin_corte": cancelacion.SIN_CORTE.get(j.tipo),
+         "progreso": _progreso_de(j.id)}
     if con_log:
         d["log"] = j.log
     return d

@@ -1,6 +1,7 @@
 """La cola de verdad (`queue.encolar` + `_procesar`), con handlers de mentira."""
 import pytest
 
+from backend import parada
 from backend.clients import comfy
 from backend.repositories import jobs as jobs_repo
 from backend.services import cancelacion
@@ -26,7 +27,7 @@ def cola(engine, monkeypatch):
     while not queue._cola.empty():
         queue._cola.get_nowait()
     yield llamadas
-    cancelacion.limpiar()
+    parada.limpiar()
     while not queue._cola.empty():
         queue._cola.get_nowait()
 
@@ -270,7 +271,7 @@ def test_parar_el_job_en_curso_lo_corta_y_no_encadena(cola, session):
             # Lo que haría la UI a mitad del lote.
             if i == 2:
                 jobs_service.parar()
-            cancelacion.comprobar(f"quedaban {5 - i} clips")
+            parada.comprobar(f"quedaban {5 - i} clips")
             hechos.append(i)
         return "cinco clips"
 

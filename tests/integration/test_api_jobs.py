@@ -1,5 +1,6 @@
 import pytest
 
+from backend import parada
 from backend.models import Job
 from backend.services import cancelacion
 
@@ -14,7 +15,7 @@ def sin_comfy(monkeypatch):
     monkeypatch.setattr(cancelacion.procesos, "terminar_actual",
                         lambda: pedidos.append("procesos") or 0)
     yield pedidos
-    cancelacion.limpiar()
+    parada.limpiar()
 
 
 def _job(session, tipo="generar_imagenes", estado="pendiente", **kw):
@@ -37,8 +38,16 @@ def test_ver_job_y_listado_de_activos(client, session):
     assert r.json()["estado"] == "pendiente"
     assert r.json()["progreso"] is None
     assert r.json()["intentos"] == 0
+    assert r.json()["sin_corte"] is None     # las ideas se cortan a mitad
 
     assert [x["id"] for x in client.get("/api/jobs").json()] == [j.id]
+
+
+def test_la_sintesis_de_voz_se_declara_como_no_cortable(client, session):
+    """La UI lo usa para no prometer que corta lo que no puede cortar."""
+    j = _job(session, tipo="generar_voz", estado="corriendo")
+
+    assert client.get(f"/api/jobs/{j.id}").json()["sin_corte"] == "la síntesis de la narración"
 
 
 def test_cancelar_un_pendiente_lo_deja_fuera_de_la_cola(client, session, sin_comfy):
@@ -55,13 +64,13 @@ def test_cancelar_un_pendiente_lo_deja_fuera_de_la_cola(client, session, sin_com
 
 def test_cancelar_el_que_corre_lo_corta_en_caliente(client, session, sin_comfy):
     j = _job(session, estado="corriendo")
-    cancelacion.iniciar(j.id)
+    parada.iniciar(j.id)
 
     r = client.post(f"/api/jobs/{j.id}/cancelar")
 
     assert r.json()["cortado"] is True
     assert sin_comfy == ["comfy", "procesos"]
-    assert cancelacion.pedida() is True
+    assert parada.pedida() is True
 
 
 def test_cancelar_un_job_terminado_no_reescribe_su_resultado(client, session, sin_comfy):
@@ -74,7 +83,7 @@ def test_cancelar_un_job_terminado_no_reescribe_su_resultado(client, session, si
 
 def test_parar_corta_el_que_corre_y_vacia_la_cola(client, session, sin_comfy):
     corriendo = _job(session, estado="corriendo")
-    cancelacion.iniciar(corriendo.id)
+    parada.iniciar(corriendo.id)
     _job(session)
     _job(session, tipo="generar_clips")
 
@@ -87,7 +96,7 @@ def test_parar_corta_el_que_corre_y_vacia_la_cola(client, session, sin_comfy):
 def test_parar_solo_la_cola_deja_acabar_la_etapa_en_curso(client, session, sin_comfy):
     """Para no tirar los minutos de GPU que la etapa ya lleva invertidos."""
     corriendo = _job(session, estado="corriendo")
-    cancelacion.iniciar(corriendo.id)
+    parada.iniciar(corriendo.id)
     _job(session)
 
     r = client.post("/api/jobs/parar", json={"corriendo": False, "pendientes": True})

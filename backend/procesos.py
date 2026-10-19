@@ -10,6 +10,8 @@ import subprocess
 import threading
 import time
 
+from . import parada
+
 # Topes por tipo de trabajo, en segundos. Generosos a propósito: el objetivo es
 # cortar lo que no va a terminar nunca, no apurar lo lento (un montaje con 100
 # subtítulos superpuestos tarda minutos en el M3 Max).
@@ -32,8 +34,12 @@ class ProcesoTimeout(RuntimeError):
     """El proceso superó su tope y se canceló."""
 
 
-class ProcesoParado(RuntimeError):
-    """El proceso se cortó porque se pidió parar el job (no es un fallo suyo)."""
+class ProcesoParado(parada.Parado):
+    """El proceso se cortó porque se pidió parar el job (no es un fallo suyo).
+
+    Es un `parada.Parado` para que la cola no tenga que distinguir quién cortó:
+    el proceso externo, el LLM, Whisper o un bucle por lotes salen todos por ahí.
+    """
 
 
 # Procesos externos vivos ahora mismo, para poder pararlos desde el hilo HTTP

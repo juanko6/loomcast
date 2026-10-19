@@ -279,13 +279,13 @@ def test_archivar_final(tmp_path):
 
 def test_sin_restos_borra_el_archivo_a_medias(tmp_path):
     """Un clip truncado existe en disco y el armado lo daría por hecho."""
-    from backend.services import cancelacion
+    from backend import parada
 
     medias = tmp_path / "03.mp4"
-    with pytest.raises(cancelacion.Cancelado):
+    with pytest.raises(parada.Parado):
         with _ffmpeg.sin_restos(medias):
             medias.write_bytes(b"mitad de un clip")
-            raise cancelacion.Cancelado("parado")
+            raise parada.Parado("parado")
     assert not medias.exists()
 
 

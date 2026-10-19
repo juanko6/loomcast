@@ -11,6 +11,7 @@ from typing import TypeVar
 import httpx
 from pydantic import BaseModel, ValidationError
 
+from .. import parada
 from ..config import LLM_MODELOS, ModeloLLM
 
 T = TypeVar("T", bound=BaseModel)
@@ -66,12 +67,52 @@ class LLMTruncado(LLMError):
 
 
 def _completar(client: httpx.Client, url: str, body: dict) -> str:
-    r = client.post(f"{url}/v1/chat/completions", json=body)
-    if r.status_code >= 400:
-        raise LLMError(f"El servidor del LLM respondió {r.status_code}: {r.text[:300]}")
-    eleccion = r.json()["choices"][0]
-    contenido = eleccion["message"]["content"]
-    if eleccion.get("finish_reason") == "length":
+    """Pide la respuesta **en streaming** y la junta.
+
+    El streaming no es para enseñar el texto mientras sale —ninguna etapa lo
+    aprovecha— sino para poder parar. Con la respuesta de un tirón, el hilo de la
+    cola se queda bloqueado dentro de httpx hasta que el modelo termina el guion
+    entero, y pulsar "Parar" no lo toca: el job se marcaría cancelado minutos
+    después, con el modelo ocupando la memoria todo ese rato. Leyendo por trozos
+    se puede mirar la bandera entre uno y otro, y salir cierra la conexión, con
+    lo que el servidor abandona la generación.
+
+    El corte llega como muy tarde en el trozo siguiente; lo que no se puede
+    partir es la lectura del prompt, antes del primer trozo.
+
+    El formato es el SSE de la API de OpenAI, que hablan igual llama-server y
+    mlx_lm.server. El contenido se valida igual que antes al volver a `chat`:
+    mlx_lm ignora `json_schema`, así que no se puede dar por hecho que lo que
+    llegue cumpla el contrato.
+    """
+    trozos: list[str] = []
+    razon = None
+    with client.stream(
+        "POST", f"{url}/v1/chat/completions", json=body | {"stream": True}
+    ) as r:
+        if r.status_code >= 400:
+            r.read()
+            raise LLMError(f"El servidor del LLM respondió {r.status_code}: {r.text[:300]}")
+        for linea in r.iter_lines():
+            parada.comprobar("generando texto")
+            if not linea.startswith("data:"):
+                continue
+            datos = linea[5:].strip()
+            if not datos or datos == "[DONE]":
+                continue
+            try:
+                trozo = json.loads(datos)
+            except json.JSONDecodeError:
+                raise LLMError(
+                    f"El servidor del LLM mandó un trozo que no es JSON: {datos[:200]}"
+                )
+            # Algunos servidores cierran con un trozo sin `choices` (solo el
+            # recuento de tokens), y otros mandan `delta` vacíos por el camino.
+            eleccion = (trozo.get("choices") or [{}])[0]
+            trozos.append((eleccion.get("delta") or {}).get("content") or "")
+            razon = eleccion.get("finish_reason") or razon
+    contenido = "".join(trozos)
+    if razon == "length":
         raise LLMTruncado(
             f"El modelo se quedó sin tokens a mitad de la respuesta "
             f"(max_tokens = {body.get('max_tokens')}). Súbelo en config.toml, "

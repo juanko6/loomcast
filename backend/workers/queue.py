@@ -7,13 +7,13 @@ import traceback
 
 import httpx
 
-from .. import procesos
+from .. import parada, procesos
 from ..clients import comfy, llm, rife
 from ..config import COLA_ESPERA_S, COLA_INTENTOS
 from ..db import get_session
 from ..models import ImagenLibre, Musica, Proyecto, Tema, Voz
 from ..repositories import jobs as jobs_repo
-from ..services import cancelacion, llm_runtime, progreso
+from ..services import llm_runtime, progreso
 from ..services.pipeline import (
     armado,
     armado_estatico,
@@ -195,7 +195,7 @@ def _esperar(segundos: float) -> bool:
     """
     fin = time.monotonic() + segundos
     while True:
-        if cancelacion.pedida():
+        if parada.pedida():
             return False
         resto = fin - time.monotonic()
         if resto <= 0:
@@ -225,11 +225,13 @@ def _intentar(job_id: int, tipo: str, ref_id: int, params: dict) -> tuple[str, s
             s.commit()
         try:
             return "ok", _ejecutar(tipo, ref_id, params)
-        except cancelacion.Cancelado as e:
+        except parada.Parado as e:
+            # El corte limpio: un bucle por lotes entre elementos, el LLM entre
+            # trozos, Whisper entre segmentos o un proceso al que matamos.
             return "cancelado", str(e)
         except Exception as e:
             fallo = traceback.format_exc(limit=5)
-            if cancelacion.pedida():
+            if parada.pedida():
                 # El error es consecuencia del corte (el workflow interrumpido
                 # en ComfyUI, el ffmpeg al que mandamos SIGTERM): es una parada,
                 # no un fallo.
@@ -258,16 +260,25 @@ def _procesar(job_id: int) -> None:
             return
         tipo, ref_id = job.tipo, job.ref_id
         params = json.loads(job.params or "{}")
-    cancelacion.iniciar(job_id)
+    parada.iniciar(job_id)
     progreso.iniciar(job_id, tipo)
     try:
         estado, log = _intentar(job_id, tipo, ref_id, params)
         # Se lee antes de limpiar: el handler puede haber terminado bien justo
         # antes del corte, y entonces su trabajo vale pero la cadena no sigue.
-        parado = cancelacion.pedida()
+        parado = parada.pedida()
     finally:
         progreso.limpiar()
-        cancelacion.limpiar()
+        parada.limpiar()
+    if estado == "ok" and parado:
+        # Pasa en las etapas que no se pueden cortar a mitad (la síntesis de voz
+        # es una sola llamada a PyTorch): se pidió parar, la etapa terminó de
+        # todos modos y su trabajo vale. Queda dicho en el log para que el
+        # historial no haga pensar que la parada no llegó.
+        log = (
+            f"{log}\n\nSe pidió parar cuando esta etapa ya estaba en marcha y no se "
+            "podía cortar a mitad: terminó, pero no se encadena la siguiente."
+        )
     with get_session() as s:
         jobs_repo.finalizar(s, jobs_repo.obtener(s, job_id), estado, log)
         s.commit()

@@ -21,7 +21,8 @@ import ImageStudio from "../imagenes/ImageStudio.svelte";
 const apiMock = vi.mocked(api);
 
 const job = (id: number, extra: Partial<Job> = {}): Job =>
-  ({ id, tipo: "generar_imagenes", estado: "pendiente", intentos: 0, progreso: null, ...extra });
+  ({ id, tipo: "generar_imagenes", estado: "pendiente", intentos: 0, sin_corte: null,
+     progreso: null, ...extra });
 const progreso = (extra: Partial<ProgresoJob> = {}): ProgresoJob =>
   ({ job_id: 1, transcurrido_s: 30, fase: "imagen 2 de 4", hecho: 1, total: 4, pct: 25, eta_s: 60, ...extra });
 const hecho = (id: number, extra: Partial<JobHistorial> = {}): JobHistorial =>
@@ -89,6 +90,21 @@ describe("BotonParar", () => {
     expect(aviso).toContain("1 trabajos que esperan en la cola siguen esperando");
   });
 
+  it("si la etapa en curso no se puede cortar a mitad, el aviso lo dice", async () => {
+    jobs.set([job(1, { estado: "corriendo", tipo: "generar_voz", sin_corte: "la síntesis de la narración" })]);
+    render(BotonParar);
+    expect(screen.getByRole("button", { name: "Parar" })).toHaveAttribute(
+      "title",
+      "la síntesis de la narración no se puede cortar a mitad: se para en cuanto termine",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Parar" }));
+
+    const aviso = vi.mocked(window.confirm).mock.calls[0][0] as string;
+    expect(aviso).toContain("la síntesis de la narración ya está en marcha y no se puede cortar");
+    expect(aviso).toContain("Se para en cuanto termine");
+  });
+
   it("un fallo del backend se dice en vez de quedarse en silencio", async () => {
     apiMock.mockRejectedValueOnce(new Error("backend caído"));
     jobs.set([job(1, { estado: "corriendo" })]);
@@ -126,6 +142,17 @@ describe("ColaPanel", () => {
     expect(panel).toHaveTextContent("1 esperando: Montaje final");
     expect(within(panel).getByRole("button", { name: "Detener lo actual" })).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Parar todo y vaciar la cola" })).toBeInTheDocument();
+  });
+
+  it("el panel avisa de la etapa que no se corta a mitad", async () => {
+    jobs.set([job(1, { estado: "corriendo", tipo: "generar_voz", sin_corte: "la síntesis de la narración" })]);
+    render(ColaPanel);
+
+    await abrir();
+
+    expect(screen.getByRole("region", { name: "Cola de trabajos" })).toHaveTextContent(
+      "la síntesis de la narración no se puede cortar a mitad",
+    );
   });
 
   it("avisa de que un job va por su segundo intento", async () => {

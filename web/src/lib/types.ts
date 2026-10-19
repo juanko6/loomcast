@@ -33,6 +33,10 @@ export interface Job {
   // Intentos gastados: la cola reintenta sola los fallos transitorios, así que
   // un 3 aquí quiere decir que lo de fuera falló tres veces.
   intentos: number;
+  // Si esta etapa no se puede cortar a mitad, qué es lo que no se corta ("la
+  // síntesis de la narración"); null en todas las demás. El botón de parada lo
+  // dice en vez de aparentar que corta.
+  sin_corte: string | null;
   progreso: ProgresoJob | null;
 }
 

@@ -10,14 +10,14 @@ import time
 import tempfile
 from pathlib import Path
 
-from ... import procesos
+from ... import parada, procesos
 from ...clients import comfy, rife
 from ...config import I2V_FPS_FINAL, PROYECTOS_DIR, motor_i2v
 from ...db import get_session
 from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
 from ...repositories import proyectos as proyectos_repo
-from .. import cancelacion, progreso
+from .. import progreso
 from ._ffmpeg import args_video, duracion, sin_restos
 from .clips import ALTO, ANCHO, pendientes_de_modo
 
@@ -106,7 +106,7 @@ def generar_i2v(proyecto_id: int, forzar: bool = False,
         for i, e in enumerate(pendientes):
             # Entre escena y escena, que es lo que hace que parar un lote de
             # doce no tire por la borda los clips ya animados.
-            cancelacion.comprobar(f"quedaban {len(pendientes) - i} clips")
+            parada.comprobar(f"quedaban {len(pendientes) - i} clips")
             progreso.lote(i, len(pendientes), "clip")
             t0 = time.time()
             salida = clips_dir / f"{e['orden']:02d}.mp4"

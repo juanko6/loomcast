@@ -10,7 +10,8 @@ from ...config import PROYECTOS_DIR, motor_i2v
 from ...db import get_session
 from ...repositories import escenas as escenas_repo
 from ...repositories import proyectos as proyectos_repo
-from .. import cancelacion, progreso
+from ... import parada
+from .. import progreso
 from . import clips as clips_mod
 from . import i2v as i2v_mod
 from ._ffmpeg import sin_restos
@@ -64,7 +65,7 @@ def generar_clips_mixto(proyecto_id: int, motor: str = "") -> str:
     ]
     hechas, cuenta = len(escenas) - len(pendientes), {}
     for i, (orden, modo) in enumerate(pendientes):
-        cancelacion.comprobar(f"quedaban {len(pendientes) - i} clips")
+        parada.comprobar(f"quedaban {len(pendientes) - i} clips")
         progreso.lote(i, len(pendientes), "clip")
         regenerar_clip(proyecto_id, orden, modo, motor=motor)
         cuenta[modo] = cuenta.get(modo, 0) + 1

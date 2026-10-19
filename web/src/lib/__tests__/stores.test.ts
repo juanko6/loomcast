@@ -27,7 +27,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const job = (id: number) => ({ id, tipo: "generar_voz", estado: "corriendo", progreso: null });
+const job = (id: number) =>
+  ({ id, tipo: "generar_voz", estado: "corriendo", intentos: 1, sin_corte: null, progreso: null });
 
 describe("navegación", () => {
   it("abrirEn fija la selección pendiente y cambia de modo", () => {
