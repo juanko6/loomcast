@@ -39,6 +39,16 @@ class VozSeleccionIn(BaseModel):
     voz: str  # slug de la voz del banco
 
 
+class MusicaProyectoIn(BaseModel):
+    """Qué pista usa el proyecto y si el armado la mezcla.
+
+    `musica_id` None desengancha la pista (la fila sigue en la biblioteca de
+    Música: es reutilizable y no se borra con el proyecto).
+    """
+    musica_id: int | None = None
+    mezclar: bool = False
+
+
 class EscenaPromptIn(BaseModel):
     orden: int
     prompt: str

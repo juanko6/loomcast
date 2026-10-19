@@ -4,6 +4,7 @@
   import StepVoz from "./steps/StepVoz.svelte";
   import StepMetadatos from "./steps/StepMetadatos.svelte";
   import StepEscenas from "./steps/StepEscenas.svelte";
+  import StepMusica from "./steps/StepMusica.svelte";
   import StepVideo from "./steps/StepVideo.svelte";
   import Chip from "../primitives/Chip.svelte";
   import {
@@ -45,11 +46,23 @@
       hecho: p.imagenes_completas,
       bloqueado: !p.subtitulos,
     },
+    {
+      id: "musica",
+      label: "Música",
+      hecho: !!p.musica?.tiene_audio,
+      // La música se escribe desde la historia, así que basta con tener guion;
+      // la duración sale de la narración si ya está hecha.
+      bloqueado: !p.guion,
+    },
     { id: "video", label: "Vídeo final", hecho: p.video_disponible, bloqueado: !p.imagenes_completas },
   ]);
 
   // Primer paso pendiente (o el último si está todo hecho).
-  const sugerido = $derived(pasos.find((s) => !s.hecho && !s.bloqueado)?.id ?? "video");
+  // La música es opcional: no se sugiere sola, se entra a mano. Si no, un
+  // proyecto con todo hecho menos la música abriría siempre ahí.
+  const sugerido = $derived(
+    pasos.find((s) => s.id !== "musica" && !s.hecho && !s.bloqueado)?.id ?? "video",
+  );
   const activo = $derived(
     elegido && !pasos.find((s) => s.id === elegido)?.bloqueado ? elegido : sugerido,
   );
@@ -105,6 +118,14 @@
         onregenclip={acciones.regenerarClip}
         onfijarmodos={acciones.fijarModos}
         {onver}
+      />
+    {:else if activo === "musica"}
+      <StepMusica
+        {p}
+        {busy}
+        {bust}
+        ongenerar={acciones.generarMusica}
+        onfijar={acciones.fijarMusica}
       />
     {:else}
       <StepVideo

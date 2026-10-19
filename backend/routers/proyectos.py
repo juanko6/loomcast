@@ -5,6 +5,7 @@ from ..schemas import (
     EscenasIn,
     GuionIn,
     ModosEscenasIn,
+    MusicaProyectoIn,
     PersonajeNuevoIn,
     PersonajesIn,
     RegenerarClipIn,
@@ -75,6 +76,28 @@ def generar_voz(pid: int, body: VozGenerarIn | None = None):
     instruct = body.instruct if body else None
     return {"job_id": proyectos_service.encolar_etapa(
         pid, "generar_voz", modo=modo, instruct=instruct)}
+
+
+@router.post("/{pid}/musica")
+def generar_musica(pid: int):
+    """Escribe el brief musical de esta historia y encola la pista.
+
+    La pista queda en la biblioteca de Música (descargable sola, sin la
+    narración); mezclarla en el vídeo es aparte, con el PUT de abajo.
+    """
+    return {"job_id": proyectos_service.encolar_etapa(pid, "generar_musica_proyecto")}
+
+
+@router.put("/{pid}/musica")
+def fijar_musica(pid: int, body: MusicaProyectoIn):
+    """Engancha una pista de la biblioteca al proyecto y/o activa la mezcla."""
+    try:
+        proyectos_service.fijar_musica(pid, body.musica_id, body.mezclar)
+        return {"ok": True}
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+    except proyectos_service.MusicaNoExiste:
+        raise HTTPException(404, "Esa pista de música no existe")
 
 
 @router.post("/{pid}/subtitulos")

@@ -308,3 +308,92 @@ def test_armar_estatico_colgado_se_cancela(session, proy, base, monkeypatch):
         armado_estatico.armar_estatico(proy)
     session.expire_all()
     assert proyectos_repo.obtener(session, proy).estado != "FINAL"
+
+
+# --- mezcla de la música (ducking) ------------------------------------------
+
+def _pista(session, dirs_tmp, proyecto_id, mezclar=True, segundos=2.0, con_audio=True):
+    """Una pista en la biblioteca de Música, enganchada al proyecto."""
+    from backend.repositories import musica as musica_repo
+
+    m = musica_repo.crear(session, "instrumental", "banda sonora", "tags", "[Intro]",
+                          int(segundos), 90, "E minor", "4", "en")
+    session.flush()
+    if con_audio:
+        car = dirs_tmp["musica"] / str(m.id)
+        car.mkdir(parents=True, exist_ok=True)
+        sf.write(car / "musica.wav", [0.1] * int(24000 * segundos), 24000)
+    p = proyectos_repo.obtener(session, proyecto_id)
+    p.musica_id = m.id
+    p.musica_mezclar = mezclar
+    session.commit()
+    return m.id
+
+
+def _canales_audio(video):
+    r = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
+         "stream=codec_name,duration", "-of", "csv=p=0", str(video)],
+        capture_output=True, text=True, check=True)
+    return r.stdout.strip()
+
+
+@pytest.mark.parametrize("armar,etiqueta", [
+    (lambda pid: armado.armar_video(pid), "movimiento"),
+    (lambda pid: armado_estatico.armar_estatico(pid), "estático"),
+])
+def test_armar_con_musica_la_mezcla_bajo_la_voz(session, proy, base, dirs_tmp, armar, etiqueta):
+    _voz(base)
+    _clips(base)
+    _imagenes(base)
+    mid = _pista(session, dirs_tmp, proy)
+
+    log = armar(proy)
+
+    assert f"con música ({mid})" in log
+    final = base / "final.mp4"
+    assert "audio" in _sonda(final)
+    # El audio cubre todo el video: la cama se rellena con silencio si es más
+    # corta, y la voz también.
+    assert _ffmpeg.duracion(final) == pytest.approx(1.0 + armado.VIDEO_COLA_FINAL_S, abs=0.3)
+    assert _canales_audio(final)
+
+
+def test_sin_mezclar_el_video_no_cambia(session, proy, base, dirs_tmp):
+    _voz(base)
+    _clips(base)
+    _pista(session, dirs_tmp, proy, mezclar=False)
+
+    log = armado.armar_video(proy)
+
+    assert "con música" not in log
+    assert (base / "final.mp4").exists()
+
+
+@pytest.mark.parametrize("caso,mensaje", [
+    ("sin_pista", "no tiene pista"),
+    ("sin_audio", "aún no tiene audio"),
+    ("pista_borrada", "ya no existe"),
+])
+def test_mezcla_activada_sin_pista_lista_falla_antes_de_renderizar(
+    session, proy, base, dirs_tmp, caso, mensaje
+):
+    """Un video en silencio pasaría desapercibido hasta publicarlo, así que se
+    para antes de gastar el render."""
+    from backend.repositories import musica as musica_repo
+
+    _voz(base)
+    _clips(base)
+    if caso == "sin_pista":
+        p = proyectos_repo.obtener(session, proy)
+        p.musica_mezclar = True
+        session.commit()
+    else:
+        mid = _pista(session, dirs_tmp, proy, con_audio=(caso == "pista_borrada"))
+        if caso == "pista_borrada":
+            musica_repo.borrar(session, musica_repo.obtener(session, mid))
+            session.commit()
+
+    with pytest.raises(ValueError, match=mensaje):
+        armado.armar_video(proy)
+    assert not (base / "final.mp4").exists()

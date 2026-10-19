@@ -82,6 +82,9 @@ VIDEO_ENCODER: str = _video.get("encoder", "hardware")
 VIDEO_BITRATE_MBPS: int = _video.get("bitrate_mbps", 12)
 VIDEO_CRF: int = _video.get("crf", 18)
 VIDEO_COLA_FINAL_S: float = _video.get("cola_final_s", 1.5)
+# Mezcla de la música del proyecto en el armado (ver [video] en config.toml).
+VIDEO_MUSICA_DB: float = float(_video.get("musica_db", -16.0))
+VIDEO_MUSICA_FADE_S: float = float(_video.get("musica_fade_s", 2.0))
 
 @dataclass(frozen=True)
 class MotorI2V:

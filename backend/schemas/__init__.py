@@ -11,6 +11,7 @@ from .api import (
     MusicaCamposIn,
     MusicaGenerarIn,
     MusicaLanzarIn,
+    MusicaProyectoIn,
     PersonajeIn,
     PersonajeNuevoIn,
     PersonajesIn,
@@ -50,7 +51,7 @@ from .plantilla import (
 __all__ = [
     "EscenaPromptIn", "EscenasIn", "GaleriaFinalIn", "GaleriaGenerarIn",
     "GaleriaPreviewsIn", "GaleriaPromptIn", "ModoEscenaIn", "ModosEscenasIn",
-    "MusicaCamposIn", "MusicaGenerarIn", "MusicaLanzarIn",
+    "MusicaCamposIn", "MusicaGenerarIn", "MusicaLanzarIn", "MusicaProyectoIn",
     "PersonajeIn", "PersonajeNuevoIn", "PersonajesIn",
     "RegenerarClipIn", "RegenerarImagenIn", "EstadoIdeaIn", "GuionIn", "TemaIn",
     "VideoIn", "VozGenerarIn", "VozNuevaIn", "VozSeleccionIn",

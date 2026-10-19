@@ -27,6 +27,16 @@ def _migrar() -> None:
             c.execute(text("ALTER TABLE proyectos ADD COLUMN voz VARCHAR"))
             c.commit()
 
+        # La pista de música del proyecto y si se mezcla en el video final.
+        nuevas = {
+            "musica_id": "INTEGER",
+            "musica_mezclar": "BOOLEAN DEFAULT 0",
+        }
+        for col, tipo in nuevas.items():
+            if col not in cols:
+                c.execute(text(f"ALTER TABLE proyectos ADD COLUMN {col} {tipo}"))
+        c.commit()
+
         cols = [r[1] for r in c.execute(text("PRAGMA table_info(escenas)"))]
         nuevas = {
             "prompt_movimiento": "TEXT DEFAULT ''",

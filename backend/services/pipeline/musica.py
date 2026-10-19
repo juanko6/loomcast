@@ -95,9 +95,15 @@ def generar_portada(musica_id: int) -> str:
     return "Portada generada"
 
 
+def leer_prompt(nombre: str) -> str:
+    """Prompt de sistema de `prompts/`. Vive aquí porque lo usan las dos etapas
+    de música: la de la sección y la del proyecto."""
+    return (PROMPTS_DIR / nombre).read_text()
+
+
 def _sistema(tipo: str) -> str:
     nombre = "musica_cancion.md" if tipo == "cancion" else "musica_instrumental.md"
-    return (PROMPTS_DIR / nombre).read_text()
+    return leer_prompt(nombre)
 
 
 def mejorar_prompt(musica_id: int) -> str:

@@ -110,7 +110,8 @@ def test_borrar_quita_fila_y_carpeta(client, pista, dirs_tmp):
     car = musica_pipeline.carpeta(pista)
     car.mkdir(parents=True)
     (car / "musica.flac").write_bytes(b"x")
-    assert client.delete(f"/api/musica/{pista}").json() == {"borrada": pista, "archivos": 1}
+    assert client.delete(f"/api/musica/{pista}").json() == {
+        "borrada": pista, "archivos": 1, "proyectos_desvinculados": 0}
     assert not car.exists()
     assert client.delete(f"/api/musica/{pista}").status_code == 404
 
