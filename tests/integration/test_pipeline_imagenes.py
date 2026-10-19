@@ -143,9 +143,31 @@ def test_generar_retrato_usa_ficha_y_encuadre(session, dirs_tmp, fake_comfy):
     log = retratos.generar_retrato(p.id, "ANA")
 
     llamada = dict(fake_comfy.llamadas)["generar_imagen"]
-    assert llamada["prompt"] == f"a tall woman with red hair, {retratos.ENCUADRE}"
+    assert llamada["prompt"] == f"a tall woman with red hair, {retratos.ENCUADRE_PERSONA}"
     assert llamada["destino"] == retratos.ruta_retrato("demo", "ANA") and llamada["destino"].exists()
     assert fake_comfy.nombres()[-1] == "liberar_memoria" and "ANA" in log
+
+
+def test_el_retrato_de_un_objeto_no_pide_cara(session, dirs_tmp, fake_comfy):
+    """Regresión: con el encuadre de persona, un mapa descrito con "no humans
+    are visible" salía con una cara pintada encima — cinco términos pidiendo
+    rostro le ganan a una negación."""
+    p = f.proyecto(session)
+    ficha = ("a large worn tactical map spread on a wooden table, no humans "
+             "are visible")
+    f.personaje(session, p.id, clave="MAPA", ficha=ficha, tipo="objeto")
+
+    log = retratos.generar_retrato(p.id, "MAPA")
+
+    prompt = dict(fake_comfy.llamadas)["generar_imagen"]["prompt"]
+    assert prompt == f"{ficha}, {retratos.ENCUADRE_OBJETO}"
+    for pide_rostro in ("character reference portrait", "sharp focus on the face",
+                        "entire head visible", "natural skin texture",
+                        "neutral expression"):
+        assert pide_rostro not in prompt
+    # Y lo niega, que es lo contrario de pedirlo.
+    assert "no people" in prompt and "no face" in prompt
+    assert "como objeto" in log
 
 
 @pytest.mark.parametrize("nuevo,cambia", [(False, False), (True, True)])

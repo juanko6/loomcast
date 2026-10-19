@@ -17,6 +17,7 @@ from ..repositories import personajes as personajes_repo
 from ..repositories import plantillas as plantillas_repo
 from ..repositories import proyectos as proyectos_repo
 from ..repositories import voces as voces_repo
+from ..services.pipeline import casting
 from ..services.pipeline import escenas as escenas_pipeline
 from ..services.pipeline import musica as musica_pipeline
 from ..services.pipeline import retratos
@@ -153,6 +154,7 @@ def detalle(pid: int) -> dict:
                 "clave": x.clave,
                 "nombre": x.nombre,
                 "ficha": x.ficha,
+                "tipo": x.tipo or "persona",
                 "retrato": retratos.ruta_retrato(p.slug, x.clave).exists(),
             }
             for x in personajes_repo.por_proyecto(s, pid)
@@ -261,7 +263,8 @@ class PersonajeRepetido(ValueError):
     pass
 
 
-def anadir_personaje(pid: int, clave: str, nombre: str, ficha: str) -> str:
+def anadir_personaje(pid: int, clave: str, nombre: str, ficha: str,
+                     tipo: str = "persona") -> str:
     """Mete un personaje al reparto a mano.
 
     Hace falta porque el casting se deja gente: alguien que sale en varias
@@ -284,6 +287,7 @@ def anadir_personaje(pid: int, clave: str, nombre: str, ficha: str) -> str:
         personajes_repo.crear(
             s, pid, clave, nombre.strip(), ficha.strip(),
             random.randint(0, 2**31 - 1),
+            casting.normalizar_tipo(tipo, ficha),
         )
         s.commit()
     return clave

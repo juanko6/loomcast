@@ -24,15 +24,29 @@ from ...repositories import personajes as personajes_repo
 from ...repositories import proyectos as proyectos_repo
 
 # Encuadre del retrato. Deliberadamente neutro y bien iluminado: esto no es una
-# escena, es una ficha policial. Cuanto más limpia y frontal sea la cara, mejor
-# la extrae el motor de edición al montarla en las escenas. Por eso tampoco se
-# le mete el estilo visual de la plantilla, que en drama pide luz dura y sombras
-# y taparía justo lo que hay que ver.
-ENCUADRE = (
+# escena, es una ficha policial. Cuanto más limpia y frontal sea la referencia,
+# mejor la extrae el motor de edición al montarla en las escenas. Por eso
+# tampoco se le mete el estilo visual de la plantilla, que en drama pide luz
+# dura y sombras y taparía justo lo que hay que ver.
+ENCUADRE_PERSONA = (
     "character reference portrait, waist-up shot, facing the camera, neutral "
     "expression, plain neutral grey seamless background, soft even diffused "
     "lighting, no harsh shadows, sharp focus on the face, entire head visible, "
     "photorealistic, natural skin texture"
+)
+
+# El reparto admite objetos a propósito (un barco, un mapa, una máquina que
+# vuelve en varias escenas tampoco debe mutar), y ahí el encuadre de persona
+# hacía daño: pedía cara, cabeza y piel, así que el generador se las inventaba
+# encima del objeto aunque la ficha dijera "no humans are visible" — cinco
+# términos pidiendo rostro le ganan a una negación. Este encuadre pide lo mismo
+# que el otro (sujeto centrado, fondo liso, luz pareja) sin nombrar nada humano,
+# y lo niega explícitamente al final.
+ENCUADRE_OBJETO = (
+    "object reference photograph, the whole object centred and fully visible, "
+    "three-quarter view, plain neutral grey seamless background, soft even "
+    "diffused lighting, no harsh shadows, sharp focus, photorealistic, visible "
+    "material texture and wear, no people, no person, no face, no hands"
 )
 
 
@@ -70,8 +84,10 @@ def generar_retrato(proyecto_id: int, clave: str, nuevo_seed: bool = False) -> s
             personaje.seed = random.randint(0, 2**31 - 1)
             s.commit()
         ficha, seed, slug = personaje.ficha, personaje.seed, p.slug
+        tipo = personaje.tipo or "persona"
 
-    prompt = f"{ficha}, {ENCUADRE}"
+    encuadre = ENCUADRE_OBJETO if tipo == "objeto" else ENCUADRE_PERSONA
+    prompt = f"{ficha}, {encuadre}"
     carpeta(slug).mkdir(parents=True, exist_ok=True)
     try:
         comfy.generar_imagen(
@@ -84,4 +100,5 @@ def generar_retrato(proyecto_id: int, clave: str, nuevo_seed: bool = False) -> s
         )
     finally:
         comfy.liberar_memoria()
-    return f"Retrato de {clave} generado (seed {seed})"
+    como = " como objeto" if tipo == "objeto" else ""
+    return f"Retrato de {clave} generado{como} (seed {seed})"

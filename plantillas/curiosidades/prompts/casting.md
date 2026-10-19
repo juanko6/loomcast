@@ -33,9 +33,10 @@ GOOD: a weathered deep-sea diver in his fifties with a stocky build, grey stubbl
 BAD: a deep-sea diver in his fifties. He has grey stubble and wears a yellow suit.
 
 OUTPUT RULES
+- `tipo`: `"persona"` for a living being with a face (people and animals) and `"objeto"` for anything else — a ship, a map, a letter, a machine, a building. It decides how the reference image of that cast member is framed: asking for a face, a head and skin texture over a map paints a face on it. When in doubt, `"persona"`.
 - `ficha` in English; `nombre` in Spanish.
 - No text elements, letters, numbers, logos or watermarks described in the ficha.
 - Do not include headings, explanations, comments, alternatives, bullets, quotes, markdown, or line breaks inside the values.
 
 Respond ONLY with valid JSON, no additional text:
-{"personajes": [{"clave": "UPPERCASE_TOKEN", "nombre": "cómo lo llama el guion", "ficha": "a ... (25-45 words, English, physical only)"}]}
+{"personajes": [{"clave": "UPPERCASE_TOKEN", "nombre": "cómo lo llama el guion", "tipo": "persona|objeto", "ficha": "a ... (25-45 words, English, physical only)"}]}

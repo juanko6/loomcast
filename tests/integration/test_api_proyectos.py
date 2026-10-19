@@ -71,7 +71,8 @@ def test_detalle_refleja_archivos_en_disco_y_jobs_activos(client, session, proy,
     assert d["guion_version"] == 1
     assert [e["imagen"] for e in d["escenas"]] == [True, True]
     assert d["personajes"] == [
-        {"clave": "ANA", "nombre": "Ana", "ficha": "a tall woman with red hair", "retrato": False}]
+        {"clave": "ANA", "nombre": "Ana", "ficha": "a tall woman with red hair",
+         "tipo": "persona", "retrato": False}]
     assert d["versiones"][0]["nombre"] == "final_20260101.mp4"
     assert d["job_activo"] == "generar_voz" and d["jobs_activos"] == 1
 

@@ -25,6 +25,26 @@ from ...repositories import proyectos as proyectos_repo
 from ...schemas import CastingLLM
 
 
+# Frases con las que una ficha dice, en sus propias palabras, que ahí no hay
+# nadie. Si el LLM marcó "persona" pero la ficha dice esto, manda la ficha: es
+# lo que pasó con un mapa táctico descrito con "no humans are visible", al que
+# el encuadre de retrato le pintaba una cara encima.
+_SIN_PERSONAS = (
+    "no humans", "no human", "no people", "no person", "no figures",
+    "no faces", "no face", "unpeopled",
+)
+
+
+def normalizar_tipo(tipo: str, ficha: str) -> str:
+    """persona | objeto. Ante la duda, persona, que es el caso común."""
+    if (tipo or "").strip().lower().startswith("obj"):
+        return "objeto"
+    bajada = ficha.lower()
+    if any(frase in bajada for frase in _SIN_PERSONAS):
+        return "objeto"
+    return "persona"
+
+
 def _limpiar_ficha(ficha: str) -> str:
     """Deja la ficha como una frase nominal continua, que es como se sustituye.
 
@@ -78,6 +98,7 @@ def generar_casting(proyecto_id: int) -> str:
             "clave": clave,
             "nombre": pj.nombre.strip(),
             "ficha": _limpiar_ficha(pj.ficha),
+            "tipo": normalizar_tipo(pj.tipo, pj.ficha),
             "seed": random.randint(0, 2**31 - 1),
         })
 
@@ -87,5 +108,7 @@ def generar_casting(proyecto_id: int) -> str:
 
     if not filas:
         return "Sin personajes recurrentes: las escenas irán sin reparto fijo"
-    nombres = ", ".join(f["clave"] for f in filas)
+    nombres = ", ".join(
+        f["clave"] + (" (objeto)" if f["tipo"] == "objeto" else "") for f in filas
+    )
     return f"{len(filas)} personajes fijados ({nombres})"

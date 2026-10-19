@@ -52,6 +52,13 @@ def _migrar() -> None:
                 c.execute(text(f"ALTER TABLE escenas ADD COLUMN {col} {tipo}"))
         c.commit()
 
+        cols = [r[1] for r in c.execute(text("PRAGMA table_info(personajes)"))]
+        if "tipo" not in cols:
+            c.execute(
+                text("ALTER TABLE personajes ADD COLUMN tipo VARCHAR DEFAULT 'persona'")
+            )
+            c.commit()
+
         cols = [r[1] for r in c.execute(text("PRAGMA table_info(imagenes_libres)"))]
         if "motor" not in cols:
             c.execute(

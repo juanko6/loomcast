@@ -35,6 +35,7 @@ def escenas(s, proyecto_id, n=2):
     s.commit()
 
 
-def personaje(s, proyecto_id, clave="ANA", nombre="Ana", ficha="a tall woman with red hair"):
-    personajes_repo.crear(s, proyecto_id, clave, nombre, ficha, 1)
+def personaje(s, proyecto_id, clave="ANA", nombre="Ana",
+              ficha="a tall woman with red hair", tipo="persona"):
+    personajes_repo.crear(s, proyecto_id, clave, nombre, ficha, 1, tipo)
     s.commit()
