@@ -135,8 +135,12 @@ def test_nadie_llama_a_subprocess_run_sin_pasar_por_procesos():
         for n, linea in enumerate(f.read_text().splitlines(), 1):
             if re.search(r"subprocess\.run\(", linea):
                 sueltos.append(f"{f.relative_to(raiz.parent)}:{n}")
-    # llm_runtime._inicio_proceso ya lleva su propio timeout=5 (consulta a `ps`).
-    assert [s.split(":")[0] for s in sueltos] == ["backend/services/llm_runtime.py"]
+    # Las dos de llm_runtime son consultas al sistema para saber qué hay vivo
+    # (`ps` para el instante de arranque de un pgid, `lsof` para quién sirve un
+    # puerto), las dos con su propio timeout=5. No son trabajo del pipeline: no
+    # hay nada que cancelar en ellas y registrarlas en la parada solo haría ruido.
+    assert {s.split(":")[0] for s in sueltos} == {"backend/services/llm_runtime.py"}
+    assert len(sueltos) == 2, sueltos
 
 
 def test_ejecutar_no_le_deja_la_terminal_al_proceso(monkeypatch):

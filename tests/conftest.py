@@ -141,6 +141,24 @@ def parada_pedida():
     parada.limpiar()
 
 
+@pytest.fixture(autouse=True)
+def pid_del_llm_aislado(monkeypatch, tmp_path):
+    """Aparta el `logs/llm.pid` real de la máquina. **Autouse a propósito.**
+
+    Ese fichero no es un dato cualquiera: guarda el pgid del llama-server vivo
+    para que, al arrancar, el backend adopte o remate al huérfano de la
+    ejecución anterior (`_matar_pgid`). Con la ruta real puesta, un test que
+    pase por ahí borra el pid de una sesión en marcha —o mata su grupo de
+    procesos—, y además deja la suite dependiendo de si el fichero existía:
+    el 2026-10-20 un test de memoria fallaba o pasaba según eso, y es el mejor
+    candidato a los dos fallos intermitentes que no se reprodujeron el día
+    anterior. `dirs_tmp` redirige las carpetas de salida, pero esta no.
+    """
+    from backend.services import llm_runtime
+
+    monkeypatch.setattr(llm_runtime, "ARCHIVO_PID", tmp_path / "llm.pid")
+
+
 @pytest.fixture
 def dirs_tmp(monkeypatch, tmp_path):
     """Redirige las carpetas de salida (proyectos/, voces/, reparto/, galeria/, musica/) a un tmp.

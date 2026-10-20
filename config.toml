@@ -15,6 +15,14 @@ autostart = true
 # llegado un job de voz/GPU. Encadenar ideas → guion → metadatos no debería
 # pagar el arranque cuatro veces, así que conviene un margen holgado.
 inactividad_s = 300
+# Cuánto se espera a que el sistema devuelva la memoria del modelo tras matarlo,
+# antes de dejar que la etapa siguiente cargue la suya. Matar el proceso vuelve
+# enseguida, pero el kernel tarda en reclamar 22 GiB, y cargar el TTS encima es
+# lo que mandó casi 20 GiB al swap el 2026-10-20 generando la voz de un episodio.
+# Se espera a recuperar la mayor parte de lo que ocupaba, no todo: con el
+# compresor y la fragmentación, exigir el 100 % sería esperar siempre el tope.
+# 0 = no esperar (el comportamiento de antes).
+espera_devolucion_s = 20
 # Cuánto se espera a que el llama-server responda tras lanzarlo antes de darlo
 # por fallido (la primera carga de un modelo grande desde disco es lenta).
 espera_arranque_s = 240

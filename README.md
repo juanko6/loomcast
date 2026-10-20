@@ -118,6 +118,14 @@ El llama-server no lo lleva el lanzador, sino el backend. El que quedó huérfan
 se descarga al volver (`logs/llm.pid`), y eso es lo correcto justo aquí: si el
 backend murió por falta de memoria, esos GiB son el problema.
 
+**Y al cerrar con Ctrl+C también se va el LLM.** El backend lo apaga en su
+lifespan, pero si no le llega el TERM —o murió antes— el LLM se queda: lo
+arrancó con grupo propio para poder matarle los hijos, así que ese grupo no cae
+con el lanzador. Quedaba huérfano (`ppid` 1) con sus 22 GiB dentro y nada lo
+decía. Ahora la limpieza remata lo que el backend registró en `logs/llm.pid`, y
+**solo eso**: un `llama-server` o un `mlx_lm` que hayas levantado tú no está en
+ese fichero y no se toca, que para eso existen los modelos sin `comando`.
+
 ### Sobre el arranque de ComfyUI
 
 El `--` es obligatorio: separa los argumentos de comfy-cli de los que van a
@@ -450,6 +458,42 @@ alguien encole desde dentro de un pipeline, falla.
 En un lote largo tampoco se van acumulando modelos: cada etapa de GPU suelta lo
 suyo al terminar, y el vigilante de inactividad descarga el llama-server cuando
 lleva un rato sin usarse, incluso con la tirada parada en una revisión.
+
+**Soltar un modelo tampoco es inmediato.** Matarlo devuelve el control enseguida
+—el proceso muere, su puerto queda libre— pero el kernel tarda en reclamar sus
+22 GiB, y la etapa siguiente empezaba a cargar encima: el 2026-10-20, generando
+la voz de un episodio de serie, el MLX se paró como debía (*«parando
+mlx-qwen36-35b: empieza generar_voz»*) y el pico del TTS detrás se fue casi
+20 GiB al swap. Es el mismo error que el del `/free`, en el otro sentido: allí no
+esperábamos a que ComfyUI soltara, aquí no esperábamos a que el sistema
+recogiera. Ahora `liberar()` no vuelve hasta ver de vuelta tres cuartos de lo que
+ocupaba el modelo (`[llm].espera_devolucion_s`, 20 s de tope), y lo deja medido
+en el log y en el historial del job: *«Memoria devuelta: 9.0 → 26.0 GiB (+17.0 de
+los 22 que ocupaba, en 2.3 s)»*. No falla nunca: si no vuelve, se anota y se
+sigue, porque bloquear la etapa siguiente no la haría caber.
+
+Tres cuartos y no todo porque exigir el 100 % sería agotar el tope siempre: entre
+el compresor, la fragmentación y lo que el propio backend tenga dentro, lo último
+no vuelve. Lo que importa es que lo que falte ya no sea un modelo entero.
+
+### De dónde sale la cifra de memoria
+
+De `psutil.virtual_memory().available`, en `backend/memoria.py`. Antes salía de
+`/system_stats` de ComfyUI, que para MPS devuelve lo mismo —ComfyUI lo mide así
+por debajo—, pero ataba la medición a que ComfyUI estuviera escuchando, y hace
+falta justo cuando puede no estarlo: al soltar un modelo con ComfyUI cerrado, o
+con `--sin-comfy`.
+
+Y es `available`, no «libre»: en macOS la memoria *libre* de `vm_stat` no dice si
+cabe un modelo. El 2026-10-20, con el episodio a medias, `vm_stat` daba 1,0 GiB
+libres y 25,5 GiB ocupados por el compresor (con 48,1 GiB de contenido dentro),
+mientras `available` daba 39,2 GiB — y los 39 son los reales, porque la memoria
+inactiva y la comprimida se reclaman en cuanto alguien pide.
+
+Con ComfyUI cerrado, el `POST /free` no lo recoge nadie: no hay descarga en
+camino, así que no se esperan los 20 s de rigor y el error no le echa la culpa a
+ComfyUI, que es mandar a buscar donde no es. Dice que la memoria la tiene otra
+cosa y a dónde mirar: un `llama-server` o un `mlx_lm` suelto, o el compresor.
 
 ### Qué cuenta la interfaz
 

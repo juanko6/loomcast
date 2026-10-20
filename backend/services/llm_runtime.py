@@ -19,11 +19,14 @@ import signal
 import subprocess
 import threading
 import time
+from urllib.parse import urlparse
 
+from .. import memoria
 from ..clients import comfy, llm
 from ..config import (
     LLM_AUTOSTART,
     LLM_ESPERA_ARRANQUE_S,
+    LLM_ESPERA_DEVOLUCION_S,
     LLM_INACTIVIDAD_S,
     LLM_LOGS_DIR,
     LLM_MODELOS,
@@ -187,12 +190,51 @@ def _reclamar_huerfano() -> None:
     _matar_pgid(pgid)
 
 
-def _esperar_puerto_libre(url: str, limite_s: float = 15) -> None:
+def _esperar_puerto_libre(url: str, limite_s: float = 15) -> bool:
     """Tus modelos suelen compartir puerto: hasta que el que muere no lo suelta,
-    el siguiente no puede escuchar."""
+    el siguiente no puede escuchar. Devuelve si quedó libre.
+
+    Que devuelva False importa mucho más de lo que parecía: significa que algo
+    sigue sirviendo en ese puerto después de haberle pedido que muera, y el
+    `asegurar()` siguiente lo **adopta** («ya había uno escuchando; se adopta y
+    no se toca»). Un servidor que sobreviva al SIGTERM se quedaría ahí para
+    siempre con sus 22 GiB dentro, respondiendo como si lo hubiéramos arrancado
+    nosotros. Antes esto se tragaba en silencio.
+    """
     fin = time.monotonic() + limite_s
     while time.monotonic() < fin and llm.ping(url):
         time.sleep(0.5)
+    return not llm.ping(url)
+
+
+def _rematar_el_puerto(url: str) -> None:
+    """Mata a quien siga escuchando en ese puerto tras pedirle que muera.
+
+    Es el último recurso y solo se llega aquí si el SIGTERM y el SIGKILL al
+    grupo no bastaron, que es lo que puede pasar cuando el comando del modelo
+    no es un script sino el binario directo (`mlx_lm.server --model …`): ahí el
+    `sh -c` hace exec y, si el proceso se reparentó, el grupo que mataríamos ya
+    no es el suyo. Se busca por el puerto, que es lo único que sabemos seguro.
+    """
+    puerto = urlparse(url).port
+    if not puerto:
+        return
+    try:
+        salida = subprocess.run(
+            ["lsof", "-ti", f"tcp:{puerto}", "-sTCP:LISTEN"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return
+    for pid in [int(x) for x in salida.split() if x.isdigit()]:
+        print(f"[llm] el puerto {puerto} sigue servido por el pid {pid} tras "
+              "pedirle parar: lo remato", flush=True)
+        apuntes.anotar(
+            f"El modelo seguía escuchando en el puerto {puerto} tras pararlo "
+            f"(pid {pid}): rematado para que no se adopte con su memoria dentro"
+        )
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.kill(pid, signal.SIGKILL)
 
 
 def _lanzar(modelo: ModeloLLM) -> subprocess.Popen:
@@ -240,8 +282,12 @@ def _detener(motivo: str) -> None:
     if _proc.poll() is None:
         print(f"[llm] parando «{_proc_modelo}»: {motivo}", flush=True)
         _matar(_proc)
-        if modelo:
-            _esperar_puerto_libre(modelo.url)
+        if modelo and not _esperar_puerto_libre(modelo.url):
+            # Sigue sirviendo después de matarlo: o se reparentó y el grupo que
+            # matamos no era el suyo, o alguien levantó otro en el mismo puerto.
+            # Dejarlo vivo sería peor que matarlo, porque el próximo arranque lo
+            # adoptaría con su modelo dentro.
+            _rematar_el_puerto(modelo.url)
     _olvidar_pid()
     _proc, _proc_modelo = None, ""
 
@@ -273,16 +319,25 @@ def _hacer_sitio(modelo: ModeloLLM) -> None:
     apuntes.anotar(linea)
     if lib.logrado:
         return
+    # A quién mirar depende de si ComfyUI recogió la petición: si no respondió,
+    # no tiene nada cargado que soltar y señalarlo manda a buscar donde no es.
+    culpable = (
+        "ComfyUI no está escuchando, así que la memoria la tiene otra cosa: "
+        "mira si quedó algún llama-server o mlx_lm suelto, y cuánta memoria "
+        "está comprimida (`vm_stat`: el compresor puede quedarse con decenas de "
+        "GiB tras un pico de swap, y esa no vuelve sola)"
+        if lib.peticiones == 0
+        else "mira si ComfyUI tiene un workflow en marcha —solo atiende el "
+        "/free entre prompts—, si quedó algún llama-server suelto, o si hay "
+        "otra cosa ocupándola"
+    )
     raise LLMProcesoError(
         f"No se lanza «{modelo.nombre}»: no hay memoria. Necesita "
         f"{modelo.memoria_gb:.0f} GiB libres y quedan {lib.despues_gb:.1f} "
-        f"({lib.antes_gb:.1f} antes de pedirle a ComfyUI que suelte), tras "
-        f"{lib.espera_s:.0f} s de espera. Lanzarlo igualmente es lo que hace "
-        "que el kernel mate al backend con Killed: 9. Mira si ComfyUI tiene "
-        "un workflow en marcha —solo atiende el /free entre prompts—, si "
-        "quedó algún llama-server "
-        "suelto, o si hay otra cosa ocupándola. Si tu equipo es más pequeño, "
-        "baja [llm].memoria_gb (o el del modelo) a lo que de verdad necesite."
+        f"({lib.antes_gb:.1f} al empezar), tras {lib.espera_s:.0f} s de espera. "
+        "Lanzarlo igualmente es lo que hace que el kernel mate al backend con "
+        f"Killed: 9. {culpable}. Si tu equipo es más pequeño, baja "
+        "[llm].memoria_gb (o el del modelo) a lo que de verdad necesite."
     )
 
 
@@ -308,10 +363,64 @@ def asegurar() -> ModeloLLM:
         return modelo
 
 
+# Qué parte de lo que ocupaba el modelo hay que ver volver para dar la memoria
+# por devuelta. No el 100 %: entre el compresor, la fragmentación y lo que el
+# propio backend tenga dentro, esperar a recuperarlo todo sería agotar el tope
+# siempre. Con tres cuartos, lo que falta ya no es un modelo entero.
+DEVUELTA = 0.75
+
+
+def _esperar_devolucion(memoria_gb: float, antes: float | None) -> None:
+    """Espera a que el sistema reclame la memoria del modelo que acabamos de
+    matar, antes de dejar que la etapa siguiente cargue la suya.
+
+    `_matar` espera a que el proceso muera y a que su puerto quede libre, pero
+    eso no es lo mismo que tener la memoria de vuelta: el kernel tarda en
+    reclamar 22 GiB, y el 2026-10-20, generando la voz de un episodio de serie,
+    el TTS empezó a cargar justo detrás y el pico se fue casi 20 GiB al swap.
+
+    Es el mismo error que ya nos costó un `Killed: 9` con el `/free` de ComfyUI,
+    en el otro sentido: allí no esperábamos a que soltara, aquí no esperábamos a
+    que el sistema recogiera. Nunca falla: la etapa siguiente tiene que correr
+    igual, así que si la memoria no vuelve se anota y se sigue.
+    """
+    if memoria_gb <= 0 or antes is None or LLM_ESPERA_DEVOLUCION_S <= 0:
+        return
+    objetivo = antes + memoria_gb * DEVUELTA
+    inicio = time.monotonic()
+    fin = inicio + LLM_ESPERA_DEVOLUCION_S
+    libre = antes
+    while True:
+        libre = memoria.disponible_gb()
+        if libre is None or libre >= objetivo or time.monotonic() >= fin:
+            break
+        time.sleep(0.25)
+    espera = time.monotonic() - inicio
+    if libre is None:
+        return
+    linea = (
+        f"Memoria devuelta: {antes:.1f} → {libre:.1f} GiB "
+        f"({libre - antes:+.1f} de los {memoria_gb:.0f} que ocupaba, "
+        f"en {espera:.1f} s)"
+    )
+    print(f"[llm] {linea}", flush=True)
+    apuntes.anotar(linea)
+
+
 def liberar(motivo: str) -> None:
-    """Descarga el LLM antes de una etapa de voz/GPU que necesita la memoria."""
+    """Descarga el LLM antes de una etapa de voz/GPU que necesita la memoria.
+
+    No vuelve hasta ver la memoria de vuelta (ver `_esperar_devolucion`): quien
+    llama lo hace para que quepa lo suyo, y devolverle el control antes de que
+    el kernel haya reclamado el modelo es mandarlo al swap.
+    """
     with _lock:
+        modelo = por_id(_proc_modelo)
+        habia = _proc is not None and _proc.poll() is None
+        antes = memoria.disponible_gb() if habia else None
         _detener(motivo)
+        if habia and modelo:
+            _esperar_devolucion(modelo.memoria_gb, antes)
 
 
 @contextlib.contextmanager

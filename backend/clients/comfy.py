@@ -8,6 +8,7 @@ from pathlib import Path
 
 import httpx
 
+from .. import memoria
 from ..config import (
     COMFY_ESPERA_LIBERACION_S,
     COMFY_TIMEOUT_S,
@@ -544,25 +545,15 @@ def interrumpir() -> None:
 
 
 def memoria_libre_gb() -> float | None:
-    """GiB de memoria unificada libres, según ComfyUI. None si no responde.
+    """GiB de memoria unificada disponibles. None si no se puede medir.
 
-    Sale de `/system_stats`, que no necesita dependencias nuevas. En MPS el
-    `vram_free` del dispositivo no es "VRAM": ComfyUI lo saca de la memoria
-    disponible del sistema (`get_free_memory` manda cpu y mps al mismo sitio),
-    que es justo la cifra que mira el kernel cuando decide a quién mata.
+    Antes salía de `/system_stats` de ComfyUI, que para MPS devuelve la memoria
+    disponible del sistema. Daba el mismo número —ComfyUI la mide por debajo
+    igual que `backend/memoria.py`— pero ataba la medición a que ComfyUI
+    estuviera escuchando, y hace falta justo cuando puede no estarlo: al soltar
+    un modelo para que quepa el siguiente, con ComfyUI cerrado.
     """
-    try:
-        with httpx.Client(timeout=10) as c:
-            datos = c.get(f"{COMFY_URL}/system_stats").json()
-    except (httpx.HTTPError, ValueError):
-        return None
-    dispositivos = datos.get("devices") or []
-    libre = (
-        dispositivos[0].get("vram_free")
-        if dispositivos
-        else datos.get("system", {}).get("ram_free")
-    )
-    return None if libre is None else libre / GB
+    return memoria.disponible_gb()
 
 
 @dataclass(frozen=True)
@@ -624,6 +615,12 @@ def liberar_memoria(hasta_gb: float | None = None) -> Liberacion:
     peticiones = _pedir_free()
     if hasta_gb is None or antes is None:
         return Liberacion(antes, antes, 0.0, peticiones, True)
+    # ComfyUI no respondió: no hay bandera encendida ni descarga en camino, así
+    # que esperar los segundos de rigor no cambiaría nada. Se devuelve lo medido
+    # y quien llama decide; el mensaje de error dirá que la memoria la tiene
+    # otra cosa, que es lo útil cuando ComfyUI está cerrado.
+    if peticiones == 0:
+        return Liberacion(antes, antes, 0.0, 0, antes >= hasta_gb)
 
     fin = inicio + LIBERACION_ESPERA_S
     libre = antes
@@ -646,7 +643,11 @@ def liberar_memoria(hasta_gb: float | None = None) -> Liberacion:
 
 
 def _pedir_free() -> int:
-    """Manda el POST /free; devuelve 1 si salió y 0 si ComfyUI no respondió."""
+    """Manda el POST /free; devuelve 1 si salió y 0 si ComfyUI no respondió.
+
+    El 0 importa: si nadie recogió la petición no hay ninguna descarga en camino
+    que esperar, y la memoria que falte la tiene otra cosa.
+    """
     try:
         with httpx.Client(timeout=15) as c:
             c.post(
