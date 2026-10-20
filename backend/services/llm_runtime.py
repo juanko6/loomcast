@@ -19,6 +19,7 @@ import signal
 import subprocess
 import threading
 import time
+from urllib.parse import urlparse
 
 from .. import memoria
 from ..clients import comfy, llm
@@ -189,12 +190,51 @@ def _reclamar_huerfano() -> None:
     _matar_pgid(pgid)
 
 
-def _esperar_puerto_libre(url: str, limite_s: float = 15) -> None:
+def _esperar_puerto_libre(url: str, limite_s: float = 15) -> bool:
     """Tus modelos suelen compartir puerto: hasta que el que muere no lo suelta,
-    el siguiente no puede escuchar."""
+    el siguiente no puede escuchar. Devuelve si quedó libre.
+
+    Que devuelva False importa mucho más de lo que parecía: significa que algo
+    sigue sirviendo en ese puerto después de haberle pedido que muera, y el
+    `asegurar()` siguiente lo **adopta** («ya había uno escuchando; se adopta y
+    no se toca»). Un servidor que sobreviva al SIGTERM se quedaría ahí para
+    siempre con sus 22 GiB dentro, respondiendo como si lo hubiéramos arrancado
+    nosotros. Antes esto se tragaba en silencio.
+    """
     fin = time.monotonic() + limite_s
     while time.monotonic() < fin and llm.ping(url):
         time.sleep(0.5)
+    return not llm.ping(url)
+
+
+def _rematar_el_puerto(url: str) -> None:
+    """Mata a quien siga escuchando en ese puerto tras pedirle que muera.
+
+    Es el último recurso y solo se llega aquí si el SIGTERM y el SIGKILL al
+    grupo no bastaron, que es lo que puede pasar cuando el comando del modelo
+    no es un script sino el binario directo (`mlx_lm.server --model …`): ahí el
+    `sh -c` hace exec y, si el proceso se reparentó, el grupo que mataríamos ya
+    no es el suyo. Se busca por el puerto, que es lo único que sabemos seguro.
+    """
+    puerto = urlparse(url).port
+    if not puerto:
+        return
+    try:
+        salida = subprocess.run(
+            ["lsof", "-ti", f"tcp:{puerto}", "-sTCP:LISTEN"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return
+    for pid in [int(x) for x in salida.split() if x.isdigit()]:
+        print(f"[llm] el puerto {puerto} sigue servido por el pid {pid} tras "
+              "pedirle parar: lo remato", flush=True)
+        apuntes.anotar(
+            f"El modelo seguía escuchando en el puerto {puerto} tras pararlo "
+            f"(pid {pid}): rematado para que no se adopte con su memoria dentro"
+        )
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.kill(pid, signal.SIGKILL)
 
 
 def _lanzar(modelo: ModeloLLM) -> subprocess.Popen:
@@ -242,8 +282,12 @@ def _detener(motivo: str) -> None:
     if _proc.poll() is None:
         print(f"[llm] parando «{_proc_modelo}»: {motivo}", flush=True)
         _matar(_proc)
-        if modelo:
-            _esperar_puerto_libre(modelo.url)
+        if modelo and not _esperar_puerto_libre(modelo.url):
+            # Sigue sirviendo después de matarlo: o se reparentó y el grupo que
+            # matamos no era el suyo, o alguien levantó otro en el mismo puerto.
+            # Dejarlo vivo sería peor que matarlo, porque el próximo arranque lo
+            # adoptaría con su modelo dentro.
+            _rematar_el_puerto(modelo.url)
     _olvidar_pid()
     _proc, _proc_modelo = None, ""
 

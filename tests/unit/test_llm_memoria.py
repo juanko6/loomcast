@@ -170,7 +170,13 @@ def test_liberar_espera_la_devolucion_antes_de_devolver_el_control(
     monkeypatch.setattr(llm_runtime, "_proc_modelo", modelo.id)
     monkeypatch.setattr(llm_runtime, "_proc", _ProcVivo())
     monkeypatch.setattr(llm_runtime, "_matar", lambda proc: None)
-    monkeypatch.setattr(llm_runtime, "_esperar_puerto_libre", lambda url: None)
+    # True = el puerto quedó libre. Devolver None aquí haría que el código
+    # entrara a rematar el puerto y `lsof` mataría de verdad a quien estuviera
+    # escuchando en el 9876 de esta máquina.
+    monkeypatch.setattr(llm_runtime, "_esperar_puerto_libre", lambda url: True)
+    monkeypatch.setattr(
+        llm_runtime, "_rematar_el_puerto", lambda url: pytest.fail("no tocaba rematar")
+    )
     monkeypatch.setattr(llm_runtime, "_olvidar_pid", lambda: None)
     monkeypatch.setattr(llm_runtime.memoria, "disponible_gb", lambda: 9.0)
     monkeypatch.setattr(
