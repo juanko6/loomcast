@@ -18,9 +18,12 @@ def listar(s: Session) -> list[Tema]:
 
 
 def borrar(s: Session, tema_id: int) -> None:
-    """Borra el tema, sus ideas y los jobs de generación que lo referencian."""
+    """Borra el tema, sus ideas, sus lotes y los jobs que lo referencian."""
     from ..models import Idea, Job
 
+    from . import autopilotos as autopilotos_repo
+
+    autopilotos_repo.borrar_lotes_de_tema(s, tema_id)
     s.query(Idea).filter(Idea.tema_id == tema_id).delete()
     s.query(Job).filter(Job.tipo == "generar_ideas",
                         Job.ref_id == tema_id).delete()

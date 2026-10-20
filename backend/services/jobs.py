@@ -14,7 +14,7 @@ Cancelar tiene dos mitades muy distintas:
 """
 from ..db import get_session
 from ..repositories import jobs as jobs_repo
-from . import cancelacion, progreso
+from . import autopiloto, cancelacion, progreso
 
 MOTIVO = "Parado desde la interfaz"
 
@@ -87,7 +87,21 @@ def parar(corriendo: bool = True, pendientes: bool = True) -> dict:
     Con `corriendo=False` se vacía la cola pero se deja acabar la etapa en
     curso: sirve para "que termine esta y pare", sin tirar minutos de GPU ya
     invertidos.
+
+    Vaciar la cola apaga además **todos los autopilotos**, y se hace antes de
+    cancelar nada: un autopiloto encola la etapa siguiente en cuanto la anterior
+    termina, así que dejarlo encendido convertiría la parada en un juego de
+    quién llega primero —se vacía la cola y él la vuelve a llenar—. Apagándolo
+    primero, el worker viene a preguntar qué toca y se encuentra con que ya no
+    hay a quién seguir. Los que esperaban revisión también se apagan: el botón
+    dice parar. Relanzar uno es un clic y retoma el proyecto donde esté.
+
+    "Detener lo actual" (`pendientes=False`) no los apaga: ahí se corta una
+    etapa, no la línea de producción. El autopiloto de ese proyecto se detiene
+    de todos modos —su etapa sube como cancelada y el worker se lo dice—, y el
+    lote sigue con el proyecto siguiente.
     """
+    autopilotos = autopiloto.parar_todos(MOTIVO) if pendientes else 0
     with get_session() as s:
         activos_ahora = jobs_repo.activos(s)
         en_curso = [j for j in activos_ahora if j.estado == "corriendo"]
@@ -102,4 +116,7 @@ def parar(corriendo: bool = True, pendientes: bool = True) -> dict:
         "corriendo": len(ids_en_curso) if corriendo else 0,
         "pendientes": len(esperando) if pendientes else 0,
         "cortado": bool(cortados),
+        # Cuántas tiradas automáticas se apagaron: es lo que la UI necesita para
+        # no decir "se paró" cuando además se ha cancelado un lote entero.
+        "autopilotos": autopilotos,
     }

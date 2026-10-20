@@ -80,6 +80,11 @@ equivalente de la feature de música como plantilla.
 ### Wiring
 9. **Cola** `backend/workers/queue.py` — importar el pipeline, registrar los handlers en
    `HANDLERS`; añadir los jobs LLM a `JOBS_LLM`; encadenados automáticos a `CADENA` si aplica.
+   Si la etapa forma parte del pipeline de vídeo que conduce el autopiloto, añadirla además a
+   `ETAPAS` de `services/autopiloto.py` y enseñarle a `_que_falta` cómo saber que ya está hecha
+   (un archivo en disco, una fila, o el job terminado si el resultado puede ser legítimamente
+   vacío). **Nunca encolar desde dentro de una etapa**: encola el worker, y solo él, porque es lo
+   que permite que parar pare (ver `models/autopiloto.py`).
 10. **App** `backend/main.py` — importar el router y `app.include_router(<feature>.router)`.
 11. **.gitignore** — añadir el directorio de salida (`<feature>/`) para no versionar binarios.
 

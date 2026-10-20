@@ -9,8 +9,9 @@ ACTIVOS = ["pendiente", "corriendo"]
 TERMINADOS = ["ok", "error", "cancelado"]
 
 
-def crear(s: Session, tipo: str, ref_id: int, params: str = "{}") -> Job:
-    job = Job(tipo=tipo, ref_id=ref_id, params=params)
+def crear(s: Session, tipo: str, ref_id: int, params: str = "{}",
+          prioridad: int = 0) -> Job:
+    job = Job(tipo=tipo, ref_id=ref_id, params=params, prioridad=prioridad)
     s.add(job)
     return job
 
@@ -72,6 +73,34 @@ def escenas_en_cola(s: Session, pid: int) -> dict[int, str]:
         if orden is not None:
             out[orden] = "imagen" if j.tipo == "regenerar_imagen" else "clip"
     return out
+
+
+def termino_ok(s: Session, ref_id: int, tipo: str) -> bool:
+    """Si esa etapa ya se completó alguna vez sobre ese proyecto.
+
+    Hace falta para las etapas cuyo resultado puede ser legítimamente vacío: un
+    reparto sin personajes es la respuesta normal en *curiosidades*, así que no
+    hay nada en disco ni en la base que distinga "el casting no se ha hecho" de
+    "se hizo y no hay nadie". El job terminado sí lo distingue.
+    """
+    return (
+        s.query(Job)
+        .filter(Job.ref_id == ref_id, Job.tipo == tipo, Job.estado == "ok")
+        .first()
+        is not None
+    )
+
+
+def activos_de_proyecto_ids(s: Session, pid: int, tipos: list[str]) -> list[int]:
+    """Ids de los jobs del proyecto que están en la cola o corriendo. Es lo que
+    hay que cancelar para parar el autopiloto de un proyecto concreto."""
+    return [
+        j.id
+        for j in s.query(Job)
+        .filter(Job.ref_id == pid, Job.tipo.in_(tipos), Job.estado.in_(ACTIVOS))
+        .order_by(Job.id)
+        .all()
+    ]
 
 
 def corriendo(s: Session) -> Job | None:

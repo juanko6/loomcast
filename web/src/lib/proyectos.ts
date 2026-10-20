@@ -1,6 +1,7 @@
 // Cliente del modo Vídeos: temas, ideas, proyectos, voces y reparto propio.
 // Refleja backend/routers/{temas,ideas,proyectos,voces,reparto,sistema}.py
 import { api, apiForm } from "./api";
+import type { Autopiloto } from "./autopiloto";
 import type { ProyectoResumen, TemaResumen } from "./types";
 
 export interface Idea {
@@ -158,6 +159,10 @@ export interface ProyectoDetalle {
   versiones: Version[];
   jobs_activos: number;
   job_activo: string | null;
+  // Su última tirada automática, viva o terminada; null si nunca tuvo una. Va
+  // la última y no solo la viva porque cómo acabó la anterior —un fallo, una
+  // parada— es lo que hay que leer antes de relanzarla.
+  autopiloto: Autopiloto | null;
 }
 
 // Un paso del pipeline en el stepper de la vista de proyecto.
@@ -427,4 +432,5 @@ export const ETAPA_VIDEO: Record<string, string> = {
   regenerar_clip: "Regenerando un clip…",
   armar_video: "Armando el vídeo final (subtítulos + voz)…",
   generar_resumen_episodio: "Cerrando el episodio (resumen para el siguiente)…",
+  generar_retratos: "Retratando al reparto…",
 };

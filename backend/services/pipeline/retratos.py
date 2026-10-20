@@ -12,6 +12,7 @@ en config.toml.
 """
 import random
 
+from ... import parada
 from ...clients import comfy
 from ...config import (
     PERSONAJE_HEIGHT,
@@ -22,6 +23,7 @@ from ...config import (
 from ...db import get_session
 from ...repositories import personajes as personajes_repo
 from ...repositories import proyectos as proyectos_repo
+from .. import progreso
 
 # Encuadre del retrato. Deliberadamente neutro y bien iluminado: esto no es una
 # escena, es una ficha policial. Cuanto más limpia y frontal sea la referencia,
@@ -65,6 +67,71 @@ def generar_retrato(proyecto_id: int, clave: str, nuevo_seed: bool = False) -> s
     no convence; sin él se reusa el seed guardado y la imagen solo cambia si se
     editó la ficha.
     """
+    datos = _preparar(proyecto_id, clave, nuevo_seed)
+    try:
+        return _pintar(clave, *datos)
+    finally:
+        comfy.liberar_memoria()
+
+
+def pendientes(s, proyecto_id: int) -> list[str]:
+    """Claves del reparto a las que les falta su retrato.
+
+    Sin ficha no se retrata a nadie (no hay nada que dibujar), así que esos no
+    cuentan como pendientes: si contaran, el autopiloto pediría una y otra vez
+    una etapa que no puede avanzar.
+    """
+    p = proyectos_repo.obtener(s, proyecto_id)
+    if p is None:
+        return []
+    return [
+        x.clave
+        for x in personajes_repo.por_proyecto(s, proyecto_id)
+        if (x.ficha or "").strip() and not ruta_retrato(p.slug, x.clave).exists()
+    ]
+
+
+def generar_retratos(proyecto_id: int) -> str:
+    """Retrata de una tirada a todo el reparto que no tenga cara.
+
+    A mano los retratos se piden uno a uno, porque uno mira la cara que salió y
+    decide si la rehace. En automático eso serían N clics, así que esta etapa
+    hace el lote entero: mira la bandera de parada entre personaje y personaje
+    (un retrato no se escribe hasta que ComfyUI lo entrega, así que cortar aquí
+    no deja PNG a medias) y suelta la memoria **una vez al final** y no tras
+    cada cara, que es lo que haría descargar y recargar ~19 GB por personaje.
+
+    Los que ya tienen retrato no se tocan: rehacer una cara es una decisión, y
+    la de este reparto puede venir del reparto propio o de una serie.
+    """
+    with get_session() as s:
+        if proyectos_repo.obtener(s, proyecto_id) is None:
+            raise ValueError(f"Proyecto {proyecto_id} no existe")
+        claves = pendientes(s, proyecto_id)
+
+    if not claves:
+        return "Nadie del reparto necesita retrato"
+
+    hechos = []
+    try:
+        for i, clave in enumerate(claves):
+            parada.comprobar(f"quedaban {len(claves) - i} retratos")
+            progreso.lote(i, len(claves), "retrato")
+            _pintar(clave, *_preparar(proyecto_id, clave, nuevo_seed=False))
+            hechos.append(clave)
+    finally:
+        comfy.liberar_memoria()
+    return f"{len(hechos)} retratos generados ({', '.join(hechos)})"
+
+
+def _preparar(proyecto_id: int, clave: str,
+              nuevo_seed: bool = False) -> tuple[str, int, str, str]:
+    """Valida y devuelve (prompt, seed, slug, tipo).
+
+    Va aparte de pintar porque no toca ComfyUI: un personaje que no existe o sin
+    ficha tiene que fallar **antes** de que haya nada cargado, y entonces
+    tampoco hay memoria que soltar.
+    """
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)
         if p is None:
@@ -87,18 +154,20 @@ def generar_retrato(proyecto_id: int, clave: str, nuevo_seed: bool = False) -> s
         tipo = personaje.tipo or "persona"
 
     encuadre = ENCUADRE_OBJETO if tipo == "objeto" else ENCUADRE_PERSONA
-    prompt = f"{ficha}, {encuadre}"
+    return f"{ficha}, {encuadre}", seed, slug, tipo
+
+
+def _pintar(clave: str, prompt: str, seed: int, slug: str, tipo: str) -> str:
+    """Una cara. Sin soltar la memoria: lo hace quien llama, porque el lote la
+    suelta una sola vez al final y no tras cada personaje."""
     carpeta(slug).mkdir(parents=True, exist_ok=True)
-    try:
-        comfy.generar_imagen(
-            prompt,
-            seed,
-            ruta_retrato(slug, clave),
-            PERSONAJE_WIDTH,
-            PERSONAJE_HEIGHT,
-            PERSONAJE_MOTOR,
-        )
-    finally:
-        comfy.liberar_memoria()
+    comfy.generar_imagen(
+        prompt,
+        seed,
+        ruta_retrato(slug, clave),
+        PERSONAJE_WIDTH,
+        PERSONAJE_HEIGHT,
+        PERSONAJE_MOTOR,
+    )
     como = " como objeto" if tipo == "objeto" else ""
     return f"Retrato de {clave} generado{como} (seed {seed})"

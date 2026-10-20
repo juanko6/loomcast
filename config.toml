@@ -457,6 +457,23 @@ intentos = 3
 # recuperándose, y volver a llamarlo de inmediato lo encuentra igual de ocupado.
 espera_s = 20
 
+[autopiloto]
+# Paradas de revisión humana que respeta el autopiloto. Son las tres que ya
+# tiene el flujo a mano, y están aquí porque corregir en ellas es barato y el
+# error se propaga caro:
+#
+#   idea    — qué ideas se producen. En un lote, con esta parada puesta solo
+#             entran las ideas que alguien aprobó; sin ella entran también las
+#             propuestas, y entonces es "tema → vídeos" sin tocar nada.
+#   guion   — el texto lo decide todo: un guion malo son veinte minutos de GPU
+#             tirados en imágenes, clips y montaje.
+#   escenas — los prompts de escena, justo antes de gastar GPU en las imágenes,
+#             que es la etapa cara.
+#
+# Vaciar la lista (paradas = []) es producción sin manos. Lo que se pone aquí es
+# el valor por defecto: al lanzar un autopiloto o un lote se pueden elegir otras.
+paradas = ["idea", "guion", "escenas"]
+
 [paths]
 proyectos = "proyectos"
 plantillas = "plantillas"

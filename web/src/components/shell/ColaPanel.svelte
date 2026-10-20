@@ -7,8 +7,9 @@
   // varios intentos (la cola reintenta sola lo transitorio) y que otro se paró
   // a mano, que no es lo mismo que fallar.
   import BotonParar from "./BotonParar.svelte";
-  import { jobs, jobsDrenados, historialJobs } from "@/lib/stores";
+  import { jobs, jobsDrenados, historialJobs, lotes } from "@/lib/stores";
   import { nombreJob, resultadoJob } from "@/lib/jobs";
+  import { ETAPA_VIDEO } from "@/lib/proyectos";
   import type { JobHistorial } from "@/lib/types";
 
   let abierto = $state(false);
@@ -29,7 +30,17 @@
   // Lo que se lee en el chip: la posición dentro del lote y lo que queda. Si la
   // etapa no va por lotes (voz, guion, armado) no hay nada que contar y se
   // enseña el tiempo que lleva, que al menos distingue "va lento" de "se colgó".
+  // El lote que está produciendo ahora (solo hay uno: la línea es de uno).
+  let lote = $derived($lotes.find((l) => l.actual) ?? $lotes[0] ?? null);
+
   let texto = $derived.by(() => {
+    // Sin nada en la cola pero con un lote vivo, lo que hay que decir es que el
+    // lote está esperando a una persona, no "0 en cola".
+    if (!$jobs.length && lote) {
+      return lote.esperando
+        ? `lote: ${lote.esperando} esperando revisión`
+        : `lote: ${lote.hechos} de ${lote.total}`;
+    }
     const cola = `${$jobs.length} en cola`;
     const partes = [prog?.fase || cola];
     if (prog?.eta_s != null) partes.push(`~${reloj(prog.eta_s)}`);
@@ -37,6 +48,12 @@
     // El recuento solo se repite si la fase le quitó el sitio y además hay
     // más de un trabajo esperando.
     if (prog?.fase && $jobs.length > 1) partes.push(cola);
+    // Con un lote en marcha, el número que de verdad importa es cuántos vídeos
+    // quedan: la cola solo tiene la etapa de uno porque se producen de uno en
+    // uno, así que "2 en cola" con ocho vídeos pendientes engañaría.
+    if (lote?.actual) {
+      partes.push(`vídeo ${lote.actual.posicion} de ${lote.total}`);
+    }
     return partes.join(" · ");
   });
 
@@ -134,6 +151,33 @@
             : "Nada esperando."}
         </p>
       </div>
+
+      {#if lote}
+        <!-- El lote explica por qué la cola no se vacía, y es lo que se mira
+             para decidir si vale la pena pararlo todo. -->
+        <div class="space-y-1 border-t border-line pt-3">
+          <p class="text-xs font-medium tracking-wide text-muted">Lote en marcha</p>
+          <p class="text-sm">
+            {lote.tema}
+            <span class="text-dim">
+              · {lote.hechos} de {lote.total} hechos
+            </span>
+          </p>
+          {#if lote.actual}
+            <p class="text-xs text-dim">
+              Ahora: {lote.actual.titulo}
+              {#if lote.actual.etapa}
+                · {ETAPA_VIDEO[lote.actual.etapa] ?? nombreJob(lote.actual.etapa)}
+              {/if}
+            </p>
+          {/if}
+          <p class="text-xs text-muted">
+            {lote.pendientes} por empezar{lote.esperando
+              ? `, ${lote.esperando} esperando revisión`
+              : ""}{lote.errores ? `, ${lote.errores} con fallo` : ""}.
+          </p>
+        </div>
+      {/if}
 
       <div class="flex flex-wrap gap-2">
         <BotonParar soloCorriendo etiqueta="Detener lo actual" />

@@ -45,15 +45,20 @@ def jobs_encolados(monkeypatch):
 
     class Llamadas(list):
         # Los kwargs (params del job) por separado, para no ensuciar las
-        # comparaciones de los tests que solo miran (tipo, ref_id).
+        # comparaciones de los tests que solo miran (tipo, ref_id). La prioridad
+        # va aparte de los params porque no es un kwarg del handler: es el sitio
+        # que ocupa el job en la cola.
         params: list[dict]
+        prioridades: list[int]
 
     llamadas = Llamadas()
     llamadas.params = []
+    llamadas.prioridades = []
 
-    def falso(tipo, ref_id, *args, **kwargs):
+    def falso(tipo, ref_id, *args, prioridad=0, **kwargs):
         llamadas.append((tipo, ref_id))
         llamadas.params.append(kwargs)
+        llamadas.prioridades.append(prioridad)
         return len(llamadas)
 
     monkeypatch.setattr(queue, "encolar", falso)

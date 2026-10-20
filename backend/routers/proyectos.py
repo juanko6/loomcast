@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from ..schemas import (
+    AutopilotoIn,
     EscenasIn,
     GuionIn,
     ModosEscenasIn,
@@ -16,6 +17,7 @@ from ..schemas import (
     VozPersonajeIn,
     VozSeleccionIn,
 )
+from ..services import autopiloto as autopiloto_service
 from ..services import proyectos as proyectos_service
 
 router = APIRouter(prefix="/api/proyectos", tags=["proyectos"])
@@ -282,6 +284,58 @@ def generar_video(pid: int, body: VideoIn):
         return {"job_id": proyectos_service.generar_video(pid, body.modo, body.motor)}
     except proyectos_service.ModoVideoInvalido:
         raise HTTPException(400, "Modo de video inválido")
+
+
+# --- autopiloto -------------------------------------------------------------
+
+@router.post("/{pid}/autopiloto")
+def lanzar_autopiloto(pid: int, body: AutopilotoIn):
+    """Pone el proyecto en automático desde donde esté hasta su final.mp4.
+
+    Llega hasta la siguiente parada de revisión y ahí espera, diciéndolo. Con
+    `paradas: []` no para en ninguna.
+    """
+    try:
+        return autopiloto_service.arrancar(
+            pid, body.modo, body.motor, body.voz, body.paradas
+        )
+    except autopiloto_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+    except autopiloto_service.YaEnMarcha:
+        raise HTTPException(409, "Este proyecto ya tiene un autopiloto en marcha")
+    except autopiloto_service.SinVoz:
+        raise HTTPException(
+            400, "Elige la voz con la que narrar antes de lanzar el autopiloto: "
+                 "la narración se clona de una voz del banco."
+        )
+    except autopiloto_service.ModoVideoInvalido:
+        raise HTTPException(400, "Modo de video inválido")
+    except autopiloto_service.ParadaInvalida as e:
+        raise HTTPException(400, f"Parada de revisión desconocida: {e}")
+    except proyectos_service.VozNoDisponible:
+        raise HTTPException(400, "Voz no disponible")
+
+
+@router.post("/{pid}/autopiloto/continuar")
+def continuar_autopiloto(pid: int):
+    """Da por revisada la parada en la que esperaba y sigue."""
+    try:
+        return autopiloto_service.continuar(pid)
+    except autopiloto_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+    except autopiloto_service.NoEstaEsperando:
+        raise HTTPException(409, "El autopiloto de este proyecto no está "
+                                 "esperando ninguna revisión")
+
+
+@router.delete("/{pid}/autopiloto")
+def detener_autopiloto(pid: int):
+    """Apaga el autopiloto del proyecto y cancela lo que tuviera en la cola. El
+    resto del lote sigue."""
+    try:
+        return autopiloto_service.detener(pid)
+    except autopiloto_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
 
 
 @router.get("/{pid}/versiones")

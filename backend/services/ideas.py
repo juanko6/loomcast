@@ -37,13 +37,18 @@ def cambiar_estado(idea_id: int, estado: str) -> None:
         s.commit()
 
 
-def crear_proyecto(idea_id: int) -> dict:
+def crear_proyecto(idea_id: int, encolar_guion: bool = True) -> dict:
     """Aprueba la idea, crea el proyecto con slug único y encola el guion.
 
     Si el tema de la idea es el de una serie, el proyecto nace como su episodio
     siguiente: hereda la plantilla de la serie, se numera y se le trae el
     reparto fijo antes de escribir el guion, que es lo que ese guion necesita
     saber. Para un tema sin serie no cambia nada de lo que hacía.
+
+    `encolar_guion=False` lo deja recién nacido y sin nada en la cola: lo usa el
+    lote, donde el guion lo encola el autopiloto de cada proyecto cuando le toca
+    su turno. Si lo encolara aquí, lanzar un lote de diez metería los diez
+    guiones de golpe y el lote dejaría de producirse de uno en uno.
     """
     with get_session() as s:
         idea = ideas_repo.obtener(s, idea_id)
@@ -80,6 +85,6 @@ def crear_proyecto(idea_id: int) -> dict:
     from ..services import series as series_service
 
     traidos = series_service.traer_reparto_fijo(proyecto_id)
-    job_id = queue.encolar("generar_guion", proyecto_id)
+    job_id = queue.encolar("generar_guion", proyecto_id) if encolar_guion else None
     return {"proyecto_id": proyecto_id, "job_id": job_id,
             "reparto_traido": [x["clave"] for x in traidos]}

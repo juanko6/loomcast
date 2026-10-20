@@ -90,7 +90,8 @@ def test_parar_corta_el_que_corre_y_vacia_la_cola(client, session, sin_comfy):
 
     r = client.post("/api/jobs/parar")
 
-    assert r.json() == {"corriendo": 1, "pendientes": 2, "cortado": True}
+    assert r.json() == {"corriendo": 1, "pendientes": 2, "cortado": True,
+                        "autopilotos": 0}
     assert client.get("/api/jobs").json() == []
 
 
@@ -102,7 +103,8 @@ def test_parar_solo_la_cola_deja_acabar_la_etapa_en_curso(client, session, sin_c
 
     r = client.post("/api/jobs/parar", json={"corriendo": False, "pendientes": True})
 
-    assert r.json() == {"corriendo": 0, "pendientes": 1, "cortado": False}
+    assert r.json() == {"corriendo": 0, "pendientes": 1, "cortado": False,
+                        "autopilotos": 0}
     assert sin_comfy == []
     assert [x["id"] for x in client.get("/api/jobs").json()] == [corriendo.id]
 

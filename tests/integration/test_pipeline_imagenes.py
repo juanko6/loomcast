@@ -2,6 +2,7 @@ import os
 
 import pytest
 
+from backend import parada
 from backend.clients.comfy import ComfyError
 from backend.repositories import escenas as escenas_repo
 from backend.repositories import proyectos as proyectos_repo
@@ -186,6 +187,62 @@ def test_retrato_de_personaje_inexistente_o_sin_ficha(session, dirs_tmp, fake_co
     with pytest.raises(ValueError, match="no tiene ficha"):
         retratos.generar_retrato(p.id, "ANA")
     assert fake_comfy.llamadas == []
+
+
+# --- retratos de todo el reparto de una tirada ------------------------------
+
+def test_retratos_en_lote_solo_retrata_a_quien_le_falta(session, dirs_tmp, fake_comfy):
+    """El autopiloto no puede dar N clics, así que hay una etapa que retrata al
+    reparto entero. Quien ya tiene cara no se toca: rehacerla es una decisión, y
+    esa cara puede venir del reparto propio o de una serie."""
+    p = f.proyecto(session)
+    f.personaje(session, p.id, clave="ANA")
+    f.personaje(session, p.id, clave="LUIS", nombre="Luis")
+    retrato = retratos.ruta_retrato("demo", "ANA")
+    retrato.parent.mkdir(parents=True, exist_ok=True)
+    retrato.write_bytes(b"png")
+
+    log = retratos.generar_retratos(p.id)
+
+    assert "LUIS" in log and "ANA" not in log
+    assert sum(1 for k, _ in fake_comfy.llamadas if k == "generar_imagen") == 1
+
+
+def test_retratos_en_lote_suelta_la_memoria_una_sola_vez(session, dirs_tmp, fake_comfy):
+    """Soltarla tras cada cara descargaría y recargaría ~19 GB por personaje."""
+    p = f.proyecto(session)
+    f.personaje(session, p.id, clave="ANA")
+    f.personaje(session, p.id, clave="LUIS", nombre="Luis")
+
+    retratos.generar_retratos(p.id)
+
+    assert sum(1 for k, _ in fake_comfy.llamadas if k == "liberar_memoria") == 1
+
+
+def test_retratos_en_lote_sin_reparto_no_hace_nada(session, dirs_tmp, fake_comfy):
+    p = f.proyecto(session)
+
+    assert retratos.generar_retratos(p.id) == "Nadie del reparto necesita retrato"
+    assert fake_comfy.llamadas == []
+
+
+def test_un_personaje_sin_ficha_no_cuenta_como_pendiente(session, dirs_tmp):
+    """Si contara, el autopiloto pediría una y otra vez una etapa que no puede
+    avanzar: sin descripción física no hay nada que dibujar."""
+    p = f.proyecto(session)
+    f.personaje(session, p.id, clave="ANA", ficha="   ")
+
+    assert retratos.pendientes(session, p.id) == []
+
+
+def test_retratos_en_lote_se_corta_entre_personajes(session, dirs_tmp, fake_comfy,
+                                                    parada_pedida):
+    p = f.proyecto(session)
+    f.personaje(session, p.id, clave="ANA")
+
+    with pytest.raises(parada.Parado, match="quedaban 1 retratos"):
+        retratos.generar_retratos(p.id)
+    assert not retratos.ruta_retrato("demo", "ANA").exists()
 
 
 # --- upscale ----------------------------------------------------------------

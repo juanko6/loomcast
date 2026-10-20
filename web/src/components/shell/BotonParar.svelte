@@ -6,7 +6,7 @@
   // aviso dice exactamente qué se pierde (lo que esté a medio hacer) y qué se
   // conserva (todo lo que ya estaba terminado).
   import Button from "../primitives/Button.svelte";
-  import { jobs, pararCola } from "@/lib/stores";
+  import { jobs, lotes, pararCola } from "@/lib/stores";
 
   let {
     soloCorriendo = false,
@@ -26,6 +26,12 @@
   // Lo que la etapa en curso no puede cortar a mitad (la síntesis de voz), para
   // no prometer en el aviso algo que no va a pasar.
   const sinCorte = $derived($jobs.find((j) => j.estado === "corriendo")?.sin_corte ?? null);
+  // Los vídeos de un lote que todavía no han empezado no están en la cola:
+  // esperan su turno en la línea. El aviso tiene que decirlos, porque "parar
+  // todo" los apaga y son lo más caro que se descarta.
+  const enLote = $derived(
+    $lotes.reduce((n, l) => n + l.pendientes + l.esperando + (l.actual ? 1 : 0), 0),
+  );
 
   const tarde = $derived(
     sinCorte
@@ -43,7 +49,8 @@
         "Lo que ya estaba terminado se conserva; lo que esté a medio hacer se descarta y hay que repetirlo.\n\n" +
         (esperando
           ? `Los ${esperando} trabajos que esperan en la cola siguen esperando.`
-          : "La cola se queda vacía.")
+          : "La cola se queda vacía.") +
+        (enLote ? "\n\nEl lote sigue su curso con el vídeo siguiente." : "")
       );
     }
     return (
@@ -52,7 +59,12 @@
       "Se corta lo que se está generando" +
       (esperando ? ` y se descartan los ${esperando} trabajos que esperan.` : ".") +
       "\n\nSe conserva todo lo ya terminado (las imágenes, los clips y las pistas completas); " +
-      "lo que esté a medio hacer se descarta y hay que repetirlo."
+      "lo que esté a medio hacer se descarta y hay que repetirlo." +
+      (enLote
+        ? `\n\nSe apaga además el autopiloto de ${enLote} ` +
+          `${enLote === 1 ? "vídeo" : "vídeos"} en producción: lo que lleven hecho se ` +
+          "queda, y volver a lanzarlo los retoma donde estén."
+        : "")
     );
   }
 
@@ -70,7 +82,7 @@
   }
 </script>
 
-{#if $jobs.length}
+{#if $jobs.length || enLote}
   <Button
     variant="danger"
     {size}

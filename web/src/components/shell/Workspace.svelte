@@ -2,7 +2,7 @@
   // Área de trabajo: cabecera compartida + el estudio del modo activo. La
   // cabecera lleva el estado de la cola y la parada (ColaPanel), que así están
   // en el mismo sitio en las cuatro secciones.
-  import { modo, jobs } from "@/lib/stores";
+  import { modo, jobs, lotes } from "@/lib/stores";
   import ColaPanel from "./ColaPanel.svelte";
   import BotonParar from "./BotonParar.svelte";
   import MusicStudio from "../musica/MusicStudio.svelte";
@@ -19,6 +19,10 @@
   };
 
   let info = $derived(titulos[$modo]);
+  // La cabecera también aparece con un lote vivo y la cola momentáneamente
+  // vacía: eso es lo que pasa cuando todos sus vídeos están esperando revisión,
+  // y es justo cuando hay que poder verlo y pararlo.
+  let hayQueContar = $derived($jobs.length > 0 || $lotes.length > 0);
 </script>
 
 <section class="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -27,7 +31,7 @@
       <h1 class="text-lg font-semibold tracking-tight">{info.t}</h1>
       <p class="truncate text-sm text-dim">{info.sub}</p>
     </div>
-    {#if $jobs.length}
+    {#if hayQueContar}
       <div class="flex shrink-0 items-center gap-2">
         <ColaPanel />
         <BotonParar />
