@@ -243,7 +243,7 @@ describe("dónde aparece la parada", () => {
       guion: null, guion_version: 0, metadatos: null, voz_disponible: false, voz_version: 0,
       subtitulos: null, escenas: [], personajes: [], imagenes_completas: false,
       video_disponible: false, versiones: [], jobs_activos: 1, job_activo: "generar_imagenes",
-      musica: null, musica_mezclar: false,
+      musica: null, musica_mezclar: false, serie: null, resumen_episodio: "",
     } as ProyectoDetalle;
 
     render(ProjectView, { p, voces: [], acciones: new Proxy({}, { get: () => vi.fn() }) as never, onver: vi.fn() });

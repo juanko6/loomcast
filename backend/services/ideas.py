@@ -5,6 +5,7 @@ import unicodedata
 from ..db import get_session
 from ..repositories import ideas as ideas_repo
 from ..repositories import proyectos as proyectos_repo
+from ..repositories import series as series_repo
 from ..repositories import temas as temas_repo
 from ..workers import queue
 
@@ -37,7 +38,13 @@ def cambiar_estado(idea_id: int, estado: str) -> None:
 
 
 def crear_proyecto(idea_id: int) -> dict:
-    """Aprueba la idea, crea el proyecto con slug único y encola el guion."""
+    """Aprueba la idea, crea el proyecto con slug único y encola el guion.
+
+    Si el tema de la idea es el de una serie, el proyecto nace como su episodio
+    siguiente: hereda la plantilla de la serie, se numera y se le trae el
+    reparto fijo antes de escribir el guion, que es lo que ese guion necesita
+    saber. Para un tema sin serie no cambia nada de lo que hacía.
+    """
     with get_session() as s:
         idea = ideas_repo.obtener(s, idea_id)
         if idea is None:
@@ -53,8 +60,26 @@ def crear_proyecto(idea_id: int) -> dict:
             slug = f"{base}-{n}"
             n += 1
         idea.estado = "aprobada"
-        p = proyectos_repo.crear(s, idea_id, slug, tema.plantilla)
+        serie = series_repo.por_tema(s, idea.tema_id)
+        p = proyectos_repo.crear(
+            s, idea_id, slug,
+            # La plantilla de la serie manda sobre la del tema: es la que decide
+            # el formato de guion con líneas de personaje y los ocho prompts.
+            serie.plantilla if serie else tema.plantilla,
+        )
+        if serie is not None:
+            p.serie_id = serie.id
+            s.flush()
+            p.episodio = series_repo.siguiente_numero(s, serie.id)
         s.commit()
         proyecto_id = p.id
+
+    # Importado aquí dentro porque el servicio de series llama a este para crear
+    # el episodio: a nivel de módulo el ciclo sería real. Para un proyecto sin
+    # serie devuelve lista vacía y no toca nada.
+    from ..services import series as series_service
+
+    traidos = series_service.traer_reparto_fijo(proyecto_id)
     job_id = queue.encolar("generar_guion", proyecto_id)
-    return {"proyecto_id": proyecto_id, "job_id": job_id}
+    return {"proyecto_id": proyecto_id, "job_id": job_id,
+            "reparto_traido": [x["clave"] for x in traidos]}

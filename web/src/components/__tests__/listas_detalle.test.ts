@@ -271,7 +271,8 @@ describe("StepVideo", () => {
     id: 1, slug: "demo", estado: "IMAGENES", plantilla: "curiosidades", voz: null, voz_instruct: "", idea: null,
     guion: null, guion_version: 0, metadatos: null, voz_disponible: true, voz_version: 0, subtitulos: "x",
     escenas: [], personajes: [], imagenes_completas: true, video_disponible: false, versiones: [],
-    jobs_activos: 0, job_activo: null, musica: null, musica_mezclar: false, ...extra,
+    jobs_activos: 0, job_activo: null, musica: null, musica_mezclar: false,
+    serie: null, resumen_episodio: "", ...extra,
   });
   const acciones = () => ({ ongenerar: vi.fn(), onborrarvideo: vi.fn(), onborrarversion: vi.fn(), onborrarproyecto: vi.fn(), onver: vi.fn() });
 

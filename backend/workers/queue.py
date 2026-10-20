@@ -29,6 +29,7 @@ from ..services.pipeline import (
     musica_proyecto,
     quitar_fondo,
     retratos,
+    series,
     subtitulos,
     texto,
     upscale,
@@ -44,6 +45,7 @@ HANDLERS = {
     "generar_voz": voz.generar_voz,
     "generar_subtitulos": subtitulos.generar_subtitulos,
     "generar_casting": casting.generar_casting,
+    "generar_resumen_episodio": series.generar_resumen_episodio,
     "generar_retrato": retratos.generar_retrato,
     "generar_escenas": escenas.generar_escenas,
     "generar_imagenes": imagenes.generar_imagenes,
@@ -77,6 +79,7 @@ JOBS_LLM = {
     "mejorar_prompt_imagen",
     "mejorar_prompt_musica",
     "generar_musica_proyecto",
+    "generar_resumen_episodio",
 }
 
 # Etapas que se disparan solas al terminar la anterior:
@@ -99,6 +102,27 @@ CADENA = {
     "generar_musica": "generar_portada_musica",
     "generar_clips_mixto": "armar_video",
 }
+
+# Los dos armados. Al terminar cualquiera de ellos, un episodio de serie que
+# todavía no tenga resumen se cierra solo (ver `_encadenado`).
+ARMADOS = ("armar_video", "armar_estatico")
+
+
+def _encadenado(tipo: str, ref_id: int) -> str | None:
+    """Qué job sale solo tras este, si sale alguno.
+
+    Casi todo está en `CADENA`, que es fijo por tipo. El resumen del episodio no
+    puede estarlo: depende de si ese proyecto es un episodio y de si ya lo tiene
+    escrito. Se encadena al armado porque es cuando el episodio está de verdad
+    cerrado, y así el siguiente nace con continuidad sin que nadie se acuerde de
+    pedirla. Un proyecto suelto nunca entra aquí.
+    """
+    if tipo in CADENA:
+        return CADENA[tipo]
+    if tipo in ARMADOS and series.resumen_pendiente(ref_id):
+        return "generar_resumen_episodio"
+    return None
+
 
 # Intentos y espera de los reintentos ([cola] de config.toml). Se copian a
 # variables del módulo para que los tests puedan apretarlas sin esperar de
@@ -294,8 +318,10 @@ def _procesar(job_id: int) -> None:
     # entero en cada retoque costaría más que el propio retoque. Un job parado
     # tampoco: la etapa siguiente trabajaría sobre material a medias, y si se
     # paró es justo lo que no se quería.
-    if estado == "ok" and not parado and tipo in CADENA:
-        encolar(CADENA[tipo], ref_id)
+    if estado == "ok" and not parado:
+        siguiente = _encadenado(tipo, ref_id)
+        if siguiente:
+            encolar(siguiente, ref_id)
 
 
 def _loop() -> None:

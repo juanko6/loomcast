@@ -78,6 +78,10 @@
     <h2 class="text-lg font-semibold tracking-tight text-balance">
       {p.idea?.titulo ?? p.slug}
     </h2>
+    <!-- Un episodio se reconoce antes que nada por de qué serie es. -->
+    {#if p.serie}
+      <Chip tone="accent">{p.serie.nombre} · EP {p.serie.episodio}</Chip>
+    {/if}
     <Chip>{p.estado}</Chip>
     {#if etapa}
       <span class="flex items-center gap-2 text-sm text-dim">
@@ -150,6 +154,8 @@
         onborrarvideo={acciones.borrarVideo}
         onborrarversion={acciones.borrarVersion}
         onborrarproyecto={acciones.borrarProyecto}
+        onguardarresumen={acciones.guardarResumen}
+        ongenerarresumen={acciones.generarResumen}
         {onver}
       />
     {/if}

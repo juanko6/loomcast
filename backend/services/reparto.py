@@ -31,6 +31,7 @@ from ..db import get_session
 from ..repositories import personajes as personajes_repo
 from ..repositories import proyectos as proyectos_repo
 from ..repositories import reparto as reparto_repo
+from ..repositories import series as series_repo
 from ..repositories import voces as voces_repo
 from ..services.pipeline import retratos
 
@@ -208,20 +209,24 @@ def borrar(slug: str) -> dict:
     """Saca a alguien del reparto propio: su fila y su carpeta.
 
     Los proyectos que se lo trajeron no se tocan —tienen su copia de la ficha y
-    del retrato— y solo olvidan de dónde vino.
+    del retrato— y solo olvidan de dónde vino. Las series en cuyo reparto fijo
+    estaba sí tienen que soltarlo: esas filas son la orden de traerlo a cada
+    episodio nuevo, y dejarlas rompería la creación del siguiente.
     """
     with get_session() as s:
         m = reparto_repo.por_slug(s, slug)
         if m is None:
             raise MiembroNoExiste(slug)
         desvinculados = reparto_repo.desvincular(s, slug)
+        series_sueltas = series_repo.desvincular_reparto(s, slug)
         reparto_repo.borrar(s, m)
         s.commit()
 
     carpeta = reparto_repo.carpeta(slug)
     if carpeta.exists():
         shutil.rmtree(carpeta)
-    return {"slug": slug, "personajes_desvinculados": desvinculados}
+    return {"slug": slug, "personajes_desvinculados": desvinculados,
+            "series_desvinculadas": series_sueltas}
 
 
 def ruta_retrato(slug: str):

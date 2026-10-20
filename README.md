@@ -326,6 +326,10 @@ lista el directorio: una carpeta nueva aparece sola, sin tocar código.
 | **curiosidades** | datos sorprendentes y hechos poco conocidos, con giro final | grave de documental, ágil | 45 s, escenas de 4 s, atempo 1.05 |
 | **drama** | storytime de chisme: un conflicto cotidiano que escala | joven y cómplice | 50 s, escenas de 4 s, atempo 1.0 |
 | **historia** | un hecho real contado como relato: situación, tensión y desenlace con consecuencia | grave y pausada | 55 s, escenas de 5 s, atempo 1.0 |
+| **serie** | un episodio de una historia que continúa: mismo reparto, algo que pasa hoy y un hilo abierto para el siguiente | cercana y narrativa | 50 s, escenas de 4 s, atempo 1.0 |
+
+`serie` es la única con `formato_guion: "lineas"` (ver «Series»): su guion es
+narración más frases de los personajes, cada uno con su voz.
 
 `historia` es la que más se apoya en el resto del pipeline, y por eso vale como
 ejemplo de hasta dónde llega una plantilla:
@@ -359,6 +363,10 @@ Tema → ideas → seleccionar/aprobar → y ya en el proyecto, los pasos del
 stepper: **1** guion (editar/regenerar) → **2** voz (elegir del banco o crear nueva → generar narración) → **3** metadatos → **4** escenas (reparto → generar prompts → editarlos → aceptar y generar imágenes) → **música** (opcional, se entra a mano) → **5** armar video final.
 
 Puntos de revisión humana: selección de ideas, guion, elección de voz, reparto, y **prompts de escena antes de gastar GPU en las imágenes**.
+
+Si la historia continúa, el proyecto puede ser el **episodio de una serie**: el
+reparto y el resumen del capítulo anterior entran solos, y el resto del flujo es
+idéntico (ver «Series»).
 
 El paso **2 voz** lleva además las voces del reparto: qué voz dice las líneas de
 cada personaje y el botón para crearle una desde su ficha (ver «Voz por
@@ -574,6 +582,101 @@ A diferencia del banco de voces, aquí no se encola nada: promover y traer son
 copiar un PNG y escribir una fila, sin GPU ni LLM, así que van en el hilo HTTP
 y la UI ve el resultado al instante.
 
+## Series (episodios con continuidad)
+
+Lo que mejor funciona en Shorts no es un vídeo bueno: son diez con la misma
+gente y una historia que avanza. Una **serie** es eso, y en Loomcast son tres
+cosas y ninguna más: un **nombre**, una **plantilla** y un **reparto fijo**. No
+tiene estado de producción propio —el ciclo `IDEA → … → FINAL` es de cada
+episodio— y **un proyecto sin serie sigue funcionando exactamente igual que
+antes**: sin serie no hay contexto extra en el guion, ni marca en el vídeo, ni
+nada que cerrar.
+
+Se crea desde el desplegable «Nueva serie» de la columna de Vídeos, y a partir
+de ahí la serie tiene su propia vista: su reparto fijo, sus episodios y el botón
+que se usa a diario.
+
+### La continuidad viene de dos sitios
+
+- **El reparto fijo**, que se apoya en el reparto propio. La serie guarda a
+  quién hay que traer, y cada episodio nuevo se los trae con su ficha, su cara y
+  su voz ya fijadas: nadie vuelve a describir al protagonista en el capítulo
+  cuatro, y el generador no le cambia la cara. Como las claves son marcadores
+  `{CLAVE}` que acaban escritos en los prompts, traer a dos con la misma clave
+  da `ANA` y `ANA_2` en vez de pisar al primero (lo resuelve el mismo
+  `clave_libre` del reparto propio). Añadir o quitar a alguien afecta a los
+  episodios **siguientes**: un capítulo ya escrito no gana ni pierde personajes
+  por detrás.
+- **El resumen del episodio anterior**. Al armar el vídeo de un episodio, la
+  cola encadena un job más que escribe en qué quedó: qué pasó, cómo acabó y qué
+  queda abierto. Ese texto entra como contexto en el guion del episodio
+  siguiente. Es **editable** —en el paso «Vídeo final», junto al vídeo— porque
+  es lo que el capítulo siguiente dará por cierto: un detalle inventado que
+  nadie corrige se vuelve canon de la serie. El job se puede relanzar a mano
+  tras cambiar el guion.
+
+### Cómo se produce una serie
+
+1. **Crear la serie** con su nombre y la plantilla `serie`.
+2. **Fijar el reparto**: promover a los personajes buenos al reparto propio
+   (desde el paso de escenas de cualquier vídeo) y añadirlos a la serie. Se hace
+   una vez.
+3. **Nuevo episodio**, con un apunte opcional de una línea («Ana encuentra la
+   llave»). En blanco, el episodio lo propone el LLM desde donde quedó el
+   anterior. Un clic: crea el episodio, lo numera, le trae el reparto y encola
+   su guion.
+4. **El episodio es un proyecto normal**: guion, voz, metadatos, escenas,
+   imágenes, música y montaje, con los mismos pasos y las mismas revisiones.
+5. **Al armar el vídeo** se escribe su resumen, y el episodio siguiente ya nace
+   sabiendo en qué quedó.
+
+El otro camino es el flujo de siempre: la serie es dueña de un **tema**, y las
+ideas de ese tema son ideas de episodio (con el `ideas.md` de la plantilla de
+serie, que piensa en capítulos y no en vídeos sueltos). Aprobar una de ellas
+crea el episodio siguiente por el mismo sitio, `ideas.crear_proyecto`, así que
+no hay dos maneras distintas de nacer un proyecto. Ese tema no se lista aparte
+en la columna de Temas: tiene el mismo nombre que la serie y se entra a él desde
+el botón «Pedir ideas de episodio».
+
+### La plantilla `serie`
+
+Es la primera que activa `formato_guion: "lineas"`, el formato de guion con
+líneas atribuidas que se construyó en la Fase 6 y que hasta ahora no usaba
+ninguna. Su guion es narración más frases de los personajes —el narrador lleva
+la historia y alguien dice de 3 a 6 líneas puntuales, cada una con **su voz del
+banco**—, y el resto de sus ocho prompts está escrito para episodios: ideas que
+son capítulos de una secuencia, títulos que funcionan para quien entra por el
+cuarto, storyboard con una localización que se repite y casting que solo fija a
+los que la serie añade. Las otras tres plantillas no se enteran de nada: siguen
+con su formato de siempre, y hay un test que lo fija.
+
+### La marca de episodio
+
+El vídeo de un episodio sale con «NOMBRE DE LA SERIE · EP 3» quemado arriba a la
+izquierda, por debajo de la zona que las apps tapan con su interfaz. Va quemada
+porque el título de la publicación se corta y no viaja cuando alguien reenvía el
+archivo. Usa la fuente y los colores de los subtítulos de la plantilla (es el
+vídeo el que tiene un look, no la marca) y se dibuja con Pillow, como los
+subtítulos: en el montaje con movimiento es un PNG transparente superpuesto con
+`overlay` durante todo el vídeo, y en el estático se estampa en cada still. Un
+proyecto sin serie no añade ni la entrada ni el overlay.
+
+### Borrar sin romper nada
+
+- **Disolver la serie** no borra sus episodios: cada uno lleva su guion, su
+  narración, su reparto copiado y su vídeo, y perderlos por disolver la serie
+  sería una pérdida desproporcionada (el mismo criterio que al borrar un tema
+  con proyectos). Se quedan como vídeos sueltos, que es lo que son sin serie, y
+  el tema de las ideas sigue siendo un tema normal. Lo que se va es la serie y
+  su reparto fijo.
+- **Borrar un episodio** del medio no rompe los demás: los números no se
+  recalculan (el 4 ya se publicó llamándose 4) y el siguiente episodio continúa
+  el anterior que quede, saltándose el hueco.
+- **Borrar a alguien del reparto propio** lo saca también del reparto fijo de
+  las series. Aquí no basta con desvincular como en los personajes de un
+  proyecto: esas filas son la orden de traerlo a cada episodio nuevo, y dejarlas
+  haría fallar la creación del siguiente.
+
 ## Ciclo de vida del LLM
 
 Solo cinco etapas usan el llama-server (ideas, guion, metadatos, reparto y prompts de escena); el resto del pipeline pelea por la misma memoria unificada. Por eso el modelo de texto no vive residente: Loomcast lo **carga al empezar una etapa de texto y lo descarga antes de cualquier etapa de voz/GPU**, igual que ya hacía con ComfyUI (`/free`) y Qwen3-TTS.
@@ -744,6 +847,7 @@ o perdió su clip no deja un hueco: esa línea la narra la voz del proyecto.
 - ✅ **Plantilla `historia`** — un hecho real contado como relato: guion narrativo, voz grave y pausada, reparto y estilo de época sin personajes reconocibles. Tercer nicho junto a `curiosidades` y `drama`, y con ella se cierra la Fase 5
 - ✅ **Reparto propio** — personajes guardados aparte, con su ficha y su cara, que se traen a cualquier vídeo nuevo; la cara se copia al proyecto y editarla ahí no toca al original. Primera pieza de la Fase 6
 - ✅ **Voz por personaje** — la narración se sintetiza por tramos y cada personaje dice sus líneas con su voz del banco, que viaja con él en el reparto propio; el formato de guion con líneas atribuidas se activa por plantilla y hoy no lo usa ninguna (es para las series). Segunda pieza de la Fase 6
+- ✅ **Series** — episodios con continuidad: reparto fijo que viaja a cada capítulo, resumen del episodio anterior como contexto del guion siguiente, plantilla `serie` con guion de líneas atribuidas y marca «SERIE · EP n» en el vídeo. Cierra la Fase 8
 - ⬜ Pendiente — empaquetado
 
 ## Imágenes

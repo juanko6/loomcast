@@ -3,6 +3,7 @@ from ..db import get_session
 from ..repositories import ideas as ideas_repo
 from ..repositories import plantillas as plantillas_repo
 from ..repositories import proyectos as proyectos_repo
+from ..repositories import series as series_repo
 from ..repositories import temas as temas_repo
 from ..workers import queue
 
@@ -31,12 +32,18 @@ def listar_temas() -> list[dict]:
         out = []
         for t in temas_repo.listar(s):
             ideas = ideas_repo.por_tema(s, t.id)
+            serie = series_repo.por_tema(s, t.id)
             out.append({
                 "id": t.id,
                 "texto": t.texto,
                 "plantilla": t.plantilla,
                 "n_ideas": len(ideas),
                 "n_aprobadas": sum(1 for i in ideas if i.estado == "aprobada"),
+                # El tema de una serie no es un tema que el usuario haya creado:
+                # es de donde cuelgan sus ideas de episodio, y se entra a él
+                # desde la serie. La UI no lo lista aparte para no enseñar la
+                # misma cosa dos veces con el mismo nombre.
+                "serie": serie.nombre if serie else None,
             })
         return out
 

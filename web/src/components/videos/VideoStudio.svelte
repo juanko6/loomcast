@@ -7,23 +7,29 @@
   import Viewer from "../primitives/Viewer.svelte";
   import IdeasView from "./IdeasView.svelte";
   import ProjectView from "./ProjectView.svelte";
+  import SerieView from "./SerieView.svelte";
   import { jobs, jobsDrenados, refrescarJobs, seleccionPendiente } from "@/lib/stores";
   import { currentTrack } from "@/lib/player";
   import * as API from "@/lib/proyectos";
+  import * as SeriesAPI from "@/lib/series";
   import type { Idea, MiembroReparto, ProyectoDetalle, Voz } from "@/lib/proyectos";
+  import type { SerieDetalle, SerieResumen } from "@/lib/series";
   import type { ProyectoResumen, TemaResumen } from "@/lib/types";
 
   // --- estado ---
   let temas = $state<TemaResumen[]>([]);
+  let series = $state<SerieResumen[]>([]);
   let proyectos = $state<ProyectoResumen[]>([]);
   let voces = $state<Voz[]>([]);
   let reparto = $state<MiembroReparto[]>([]);
   let plantillas = $state<string[]>([]);
 
-  // Vista actual: un tema (sus ideas) o un proyecto (el pipeline).
-  let vista = $state<{ tipo: "tema" | "proyecto"; id: number } | null>(null);
+  // Vista actual: una serie (sus episodios), un tema (sus ideas) o un proyecto
+  // (el pipeline).
+  let vista = $state<{ tipo: "tema" | "proyecto" | "serie"; id: number } | null>(null);
   let ideas = $state<Idea[]>([]);
   let proyecto = $state<ProyectoDetalle | null>(null);
+  let serie = $state<SerieDetalle | null>(null);
   let bust = $state(0);
   let error = $state("");
 
@@ -31,12 +37,23 @@
   let temaTexto = $state("");
   let temaPlantilla = $state("");
 
+  // Formulario de serie nueva. La plantilla por defecto es la de episodios, que
+  // es la que activa el guion con líneas de personaje.
+  let serieNombre = $state("");
+  let seriePlantilla = $state("serie");
+
   // Visor a pantalla completa
   let visorHtml = $state<string | null>(null);
   let visorPie = $state("");
 
   const reservaPlayer = $derived($currentTrack ? "padding-bottom:88px" : "");
   const ocupado = $derived((proyecto?.jobs_activos ?? 0) > 0);
+  // La serie no produce nada por sí misma; lo que bloquea sus botones es que ya
+  // haya algo en la cola (crear un episodio encola su guion).
+  const hayTrabajo = $derived($jobs.length > 0);
+  // El tema de una serie no se lista aparte: tiene el mismo nombre que ella y
+  // se entra a sus ideas de episodio desde la propia serie.
+  const temasSueltos = $derived(temas.filter((t) => !t.serie));
 
   function fallo(e: unknown) {
     error = (e as Error).message;
@@ -44,7 +61,9 @@
 
   async function refrescarListas() {
     try {
-      [temas, proyectos] = await Promise.all([API.listarTemas(), API.listarProyectos()]);
+      [temas, proyectos, series] = await Promise.all([
+        API.listarTemas(), API.listarProyectos(), SeriesAPI.listarSeries(),
+      ]);
     } catch (e) {
       fallo(e);
     }
@@ -54,17 +73,19 @@
     if (!vista) return;
     try {
       if (vista.tipo === "tema") ideas = await API.ideasDeTema(vista.id);
+      else if (vista.tipo === "serie") serie = await SeriesAPI.detalleSerie(vista.id);
       else proyecto = await API.detalleProyecto(vista.id);
     } catch (e) {
       fallo(e);
     }
   }
 
-  function irA(tipo: "tema" | "proyecto", id: number) {
+  function irA(tipo: "tema" | "proyecto" | "serie", id: number) {
     error = "";
     vista = { tipo, id };
     ideas = [];
     proyecto = null;
+    serie = null;
     cargarVista();
   }
 
@@ -82,6 +103,97 @@
       fallo(e);
     }
   }
+
+  // --- series ---
+  async function crearSerie(ev: Event) {
+    ev.preventDefault();
+    if (!serieNombre.trim()) return;
+    try {
+      const s = await SeriesAPI.crearSerie(serieNombre.trim(), seriePlantilla);
+      serieNombre = "";
+      await refrescarListas();
+      irA("serie", s.id);
+    } catch (e) {
+      fallo(e);
+    }
+  }
+
+  const accSerie = {
+    // Crear el episodio ya encola su guion, así que se abre el proyecto: es
+    // donde se va a seguir trabajando.
+    nuevoEpisodio: async (apunte: string) => {
+      if (!serie) return;
+      try {
+        const { proyecto_id, reparto_traido } = await SeriesAPI.crearEpisodio(serie.id, apunte);
+        await refrescarListas();
+        irA("proyecto", proyecto_id);
+        refrescarJobs();
+        if (reparto_traido.length)
+          console.info(`Reparto fijo traído: ${reparto_traido.join(", ")}`);
+      } catch (e) {
+        fallo(e);
+      }
+    },
+    anadirMiembro: async (slug: string) => {
+      if (!serie) return;
+      try {
+        await SeriesAPI.anadirMiembroSerie(serie.id, slug);
+        await cargarVista();
+        refrescarListas();
+      } catch (e) {
+        fallo(e);
+      }
+    },
+    quitarMiembro: async (slug: string, nombre: string) => {
+      if (!serie) return;
+      if (
+        !confirm(
+          `¿Quitar a «${nombre}» del reparto fijo de la serie?\n\n` +
+            "Los episodios ya hechos se quedan con él: tienen su copia de la ficha y de la cara.",
+        )
+      )
+        return;
+      try {
+        await SeriesAPI.quitarMiembroSerie(serie.id, slug);
+        await cargarVista();
+        refrescarListas();
+      } catch (e) {
+        fallo(e);
+      }
+    },
+    // Las ideas de episodio son ideas del tema de la serie: mismo flujo de
+    // siempre, con el prompt de ideas de la plantilla de serie.
+    ideas: async () => {
+      if (!serie) return;
+      const temaId = serie.tema_id;
+      try {
+        await API.masIdeas(temaId);
+        refrescarJobs();
+        irA("tema", temaId);
+      } catch (e) {
+        fallo(e);
+      }
+    },
+    borrar: async () => {
+      if (!serie) return;
+      const nombre = serie.nombre;
+      if (
+        !confirm(
+          `¿Disolver la serie «${nombre}»?\n\n` +
+            "Sus episodios NO se borran: se quedan como vídeos sueltos, con su guion y su vídeo.",
+        )
+      )
+        return;
+      try {
+        await SeriesAPI.borrarSerie(serie.id);
+        vista = null;
+        serie = null;
+        refrescarListas();
+      } catch (e) {
+        fallo(e);
+      }
+    },
+  };
 
   // Borrar un proyecto se puede desde su paso final y desde el listado, así que
   // la confirmación (doble: se lleva la carpeta entera) vive aquí y no en el
@@ -253,6 +365,8 @@
       await tras(API.borrarVoz(slug));
       voces = await API.listarVoces();
     },
+    guardarResumen: (resumen: string) => tras(API.editarResumen(pid(), resumen)),
+    generarResumen: () => tras(API.generarResumen(pid())),
     generarMetadatos: () => tras(API.generarMetadatos(pid())),
     generarCasting: () => tras(API.generarCasting(pid())),
     guardarCasting: (p: API.Personaje[]) => tras(API.guardarCasting(pid(), p)),
@@ -388,9 +502,57 @@
       <Button type="submit" class="w-full" disabled={!temaTexto.trim()}>Generar ideas</Button>
     </form>
 
+    <!-- Una serie se crea una vez y se saca capítulos; por eso el formulario es
+         un desplegable y no compite con el de tema, que es el del día a día. -->
+    <details class="border-b border-line p-4">
+      <summary class="cursor-pointer text-sm font-semibold">Nueva serie</summary>
+      <form class="mt-3 space-y-3" onsubmit={crearSerie}>
+        <input
+          class="control"
+          bind:value={serieNombre}
+          placeholder="Nombre de la serie. Ej: La casa de Alicia"
+          aria-label="Nombre de la serie"
+        />
+        <Field label="Plantilla de la serie">
+          <select class="control" bind:value={seriePlantilla}>
+            {#each plantillas as pl (pl)}
+              <option value={pl}>{pl}</option>
+            {/each}
+          </select>
+        </Field>
+        <p class="text-xs text-muted">
+          La plantilla manda en todos los episodios: «serie» es la que escribe el guion con líneas
+          de personaje, para que cada uno hable con su voz.
+        </p>
+        <Button type="submit" class="w-full" disabled={!serieNombre.trim()}>Crear serie</Button>
+      </form>
+    </details>
+
+    {#if series.length}
+      <div class="space-y-1 border-b border-line p-4">
+        <p class="mb-2 text-xs font-medium tracking-wide text-muted">Series</p>
+        {#each series as sr (sr.id)}
+          <button
+            type="button"
+            onclick={() => irA("serie", sr.id)}
+            class={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors
+              ${vista?.tipo === "serie" && vista.id === sr.id ? "bg-accent-soft" : "hover:bg-surface-2"}`}
+          >
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm">{sr.nombre}</span>
+              <span class="text-xs text-muted">
+                {sr.n_episodios} {sr.n_episodios === 1 ? "episodio" : "episodios"} ·
+                {sr.n_miembros} fijos
+              </span>
+            </span>
+          </button>
+        {/each}
+      </div>
+    {/if}
+
     <div class="space-y-1 p-4">
       <p class="mb-2 text-xs font-medium tracking-wide text-muted">Temas</p>
-      {#each temas as t (t.id)}
+      {#each temasSueltos as t (t.id)}
         <div
           class={`group flex items-center gap-2 rounded-lg px-2.5 py-2 transition-colors
             ${vista?.tipo === "tema" && vista.id === t.id ? "bg-accent-soft" : "hover:bg-surface-2"}`}
@@ -427,6 +589,9 @@
             class="flex min-w-0 flex-1 items-center gap-2 text-left"
           >
             <span class="min-w-0 flex-1 truncate text-sm">{pr.titulo}</span>
+            {#if pr.serie}
+              <Chip tone="accent">EP {pr.episodio}</Chip>
+            {/if}
             <Chip>{pr.estado}</Chip>
           </button>
           <span class="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
@@ -457,7 +622,8 @@
       <div class="grid flex-1 place-items-center p-6 text-center">
         <p class="max-w-sm text-sm text-dim">
           Crea un tema para empezar, o elige uno de la lista. De cada tema salen ideas, y de cada
-          idea aprobada, un proyecto de vídeo.
+          idea aprobada, un proyecto de vídeo. Si la historia continúa, hazla una serie: sus
+          episodios comparten reparto y cada uno sabe en qué quedó el anterior.
         </p>
       </div>
     {:else if vista.tipo === "tema"}
@@ -472,6 +638,24 @@
           onmas={accIdeas.mas}
         />
       </div>
+    {:else if vista.tipo === "serie"}
+      {#if serie}
+        <SerieView
+          s={serie}
+          {reparto}
+          busy={hayTrabajo}
+          onnuevoepisodio={accSerie.nuevoEpisodio}
+          onabrirepisodio={(pid) => irA("proyecto", pid)}
+          onanadirmiembro={accSerie.anadirMiembro}
+          onquitarmiembro={accSerie.quitarMiembro}
+          onideas={accSerie.ideas}
+          onborrarserie={accSerie.borrar}
+        />
+      {:else}
+        <div class="grid flex-1 place-items-center">
+          <span class="size-6 animate-spin rounded-full border-2 border-line border-t-accent"></span>
+        </div>
+      {/if}
     {:else if proyecto}
       <ProjectView p={proyecto} {voces} {reparto} {bust} {acciones} onver={abrirVisor} />
     {:else}

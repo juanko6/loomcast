@@ -115,11 +115,27 @@ export interface Version {
   mb: number;
 }
 
+// De qué serie es episodio un proyecto. null = vídeo suelto, que es lo que son
+// todos los proyectos que no nacen de una serie.
+export interface SerieDelProyecto {
+  id: number;
+  nombre: string;
+  slug: string;
+  episodio: number;
+  // El episodio anterior y en qué quedó: es el contexto que el LLM ya está
+  // usando para escribir este guion, así que es donde se corrige si está mal.
+  anterior: { episodio: number; resumen: string } | null;
+}
+
 export interface ProyectoDetalle {
   id: number;
   slug: string;
   estado: string;
   plantilla: string;
+  serie: SerieDelProyecto | null;
+  // En qué quedó ESTE episodio, para el guion del siguiente. Vacío = sin cerrar
+  // (o proyecto suelto).
+  resumen_episodio: string;
   voz: string | null;
   voz_instruct: string;
   idea: { titulo: string; gancho: string; resumen: string } | null;
@@ -191,6 +207,19 @@ export const generarVoz = (id: number, modo: "clon" | "design", instruct?: strin
     method: "POST",
     body: { modo, instruct },
   });
+
+// Corrige a mano en qué quedó el episodio: es lo que el guion del siguiente
+// dará por cierto, así que no puede depender de un texto que nadie revisa.
+export const editarResumen = (id: number, resumen: string) =>
+  api<{ resumen: string }>(`/proyectos/${id}/resumen`, {
+    method: "PUT",
+    body: { resumen },
+  });
+
+// Lo reescribe el LLM. Sale solo al armar el vídeo del episodio; esto es para
+// rehacerlo tras cambiar el guion.
+export const generarResumen = (id: number) =>
+  api<{ job_id: number }>(`/proyectos/${id}/resumen`, { method: "POST" });
 
 export const generarMetadatos = (id: number) =>
   api<{ job_id: number }>(`/proyectos/${id}/metadatos`, { method: "POST" });
@@ -397,4 +426,5 @@ export const ETAPA_VIDEO: Record<string, string> = {
   regenerar_imagen: "Regenerando una imagen…",
   regenerar_clip: "Regenerando un clip…",
   armar_video: "Armando el vídeo final (subtítulos + voz)…",
+  generar_resumen_episodio: "Cerrando el episodio (resumen para el siguiente)…",
 };

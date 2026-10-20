@@ -51,6 +51,9 @@ export interface TemaResumen {
   texto: string;
   n_ideas: number;
   n_aprobadas: number;
+  // Nombre de la serie dueña del tema, o null en un tema normal. El de una
+  // serie no se lista aparte: se entra a sus ideas de episodio desde la serie.
+  serie?: string | null;
 }
 
 export interface ProyectoResumen {
@@ -58,6 +61,10 @@ export interface ProyectoResumen {
   titulo: string;
   slug: string;
   estado: string;
+  // Nombre de la serie de la que es episodio, o null si es un vídeo suelto.
+  serie: string | null;
+  // Número de episodio; 0 cuando no es un episodio.
+  episodio: number;
 }
 
 export type TipoGaleria = "generar" | "editar" | "quitarfondo";

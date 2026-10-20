@@ -27,7 +27,7 @@ const proyecto = (extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle => ({
   guion: { gancho: "Hola", frases: ["Uno"], cta: "Fin" }, guion_version: 1, metadatos: null,
   voz_disponible: false, voz_version: 0, subtitulos: null, escenas: [], personajes: [],
   imagenes_completas: false, video_disponible: false, versiones: [], jobs_activos: 0, job_activo: null,
-  musica: null, musica_mezclar: false, ...extra,
+  musica: null, musica_mezclar: false, serie: null, resumen_episodio: "", ...extra,
 });
 
 beforeEach(() => {
@@ -35,7 +35,7 @@ beforeEach(() => {
   m.listarVoces.mockResolvedValue([]);
   m.listarReparto.mockResolvedValue([]);
   m.listarTemas.mockResolvedValue([{ id: 1, texto: "misterios del mar", n_ideas: 3, n_aprobadas: 1 }]);
-  m.listarProyectos.mockResolvedValue([{ id: 1, titulo: "Mi proyecto", slug: "demo", estado: "GUION" }]);
+  m.listarProyectos.mockResolvedValue([{ id: 1, titulo: "Mi proyecto", slug: "demo", estado: "GUION", serie: null, episodio: 0 }]);
   m.ideasDeTema.mockResolvedValue([
     { id: 5, titulo: "Idea A", gancho: "g", resumen: "r", estado: "propuesta", proyecto_id: null }]);
   m.detalleProyecto.mockResolvedValue(proyecto());

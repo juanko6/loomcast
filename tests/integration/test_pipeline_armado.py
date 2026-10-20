@@ -8,7 +8,13 @@ import soundfile as sf
 from backend import procesos
 from backend.repositories import escenas as escenas_repo
 from backend.repositories import proyectos as proyectos_repo
-from backend.services.pipeline import _ffmpeg, _subtitulos_render as subs, armado, armado_estatico
+from backend.services.pipeline import (
+    _ffmpeg,
+    _marca,
+    _subtitulos_render as subs,
+    armado,
+    armado_estatico,
+)
 from tests import fakes
 from tests import factories as f
 
@@ -396,3 +402,110 @@ def test_mezcla_activada_sin_pista_lista_falla_antes_de_renderizar(
     with pytest.raises(ValueError, match=mensaje):
         armado.armar_video(proy)
     assert not (base / "final.mp4").exists()
+
+
+# --- marca de episodio ------------------------------------------------------
+
+def _serie_del_proyecto(session, proyecto_id, nombre="La casa de Alicia", episodio=3):
+    """Convierte el proyecto de los demás tests en el episodio de una serie."""
+    from backend.repositories import series as series_repo
+    from backend.repositories import temas as temas_repo
+
+    tema = temas_repo.crear(session, nombre, "serie")
+    session.flush()
+    serie = series_repo.crear(session, "la-casa-de-alicia", nombre, "serie", tema.id)
+    session.flush()
+    p = proyectos_repo.obtener(session, proyecto_id)
+    p.serie_id = serie.id
+    p.episodio = episodio
+    session.commit()
+    return serie
+
+
+def test_texto_de_la_marca_en_mayusculas_y_con_el_nombre_recortado():
+    assert _marca.texto_marca("La casa de Alicia", 3) == "LA CASA DE ALICIA · EP 3"
+    # Un nombre larguísimo se recorta aquí y no al dibujar: así la marca nunca
+    # se come media pantalla ni se encoge hasta ser ilegible.
+    largo = _marca.texto_marca("Una serie con un nombre interminable de verdad", 12)
+    assert largo.endswith("· EP 12") and len(largo.split(" · ")[0]) <= 28
+    assert _marca.texto_marca("", 1) == "EP 1"
+
+
+def test_dibujar_la_marca_pinta_arriba_a_la_izquierda():
+    from PIL import Image
+
+    img = Image.new("RGBA", (subs.ANCHO, subs.ALTO), (0, 0, 0, 0))
+    _marca.dibujar(img, "LA CASA DE ALICIA · EP 3", subs.buscar_fuente("Arial Bold"),
+                   "#FFFFFF", "#000000")
+    caja = img.getbbox()
+    # Arriba (por debajo de donde las apps ponen su interfaz) y a la izquierda.
+    assert caja[1] >= _marca.MARGEN_Y - 20 and caja[3] < subs.ALTO // 3
+    assert caja[0] < subs.ANCHO // 3
+
+
+def test_armar_video_de_un_episodio_estampa_la_marca(session, proy, base):
+    _serie_del_proyecto(session, proy)
+    _voz(base)
+    _clips(base)
+
+    log = armado.armar_video(proy)
+
+    assert "marcado «LA CASA DE ALICIA · EP 3»" in log
+    assert (base / "marca.png").exists()
+    assert _sonda(base / "final.mp4")["video"][:2] == ["1080", "1920"]
+
+
+def test_armar_estatico_de_un_episodio_estampa_la_marca_en_los_stills(
+    session, proy, base
+):
+    _serie_del_proyecto(session, proy)
+    _voz(base)
+    _imagenes(base)
+
+    log = armado_estatico.armar_estatico(proy)
+
+    assert "marcado «LA CASA DE ALICIA · EP 3»" in log
+    # Los stills son imágenes aparte, así que la marca va dibujada en cada una:
+    # aquí no hay overlay de ffmpeg que valga para todo el vídeo. Los fondos de
+    # este test son de color plano, así que basta con ver que en la franja de la
+    # marca ya no hay un solo color.
+    from PIL import Image
+
+    for still in (base / "armado").glob("*.png"):
+        franja = Image.open(still).crop(
+            (0, _marca.MARGEN_Y - 10, subs.ANCHO, _marca.MARGEN_Y + 80))
+        assert len(franja.getcolors(maxcolors=4096) or []) > 1, still
+    assert (base / "final.mp4").exists()
+    assert not (base / "marca.png").exists()
+
+
+@pytest.mark.parametrize("armar", [
+    lambda pid: armado.armar_video(pid),
+    lambda pid: armado_estatico.armar_estatico(pid),
+])
+def test_un_video_suelto_no_lleva_marca(session, proy, base, armar):
+    """Lo que no se puede romper: el montaje de un proyecto sin serie es el de
+    siempre, sin entrada ni overlay de marca."""
+    _voz(base)
+    _clips(base)
+    _imagenes(base)
+
+    log = armar(proy)
+
+    assert "marcado" not in log
+    assert not (base / "marca.png").exists()
+    assert (base / "final.mp4").exists()
+
+
+def test_la_marca_convive_con_la_musica_mezclada(session, proy, base, dirs_tmp):
+    """Van juntas en el mismo ffmpeg: la marca entra como última entrada para no
+    mover los índices que la cadena de mezcla necesita."""
+    _serie_del_proyecto(session, proy)
+    _voz(base)
+    _clips(base)
+    mid = _pista(session, dirs_tmp, proy)
+
+    log = armado.armar_video(proy)
+
+    assert f"con música ({mid})" in log and "marcado «LA CASA DE ALICIA · EP 3»" in log
+    assert _canales_audio(base / "final.mp4")
