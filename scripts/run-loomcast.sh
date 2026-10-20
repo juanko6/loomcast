@@ -100,7 +100,33 @@ limpiar() {
     sleep 1
   done
   for pid in "${PIDS[@]}"; do kill -KILL "-$pid" 2>/dev/null || true; done
+  parar_llm_huerfano
   echo "${GRIS}Listo.${FIN}"
+}
+
+# El backend apaga su LLM al cerrarse, pero si no le llega el TERM —o muere
+# antes— el LLM se queda: lo arrancó con grupo propio para poder matarle los
+# hijos, y ese grupo no cae con nosotros. Queda huérfano (ppid 1) con sus GiB
+# dentro, y el Ctrl+C dejaba 22 GiB ocupados sin que nada lo dijera.
+#
+# Se remata **solo lo que el backend registró** en logs/llm.pid: ahí escribe el
+# pgid del servidor que levantó él. Un llama-server o un mlx_lm que hayas
+# arrancado tú por tu cuenta no está en ese fichero y no se toca, que para eso
+# existen los modelos sin `comando` en config.toml.
+parar_llm_huerfano() {
+  local pidfile="$RAIZ/logs/llm.pid" pgid
+  [ -f "$pidfile" ] || return 0
+  pgid="$(sed -n 's/.*"pgid"[[:space:]]*:[[:space:]]*\([0-9]\{1,\}\).*/\1/p' "$pidfile")"
+  if [ -n "$pgid" ] && kill -0 "-$pgid" 2>/dev/null; then
+    echo "${GRIS}Parando el LLM que levantó el backend (pgid $pgid)…${FIN}"
+    kill -TERM "-$pgid" 2>/dev/null || true
+    for _ in $(seq 10); do
+      kill -0 "-$pgid" 2>/dev/null || break
+      sleep 1
+    done
+    kill -KILL "-$pgid" 2>/dev/null || true
+  fi
+  rm -f "$pidfile"
 }
 trap 'limpiar; exit 0' INT TERM
 trap limpiar EXIT

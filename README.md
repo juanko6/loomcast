@@ -118,6 +118,14 @@ El llama-server no lo lleva el lanzador, sino el backend. El que quedó huérfan
 se descarga al volver (`logs/llm.pid`), y eso es lo correcto justo aquí: si el
 backend murió por falta de memoria, esos GiB son el problema.
 
+**Y al cerrar con Ctrl+C también se va el LLM.** El backend lo apaga en su
+lifespan, pero si no le llega el TERM —o murió antes— el LLM se queda: lo
+arrancó con grupo propio para poder matarle los hijos, así que ese grupo no cae
+con el lanzador. Quedaba huérfano (`ppid` 1) con sus 22 GiB dentro y nada lo
+decía. Ahora la limpieza remata lo que el backend registró en `logs/llm.pid`, y
+**solo eso**: un `llama-server` o un `mlx_lm` que hayas levantado tú no está en
+ese fichero y no se toca, que para eso existen los modelos sin `comando`.
+
 ### Sobre el arranque de ComfyUI
 
 El `--` es obligatorio: separa los argumentos de comfy-cli de los que van a
