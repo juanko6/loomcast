@@ -92,3 +92,108 @@ def test_si_comfy_no_responde_se_lanza_igual(monkeypatch, modelo):
         f"Memoria para «{modelo.nombre}» ({modelo.memoria_gb:.0f} GiB): "
         "ComfyUI no responde, no se pudo medir la memoria"
     ]
+
+
+def test_sin_comfy_el_error_no_le_echa_la_culpa_a_comfy(monkeypatch, modelo):
+    """Con ComfyUI cerrado, la memoria la tiene otra cosa: mandar a mirar su
+    workflow es mandar a buscar donde no es. El 2026-10-20 la tenía el
+    compresor, con 25,5 GiB de RAM física y 48 comprimidos dentro."""
+    def liberar(hasta_gb=None):
+        return comfy.Liberacion(9.6, 9.6, 0.0, 0, False)
+
+    monkeypatch.setattr(llm_runtime.comfy, "liberar_memoria", liberar)
+    with pytest.raises(llm_runtime.LLMProcesoError) as e:
+        llm_runtime._hacer_sitio(modelo)
+    mensaje = str(e.value)
+    assert "ComfyUI no está escuchando" in mensaje and "compresor" in mensaje
+    assert "workflow en marcha" not in mensaje
+
+
+# --- la memoria de vuelta al soltar el modelo -------------------------------
+# El otro lado del mismo error: `_matar` espera a que el proceso muera y a que
+# su puerto quede libre, pero eso no es tener la memoria de vuelta. El
+# 2026-10-20, generando la voz de un episodio, el TTS cargó justo detrás del
+# MLX recién matado y el pico se fue casi 20 GiB al swap.
+
+def _lecturas(monkeypatch, valores):
+    """La memoria disponible devuelve `valores[i]`; el último se repite."""
+    estado = {"n": 0}
+
+    def disponible():
+        i = min(estado["n"], len(valores) - 1)
+        estado["n"] += 1
+        return valores[i]
+
+    monkeypatch.setattr(llm_runtime.memoria, "disponible_gb", disponible)
+    return estado
+
+
+def test_esperar_devolucion_vuelve_cuando_la_memoria_regresa(monkeypatch, capsys):
+    # 22 GiB de modelo: con tres cuartos de vuelta (16,5) ya no falta un modelo.
+    _lecturas(monkeypatch, [9.0, 12.0, 26.0])
+    llm_runtime._esperar_devolucion(22, 9.0)
+    salida = capsys.readouterr().out
+    assert "Memoria devuelta: 9.0 → 26.0 GiB" in salida and "+17.0" in salida
+
+
+def test_esperar_devolucion_no_espera_mas_del_tope(monkeypatch):
+    """Si la memoria no vuelve, se anota y se sigue: la etapa de después tiene
+    que correr igual, y bloquearla no la haría caber."""
+    _lecturas(monkeypatch, [9.0])
+    monkeypatch.setattr(llm_runtime, "LLM_ESPERA_DEVOLUCION_S", 0.05)
+    monkeypatch.setattr(llm_runtime.time, "sleep", lambda s: None)
+    llm_runtime._esperar_devolucion(22, 9.0)
+    anotado = apuntes.recoger()[0]
+    assert "Memoria devuelta: 9.0 → 9.0 GiB" in anotado and "+0.0 de los 22" in anotado
+
+
+def test_esperar_devolucion_sin_medicion_no_bloquea(monkeypatch):
+    monkeypatch.setattr(llm_runtime.memoria, "disponible_gb", lambda: None)
+    llm_runtime._esperar_devolucion(22, 9.0)
+    assert apuntes.recoger() == []
+
+
+@pytest.mark.parametrize("memoria_gb,antes", [(0, 9.0), (22, None)])
+def test_esperar_devolucion_cuando_no_hay_nada_que_esperar(
+    monkeypatch, memoria_gb, antes
+):
+    llamadas = _lecturas(monkeypatch, [9.0])
+    llm_runtime._esperar_devolucion(memoria_gb, antes)
+    assert llamadas["n"] == 0 and apuntes.recoger() == []
+
+
+def test_liberar_espera_la_devolucion_antes_de_devolver_el_control(
+    monkeypatch, modelo
+):
+    """Es lo que evita que el TTS cargue encima de un modelo recién matado."""
+    esperas = []
+    monkeypatch.setattr(llm_runtime, "_proc_modelo", modelo.id)
+    monkeypatch.setattr(llm_runtime, "_proc", _ProcVivo())
+    monkeypatch.setattr(llm_runtime, "_matar", lambda proc: None)
+    monkeypatch.setattr(llm_runtime, "_esperar_puerto_libre", lambda url: None)
+    monkeypatch.setattr(llm_runtime, "_olvidar_pid", lambda: None)
+    monkeypatch.setattr(llm_runtime.memoria, "disponible_gb", lambda: 9.0)
+    monkeypatch.setattr(
+        llm_runtime, "_esperar_devolucion", lambda gb, antes: esperas.append((gb, antes))
+    )
+
+    llm_runtime.liberar("empieza generar_voz")
+
+    assert esperas == [(modelo.memoria_gb, 9.0)]
+
+
+def test_liberar_sin_nada_cargado_no_espera_nada(monkeypatch):
+    esperas = []
+    monkeypatch.setattr(llm_runtime, "_proc", None)
+    monkeypatch.setattr(
+        llm_runtime, "_esperar_devolucion", lambda gb, antes: esperas.append(gb)
+    )
+    llm_runtime.liberar("empieza generar_voz")
+    assert esperas == []
+
+
+class _ProcVivo:
+    """Un proceso que está vivo, para los caminos que solo miran eso."""
+
+    def poll(self):
+        return None

@@ -2,6 +2,10 @@ fastapi>=0.115
 uvicorn[standard]>=0.32
 sqlalchemy>=2.0
 httpx>=0.27
+# Para mirar la memoria disponible antes de cargar un modelo (backend/memoria.py).
+# Venía ya instalado de rebote con otras dependencias; aquí queda declarado,
+# porque decidir si cabe un modelo de 22 GiB no puede depender de la suerte.
+psutil>=5.9
 qwen-tts
 faster-whisper
 soundfile

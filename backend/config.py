@@ -12,6 +12,7 @@ _llm = _cfg["llm"]
 LLM_AUTOSTART: bool = _llm.get("autostart", False)
 LLM_INACTIVIDAD_S: float = _llm.get("inactividad_s", 300)
 LLM_ESPERA_ARRANQUE_S: float = _llm.get("espera_arranque_s", 240)
+LLM_ESPERA_DEVOLUCION_S: float = float(_llm.get("espera_devolucion_s", 20))
 
 
 @dataclass(frozen=True)
