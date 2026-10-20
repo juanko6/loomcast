@@ -10,6 +10,7 @@ from ..schemas import (
     PersonajesIn,
     RegenerarClipIn,
     RegenerarImagenIn,
+    ResumenEpisodioIn,
     VideoIn,
     VozGenerarIn,
     VozPersonajeIn,
@@ -53,6 +54,24 @@ def editar_guion(pid: int, body: GuionIn):
 @router.post("/{pid}/guion/regenerar")
 def regenerar_guion(pid: int):
     return {"job_id": proyectos_service.encolar_etapa(pid, "generar_guion")}
+
+
+@router.put("/{pid}/resumen")
+def editar_resumen(pid: int, body: ResumenEpisodioIn):
+    """Corrige en qué quedó el episodio: es lo que leerá el guion del siguiente."""
+    try:
+        return {"resumen": proyectos_service.editar_resumen_episodio(pid, body.resumen)}
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+    except proyectos_service.NoEsEpisodio:
+        raise HTTPException(400, "Este proyecto no es un episodio de ninguna serie")
+
+
+@router.post("/{pid}/resumen")
+def generar_resumen(pid: int):
+    """Reescribe el resumen con el LLM. Sale solo al armar el vídeo del
+    episodio; esto es para rehacerlo tras cambiar el guion."""
+    return {"job_id": proyectos_service.encolar_etapa(pid, "generar_resumen_episodio")}
 
 
 @router.post("/{pid}/metadatos")

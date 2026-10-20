@@ -16,6 +16,7 @@ from ..repositories import musica as musica_repo
 from ..repositories import personajes as personajes_repo
 from ..repositories import plantillas as plantillas_repo
 from ..repositories import proyectos as proyectos_repo
+from ..repositories import series as series_repo
 from ..repositories import voces as voces_repo
 from ..services import voces as voces_service
 from ..services.pipeline import casting
@@ -30,7 +31,7 @@ TIPOS_JOB_PROYECTO = [
     "generar_escenas", "generar_imagenes", "generar_upscale", "generar_clips",
     "generar_i2v", "armar_video", "armar_estatico",
     "regenerar_imagen", "regenerar_clip", "generar_clips_mixto",
-    "generar_musica_proyecto",
+    "generar_musica_proyecto", "generar_resumen_episodio",
 ]
 
 # Jobs de la cola que trabajan sobre una pista de música (su ref_id es el id de
@@ -70,9 +71,14 @@ def listar() -> list[dict]:
         out = []
         for p in proyectos_repo.listar(s):
             idea = ideas_repo.obtener(s, p.idea_id)
+            serie = series_repo.obtener(s, p.serie_id) if p.serie_id else None
             out.append({
                 "id": p.id, "slug": p.slug, "estado": p.estado,
                 "plantilla": p.plantilla, "titulo": idea.titulo if idea else "",
+                # Nombre de la serie y número de episodio, o None: el listado
+                # distingue un episodio de un vídeo suelto de un vistazo.
+                "serie": serie.nombre if serie else None,
+                "episodio": p.episodio,
             })
         return out
 
@@ -103,6 +109,32 @@ def _escena_dict(e, base_dir, en_cola=None) -> dict:
         # 'imagen' | 'clip' si esta escena tiene una regeneración esperando en
         # la cola; None si no.
         "en_cola": (en_cola or {}).get(e.orden),
+    }
+
+
+def _serie_dict(s, p) -> dict | None:
+    """De qué serie es episodio este proyecto, o None si es un vídeo suelto.
+
+    Lleva el número del episodio anterior y su resumen porque es lo que el
+    usuario necesita ver al escribir este: es el contexto que el LLM ya está
+    usando, y si está mal es ahí donde se corrige.
+    """
+    if p.serie_id is None:
+        return None
+    serie = series_repo.obtener(s, p.serie_id)
+    if serie is None:
+        return None
+    previo = series_repo.anterior(s, p.serie_id, p.episodio)
+    return {
+        "id": serie.id,
+        "nombre": serie.nombre,
+        "slug": serie.slug,
+        "episodio": p.episodio,
+        "anterior": (
+            {"episodio": previo.episodio,
+             "resumen": (previo.resumen_episodio or "").strip()}
+            if previo else None
+        ),
     }
 
 
@@ -186,6 +218,10 @@ def detalle(pid: int) -> dict:
         return {
             "id": p.id, "slug": p.slug, "estado": p.estado,
             "plantilla": p.plantilla, "voz": p.voz, "voz_instruct": voz_instruct,
+            # None = vídeo suelto. Con serie, la UI dice de qué episodio se
+            # trata y abre el paso de cerrarlo.
+            "serie": _serie_dict(s, p),
+            "resumen_episodio": p.resumen_episodio or "",
             "idea": {"titulo": idea.titulo, "gancho": idea.gancho,
                      "resumen": idea.resumen} if idea else None,
             "guion": guion_dict,
@@ -230,6 +266,28 @@ def editar_guion(pid: int, contenido: dict) -> int:
         avanzar_estado(p, "GUION")
         s.commit()
         return g.version
+
+
+class NoEsEpisodio(ValueError):
+    pass
+
+
+def editar_resumen_episodio(pid: int, texto: str) -> str:
+    """Corrige a mano en qué quedó el episodio.
+
+    El resumen lo escribe el LLM al cerrar el episodio, pero es lo que el guion
+    del siguiente va a dar por cierto: si se queda sin revisar, un detalle
+    inventado se vuelve canon de la serie. Por eso se edita como el guion.
+    """
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        if p.serie_id is None:
+            raise NoEsEpisodio(pid)
+        p.resumen_episodio = texto.strip()
+        s.commit()
+        return p.resumen_episodio
 
 
 def seleccionar_voz(pid: int, voz_slug: str) -> None:

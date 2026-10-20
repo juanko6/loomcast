@@ -15,6 +15,7 @@ from .routers import (
     musica,
     proyectos,
     reparto,
+    series,
     sistema,
     temas,
     voces,
@@ -66,6 +67,7 @@ app.include_router(temas.router)
 app.include_router(ideas.router)
 app.include_router(voces.router)
 app.include_router(reparto.router)
+app.include_router(series.router)
 app.include_router(proyectos.router)
 app.include_router(jobs.router)
 app.include_router(galeria.router)

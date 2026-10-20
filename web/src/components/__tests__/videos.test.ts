@@ -15,7 +15,7 @@ function proyecto(extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle {
     guion: null, guion_version: 0, metadatos: null, voz_disponible: false, voz_version: 0,
     subtitulos: null, escenas: [], personajes: [], imagenes_completas: false,
     video_disponible: false, versiones: [], jobs_activos: 0, job_activo: null,
-    musica: null, musica_mezclar: false, ...extra,
+    musica: null, musica_mezclar: false, serie: null, resumen_episodio: "", ...extra,
   };
 }
 

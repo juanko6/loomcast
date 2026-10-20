@@ -17,7 +17,14 @@ def test_migrar_anade_columnas_a_una_bd_antigua(engine):
         assert "voz" in cols
         # La música del proyecto: su pista y si el armado la mezcla.
         assert "musica_id" in cols and "musica_mezclar" in cols
-        assert c.execute(text("SELECT slug FROM proyectos")).scalar() == "viejo"
+        # Y de qué serie es episodio. Un proyecto de antes de las series se
+        # queda sin serie y con el episodio en 0, que es la verdad: es un vídeo
+        # suelto y el pipeline lo trata como siempre.
+        assert {"serie_id", "episodio", "resumen_episodio"} <= set(cols)
+        fila = c.execute(text(
+            "SELECT slug, serie_id, episodio, resumen_episodio FROM proyectos"
+        )).one()
+        assert fila == ("viejo", None, 0, "")
 
 
 def test_migrar_anade_los_intentos_a_los_jobs_viejos(engine):

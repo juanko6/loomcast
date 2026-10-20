@@ -13,7 +13,7 @@ from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
-from . import _mezcla
+from . import _marca, _mezcla
 from . import _subtitulos_render as subs
 from ._ffmpeg import archivar_final, args_video, duracion, sin_restos
 
@@ -74,6 +74,13 @@ def armar_video(proyecto_id: int) -> str:
     for i, b in enumerate(bloques):
         _rasterizar_transparente(b["texto"], fuente, color, borde, subs_dir / f"{i:03d}.png")
 
+    # Marca de episodio: vacía si el proyecto no es de una serie, y entonces no
+    # se añade ni la entrada ni el overlay (el montaje de un vídeo suelto no
+    # cambia en nada).
+    marca = _marca.de_proyecto(proyecto_id)
+    if marca:
+        _marca.rasterizar(marca, fuente, color, borde, base / "marca.png")
+
     cmd = ["ffmpeg", "-loglevel", "error", "-y",
            "-f", "concat", "-safe", "0", "-i", "clips_concat.txt"]
     for i in range(len(bloques)):
@@ -83,8 +90,18 @@ def armar_video(proyecto_id: int) -> str:
     idx_musica = idx_audio + 1
     if musica:
         cmd += ["-i", str(musica)]
+    # La marca va de última entrada para no mover los índices del audio, que es
+    # lo que la cadena de mezcla tiene que saber.
+    idx_marca = (idx_musica if musica else idx_audio) + 1
+    if marca:
+        cmd += ["-loop", "1", "-i", "marca.png"]
 
     cadena, prev = [], "[0:v]"
+    if marca:
+        # Sin `enable`: la marca está todo el vídeo. Va antes de los subtítulos
+        # para que, si alguno subiera hasta ahí, se dibuje encima de ella.
+        cadena.append(f"{prev}[{idx_marca}:v]overlay=0:0[marca]")
+        prev = "[marca]"
     for i, b in enumerate(bloques):
         etiqueta = f"[o{i}]"
         cadena.append(
@@ -136,5 +153,6 @@ def armar_video(proyecto_id: int) -> str:
     cola = objetivo - dur_audio
     guardado = f"; el anterior queda en versiones/{archivada}" if archivada else ""
     con_musica = f"; con música ({musica.parent.name})" if musica else ""
+    con_marca = f"; marcado «{marca}»" if marca else ""
     return (f"Video (movimiento): {len(ordenes)} escenas, {objetivo:.1f}s "
-            f"({cola:.1f}s tras la voz) → final.mp4{con_musica}{guardado}")
+            f"({cola:.1f}s tras la voz) → final.mp4{con_musica}{con_marca}{guardado}")

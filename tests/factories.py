@@ -4,6 +4,7 @@ from backend.repositories import ideas as ideas_repo
 from backend.repositories import personajes as personajes_repo
 from backend.repositories import proyectos as proyectos_repo
 from backend.repositories import reparto as reparto_repo
+from backend.repositories import series as series_repo
 from backend.repositories import temas as temas_repo
 
 
@@ -42,6 +43,28 @@ def personaje(s, proyecto_id, clave="ANA", nombre="Ana",
     personajes_repo.crear(s, proyecto_id, clave, nombre, ficha, 1, tipo,
                           reparto_slug=reparto_slug, voz=voz)
     s.commit()
+
+
+def serie(s, nombre="La casa de Alicia", plantilla="serie", slug="la-casa-de-alicia"):
+    """Una serie con su tema, como la crea el servicio."""
+    t = temas_repo.crear(s, nombre, plantilla)
+    s.flush()
+    x = series_repo.crear(s, slug, nombre, plantilla, t.id)
+    s.commit()
+    return x
+
+
+def episodio(s, serie, numero=1, slug=None, titulo=None, resumen=""):
+    """Un proyecto que es episodio `numero` de `serie` (su idea cuelga del tema
+    de la serie, como en el flujo real)."""
+    i = ideas_repo.crear(s, serie.tema_id, titulo or f"Episodio {numero}", "G", "R")
+    s.flush()
+    p = proyectos_repo.crear(s, i.id, slug or f"ep-{numero}", serie.plantilla)
+    p.serie_id = serie.id
+    p.episodio = numero
+    p.resumen_episodio = resumen
+    s.commit()
+    return p
 
 
 def miembro_reparto(s, slug="ana-narradora", nombre="Ana narradora",

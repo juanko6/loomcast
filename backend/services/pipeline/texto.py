@@ -19,6 +19,7 @@ from ...schemas import (
     IdeasLLM,
     TituloLLM,
 )
+from . import series as series_pipeline
 
 N_IDEAS = 8
 # Qué esquema de guion pide cada `formato_guion` de la plantilla. Lo que no esté
@@ -74,6 +75,12 @@ def generar_guion(proyecto_id: int) -> str:
         f"Idea del video:\n- Título: {titulo}\n"
         f"- Gancho propuesto: {gancho}\n- Resumen: {resumen}"
     )
+    # Si el proyecto es un episodio, detrás de la idea va la continuidad: el
+    # reparto fijo de la serie y qué pasó en el episodio anterior. Para un vídeo
+    # suelto es cadena vacía y la petición es byte a byte la de siempre.
+    continuidad = series_pipeline.contexto_continuidad(proyecto_id)
+    if continuidad:
+        user = f"{user}\n\n{continuidad}"
     # La plantilla elige el formato: frases, narración continua o líneas
     # atribuidas a un personaje.
     esquema = ESQUEMA_GUION.get(pl.get("formato_guion"), GuionLLM)

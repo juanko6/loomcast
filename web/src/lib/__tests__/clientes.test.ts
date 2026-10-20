@@ -13,6 +13,7 @@ import { api, apiForm } from "../api";
 import * as galeria from "../galeria";
 import * as musica from "../musica";
 import * as p from "../proyectos";
+import * as series from "../series";
 import { icons, filledIcons } from "../icons";
 
 const apiMock = vi.mocked(api);
@@ -114,6 +115,29 @@ describe("música", () => {
   });
 });
 
+describe("series", () => {
+  it.each([
+    ["listarSeries", () => series.listarSeries(), "/series", undefined],
+    ["detalleSerie", () => series.detalleSerie(7), "/series/7", undefined],
+    ["crearSerie", () => series.crearSerie("La casa", "serie"), "/series",
+      { method: "POST", body: { nombre: "La casa", plantilla: "serie" } }],
+    ["borrarSerie", () => series.borrarSerie(7), "/series/7", { method: "DELETE" }],
+    ["anadirMiembroSerie", () => series.anadirMiembroSerie(7, "ana"), "/series/7/miembros",
+      { method: "POST", body: { reparto_slug: "ana" } }],
+    ["quitarMiembroSerie", () => series.quitarMiembroSerie(7, "ana"),
+      "/series/7/miembros/ana", { method: "DELETE" }],
+    ["crearEpisodio con apunte", () => series.crearEpisodio(7, "Ana vuelve"),
+      "/series/7/episodios", { method: "POST", body: { apunte: "Ana vuelve" } }],
+    // Sin apunte el cuerpo va vacío: el episodio lo propone el LLM desde el
+    // resumen del anterior.
+    ["crearEpisodio sin apunte", () => series.crearEpisodio(7), "/series/7/episodios",
+      { method: "POST", body: { apunte: "" } }],
+  ])("%s", async (_n, llamar, ruta, opts) => {
+    await llamar();
+    expect(ultima()).toEqual(opts === undefined ? [ruta] : [ruta, opts]);
+  });
+});
+
 describe("proyectos", () => {
   it("temas e ideas", async () => {
     await p.crearTema("el espacio", "drama");
@@ -145,6 +169,11 @@ describe("proyectos", () => {
     expect(ultima()).toEqual(["/proyectos/1/voz", { method: "PUT", body: { voz: "ana" } }]);
     await p.generarVoz(1, "design", "grave");
     expect(ultima()).toEqual(["/proyectos/1/voz", { method: "POST", body: { modo: "design", instruct: "grave" } }]);
+    // Cierre del episodio: editarlo a mano y pedir que lo reescriba el LLM.
+    await p.editarResumen(1, "Pasó esto.");
+    expect(ultima()).toEqual(["/proyectos/1/resumen", { method: "PUT", body: { resumen: "Pasó esto." } }]);
+    await p.generarResumen(1);
+    expect(ultima()).toEqual(["/proyectos/1/resumen", { method: "POST" }]);
   });
 
   it("personajes y retratos", async () => {

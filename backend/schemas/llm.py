@@ -68,6 +68,18 @@ class GuionLineasLLM(BaseModel):
     voz_instruct: str = Field(min_length=1)
 
 
+class ResumenEpisodioLLM(BaseModel):
+    """En qué quedó un episodio, para que el siguiente lo sepa.
+
+    Un solo campo a propósito: es un texto que el usuario va a leer y corregir
+    antes de que entre en el guion del capítulo que viene, y partirlo en "qué
+    pasó" y "qué queda abierto" obligaría a editar dos cajas para arreglar una
+    misma frase. Lo que tiene que llevar lo dicta el prompt.
+    """
+
+    resumen: str = Field(min_length=40, max_length=1200)
+
+
 class TituloLLM(BaseModel):
     # El prompt pide 35-55 chars (máx 65); el margen evita rechazar por poco
     titulo: str = Field(min_length=10, max_length=80)

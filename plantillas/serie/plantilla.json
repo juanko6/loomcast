@@ -1,0 +1,21 @@
+{
+  "nombre": "serie",
+  "descripcion": "Un episodio de una historia que continúa: el mismo reparto en cada capítulo, algo que pasa hoy y un hilo que queda abierto para el siguiente. Ficción contemporánea, con el narrador llevando el relato y los personajes diciendo sus frases.",
+  "formato_guion": "lineas",
+  "voz": {
+    "instruct": "Voz neutra en español, adulta joven, cercana y narrativa, de quien cuenta por capítulos lo que le está pasando a gente que el espectador ya conoce; ritmo ágil que se frena antes de lo que importa, dicción clara y complicidad contenida, sin tono de anuncio.",
+    "language": "Spanish"
+  },
+  "estilo_visual": "cinematic contemporary storytelling photography, natural motivated light, lived-in everyday locations, desaturated teal and amber palette, soft film grain, shallow depth of field, vertical composition",
+  "subtitulos": {
+    "max_palabras_por_bloque": 3,
+    "fuente": "Montserrat ExtraBold",
+    "color": "#F6F1E7",
+    "borde": "#000000"
+  },
+  "ritmo": {
+    "duracion_objetivo_s": 50,
+    "duracion_escena_s": 4,
+    "atempo": 1.0
+  }
+}

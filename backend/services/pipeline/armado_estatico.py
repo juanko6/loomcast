@@ -13,7 +13,7 @@ from ...models import avanzar_estado
 from ...repositories import escenas as escenas_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
-from . import _mezcla
+from . import _marca, _mezcla
 from . import _subtitulos_render as subs
 from ._ffmpeg import archivar_final, args_video, duracion, sin_restos
 
@@ -51,6 +51,9 @@ def armar_estatico(proyecto_id: int) -> str:
     color, borde = sub_cfg.get("color", "#FFFFFF"), sub_cfg.get("borde", "#000000")
 
     bloques = subs.srt_a_bloques(base / "subtitulos.srt")
+    # Marca de episodio: vacía si el proyecto no es de una serie, y entonces los
+    # stills se estampan exactamente como siempre.
+    marca = _marca.de_proyecto(proyecto_id)
     dur_audio = sf.info(base / "voz.wav").duration
 
     # Cortes de la línea de tiempo: fronteras de escena y de subtítulo
@@ -93,6 +96,10 @@ def armar_estatico(proyecto_id: int) -> str:
         if clave not in stills:
             nombre = f"{len(stills):03d}.png"
             img = fondo(e["orden"]).copy()
+            # Aquí no hay overlay de ffmpeg que valga para todo el vídeo: cada
+            # still es una imagen aparte, así que la marca se dibuja en todas.
+            if marca:
+                _marca.dibujar(img, marca, fuente, color, borde)
             if texto:
                 subs.dibujar_subtitulo(img, texto, fuente, color, borde)
             img.save(armado_dir / nombre)
@@ -137,5 +144,7 @@ def armar_estatico(proyecto_id: int) -> str:
         s.commit()
     guardado = f"; el anterior queda en versiones/{archivada}" if archivada else ""
     con_musica = f"; con música ({musica.parent.name})" if musica else ""
+    con_marca = f"; marcado «{marca}»" if marca else ""
     return (f"Video (estático): {len(escenas)} escenas, {objetivo:.1f}s "
-            f"({VIDEO_COLA_FINAL_S:.1f}s tras la voz) → final.mp4{con_musica}{guardado}")
+            f"({VIDEO_COLA_FINAL_S:.1f}s tras la voz) → "
+            f"final.mp4{con_musica}{con_marca}{guardado}")

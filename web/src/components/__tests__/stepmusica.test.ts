@@ -13,6 +13,7 @@ const proy = (extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle => ({
   idea: null, guion: { gancho: "g", cta: "c" }, guion_version: 1, metadatos: null,
   voz_disponible: true, voz_version: 0, subtitulos: null, escenas: [], personajes: [],
   imagenes_completas: false, musica: null, musica_mezclar: false, video_disponible: false,
+  serie: null, resumen_episodio: "",
   versiones: [], jobs_activos: 0, job_activo: null, ...extra,
 });
 

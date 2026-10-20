@@ -297,7 +297,8 @@ def test_borrar_no_rompe_los_proyectos_que_ya_se_lo_trajeron(client, session, pr
 
     r = client.delete("/api/reparto/ana-narradora")
 
-    assert r.json() == {"slug": "ana-narradora", "personajes_desvinculados": 1}
+    assert r.json() == {"slug": "ana-narradora", "personajes_desvinculados": 1,
+                        "series_desvinculadas": 0}
     assert not (dirs_tmp["reparto"] / "ana-narradora").exists()
     session.expire_all()
     p = personajes_repo.por_proyecto(session, proy.id)[0]

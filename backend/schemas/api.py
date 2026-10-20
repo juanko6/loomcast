@@ -36,6 +36,37 @@ class GuionIn(BaseModel):
     lineas: list[LineaGuionIn] = []
 
 
+class SerieIn(BaseModel):
+    """Una serie nueva: su nombre y la plantilla con la que se cuenta.
+
+    La plantilla no se pide por episodio a propósito (ver models/serie.py): es
+    la que decide el nicho, el formato de guion y los ocho prompts de todos.
+    """
+    nombre: str = Field(min_length=1, max_length=120)
+    plantilla: str = "serie"
+
+
+class SerieMiembroIn(BaseModel):
+    # Slug de alguien del reparto propio, que pasa a salir en todos los
+    # episodios siguientes.
+    reparto_slug: str = Field(min_length=1)
+
+
+class EpisodioNuevoIn(BaseModel):
+    """Opcional: una línea de dirección para el episodio.
+
+    Vacío = lo propone el LLM desde el resumen del episodio anterior, que es
+    para lo que se escribe ese resumen.
+    """
+    apunte: str = ""
+
+
+class ResumenEpisodioIn(BaseModel):
+    # En qué quedó el episodio, corregido a mano. Es lo que el guion del
+    # siguiente dará por cierto.
+    resumen: str = ""
+
+
 class VozNuevaIn(BaseModel):
     nombre: str
     instruct: str

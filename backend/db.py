@@ -27,10 +27,16 @@ def _migrar() -> None:
             c.execute(text("ALTER TABLE proyectos ADD COLUMN voz VARCHAR"))
             c.commit()
 
-        # La pista de música del proyecto y si se mezcla en el video final.
+        # La pista de música del proyecto y si se mezcla en el video final, y
+        # de qué serie es episodio. Los proyectos de antes de las series se
+        # quedan con serie_id NULL y episodio 0, que es la verdad: son vídeos
+        # sueltos y el pipeline los trata como siempre.
         nuevas = {
             "musica_id": "INTEGER",
             "musica_mezclar": "BOOLEAN DEFAULT 0",
+            "serie_id": "INTEGER",
+            "episodio": "INTEGER DEFAULT 0",
+            "resumen_episodio": "TEXT DEFAULT ''",
         }
         for col, tipo in nuevas.items():
             if col not in cols:

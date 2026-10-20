@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, now_utc
@@ -31,6 +31,23 @@ class Proyecto(Base):
     # música y mezclarla son decisiones distintas: lo normal es querer la pista
     # aparte, y el vídeo con música es opcional.
     musica_mezclar: Mapped[bool] = mapped_column(default=False)
+    # Serie de la que este proyecto es un episodio. None = vídeo suelto, que es
+    # lo que son todos los de antes de la Fase 8 y lo que sigue siendo cualquier
+    # proyecto creado desde un tema sin serie: sin estas tres columnas puestas,
+    # el pipeline hace exactamente lo de siempre.
+    serie_id: Mapped[int | None] = mapped_column(
+        ForeignKey("series.id"), default=None
+    )
+    # Número de episodio dentro de la serie (1, 2, 3…). 0 = no es un episodio.
+    # Es el que se estampa en el vídeo y el que ordena la continuidad; no se
+    # recalcula al borrar un episodio del medio, porque el episodio 4 ya se
+    # publicó llamándose 4.
+    episodio: Mapped[int] = mapped_column(default=0)
+    # Qué pasó en este episodio, para que el siguiente lo sepa. Lo escribe el
+    # LLM al cerrarlo y es editable como el resto de los textos del proyecto: la
+    # continuidad de una serie no puede depender de un resumen que nadie puede
+    # corregir. Vacío = sin cerrar todavía (o proyecto suelto).
+    resumen_episodio: Mapped[str] = mapped_column(Text, default="")
     estado: Mapped[str] = mapped_column(default="IDEA")
     created_at: Mapped[datetime] = mapped_column(default=now_utc)
 

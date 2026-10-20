@@ -33,7 +33,9 @@ def test_listar_vacio(client):
 def test_listar_incluye_titulo_de_la_idea(client, proy):
     assert client.get("/api/proyectos").json() == [
         {"id": proy.id, "slug": "demo", "estado": "IDEA",
-         "plantilla": "curiosidades", "titulo": "Una idea"}]
+         "plantilla": "curiosidades", "titulo": "Una idea",
+         # Un vídeo suelto: sin serie y sin número de episodio.
+         "serie": None, "episodio": 0}]
 
 
 def test_detalle_inexistente_404(client):
