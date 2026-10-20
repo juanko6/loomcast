@@ -30,4 +30,9 @@ class Plantilla(BaseModel):
     # "frases": guion como {gancho, frases[], cta} (por defecto).
     # "narracion": guion como {narracion} — un párrafo hablado continuo que el
     # TTS lee de corrido, para storytelling sin cadencia de lista leída.
-    formato_guion: str = Field(default="frases", pattern="^(frases|narracion)$")
+    # "lineas": guion como {lineas[]} — narración con líneas atribuidas a un
+    # personaje del reparto, que las dice con su propia voz. Ninguna plantilla
+    # lo usa todavía: la capacidad está para las series (Fase 8).
+    formato_guion: str = Field(
+        default="frases", pattern="^(frases|narracion|lineas)$"
+    )

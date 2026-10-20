@@ -31,9 +31,16 @@ def reemplazar_todos(s: Session, proyecto_id: int,
     manda el del reparto y el del LLM se descarta, porque tener una ficha
     canónica que no deriva entre vídeos es justo para lo que se guardó.
 
+    **Y con otra: la voz asignada a mano sobrevive por clave.** Elegirle voz a
+    un personaje es una decisión del usuario, no algo que el LLM vuelva a
+    escribir; perderla al regenerar los prompts sería el mismo error que perder
+    a los traídos del reparto propio, solo que más difícil de notar (se oiría al
+    generar la narración).
+
     Devuelve el reparto resultante en orden: primero los conservados.
     """
     conservados = [p for p in por_proyecto(s, proyecto_id) if p.reparto_slug]
+    voces = {p.clave: p.voz for p in por_proyecto(s, proyecto_id) if p.voz}
     (
         s.query(Personaje)
         .filter(Personaje.proyecto_id == proyecto_id, Personaje.reparto_slug == "")
@@ -50,6 +57,7 @@ def reemplazar_todos(s: Session, proyecto_id: int,
         ocupadas.add(datos["clave"])
         filas.append(Personaje(
             proyecto_id=proyecto_id,
+            voz=voces.get(datos["clave"], ""),
             **{**datos, "orden": len(conservados) + len(filas)},
         ))
     s.add_all(filas)
@@ -74,12 +82,12 @@ def clave_libre(s: Session, proyecto_id: int, clave: str) -> str:
 
 def crear(s: Session, proyecto_id: int, clave: str, nombre: str,
           ficha: str, seed: int, tipo: str = "persona",
-          reparto_slug: str = "") -> Personaje:
+          reparto_slug: str = "", voz: str = "") -> Personaje:
     """Añade un personaje al reparto, detrás de los que ya hay."""
     orden = 1 + max((p.orden for p in por_proyecto(s, proyecto_id)), default=-1)
     fila = Personaje(proyecto_id=proyecto_id, orden=orden, clave=clave,
                      nombre=nombre, ficha=ficha, seed=seed, tipo=tipo,
-                     reparto_slug=reparto_slug)
+                     reparto_slug=reparto_slug, voz=voz)
     s.add(fila)
     return fila
 
@@ -102,6 +110,18 @@ def por_proyecto(s: Session, proyecto_id: int) -> list[Personaje]:
         .filter(Personaje.proyecto_id == proyecto_id)
         .order_by(Personaje.orden)
         .all()
+    )
+
+
+def desvincular_voz(s: Session, voz_slug: str) -> int:
+    """Deja sin voz a los personajes que usaban `voz_slug` (al borrarla del
+    banco). Sin esto sus líneas apuntarían a un `ref.wav` que ya no existe y la
+    etapa de voz las daría por mudas sin decir por qué. Mismo criterio que
+    `desvincular_voz` de proyectos y del reparto propio."""
+    return (
+        s.query(Personaje)
+        .filter(Personaje.voz == voz_slug)
+        .update({Personaje.voz: ""}, synchronize_session=False)
     )
 
 

@@ -105,6 +105,8 @@
         oncrearvoz={acciones.crearVoz}
         onclonarvoz={acciones.clonarVoz}
         onborrarvoz={acciones.borrarVoz}
+        onvozpersonaje={acciones.vozPersonaje}
+        oncrearvozpersonaje={acciones.crearVozPersonaje}
       />
     {:else if activo === "metadatos"}
       <StepMetadatos {p} {busy} ongenerar={acciones.generarMetadatos} />

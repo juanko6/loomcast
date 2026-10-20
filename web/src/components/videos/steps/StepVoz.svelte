@@ -18,6 +18,8 @@
     oncrearvoz,
     onclonarvoz,
     onborrarvoz,
+    onvozpersonaje,
+    oncrearvozpersonaje,
   }: {
     p: ProyectoDetalle;
     voces: Voz[];
@@ -27,10 +29,23 @@
     oncrearvoz: (nombre: string, instruct: string) => void;
     onclonarvoz: (nombre: string, audio: File, inicio: number, fin: number) => void;
     onborrarvoz: (slug: string, nombre: string) => void;
+    onvozpersonaje: (clave: string, voz: string) => void;
+    oncrearvozpersonaje: (clave: string) => void;
   } = $props();
 
   const disponibles = $derived(voces.filter((v) => v.disponible));
   const vozSel = $derived(disponibles.find((v) => v.slug === p.voz));
+
+  // El guion trae líneas atribuidas, así que hay personajes que hablan. El
+  // reparto se fija en el paso de Escenas, de modo que aquí puede no haber
+  // nadie todavía: por eso se avisa en vez de no enseñar nada.
+  const conLineas = $derived((p.guion?.lineas ?? []).length > 0);
+
+  // Qué voz dice las líneas de cada personaje, resuelta contra el banco: una
+  // voz recién creada desde su ficha está "generando" y todavía no sirve.
+  const vozDe = (clave: string) => voces.find((v) => v.slug === vozDelPersonaje(clave));
+  const vozDelPersonaje = (clave: string) =>
+    p.personajes.find((c) => c.clave === clave)?.voz ?? "";
 
   // Instrucción de la narración expresiva (borrador de sesión).
   let instruct = $state("");
@@ -122,6 +137,70 @@
     <textarea class="control" rows="3" bind:value={instruct}
       placeholder="Cómo debe contar: tono, ritmo, emoción, pausas…"></textarea>
   </Field>
+
+  <!-- Voces del reparto: quién dice sus líneas con su propia voz -->
+  {#if p.personajes.length || conLineas}
+    <div class="space-y-3 rounded-lg border border-line bg-surface-2 p-3">
+      <div>
+        <p class="text-sm">Voces del reparto</p>
+        <p class="text-xs text-muted">
+          Lo que no tenga voz propia lo narra la voz del proyecto. Su voz sale del banco,
+          se puede crear desde su ficha, y <strong>viaja con él</strong> si lo guardas en el
+          reparto propio.
+        </p>
+      </div>
+
+      {#each p.personajes as c (c.clave)}
+        {@const v = vozDe(c.clave)}
+        <div class="flex flex-wrap items-center gap-2 text-sm">
+          <span class="min-w-0 flex-1 truncate">
+            {c.nombre || c.clave}
+            <span class="font-mono text-xs text-dim">{"{" + c.clave + "}"}</span>
+            {#if v && v.estado !== "lista"}
+              <span class="text-xs text-muted">({v.estado})</span>
+            {/if}
+          </span>
+          <select
+            class="control w-56"
+            aria-label={`Voz de ${c.clave}`}
+            value={vozDelPersonaje(c.clave)}
+            onchange={(e) =>
+              onvozpersonaje(c.clave, (e.currentTarget as HTMLSelectElement).value)}
+          >
+            <option value="">— la del narrador —</option>
+            {#each disponibles as o (o.slug)}
+              <option value={o.slug}>{o.nombre}</option>
+            {/each}
+            <!-- La recién encolada todavía no está disponible, pero ya es la
+                 suya: sin esto el selector la enseñaría como "la del narrador". -->
+            {#if v && !v.disponible}
+              <option value={v.slug}>{v.nombre} ({v.estado})</option>
+            {/if}
+          </select>
+          {#if !c.voz}
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!c.ficha.trim()}
+              onclick={() => oncrearvozpersonaje(c.clave)}
+              title={c.ficha.trim()
+                ? "Crea su voz en el banco con VoiceDesign, escrita desde su ficha"
+                : "Sin ficha no hay de dónde escribir su voz"}
+            >
+              Crear desde su ficha
+            </Button>
+          {/if}
+        </div>
+      {/each}
+
+      {#if !p.personajes.length}
+        <p class="text-xs text-muted">
+          Este guion tiene líneas atribuidas, pero el reparto todavía no está fijado: se
+          hace en el paso «Escenas e imágenes». Hasta entonces las dirá la voz del proyecto.
+        </p>
+      {/if}
+    </div>
+  {/if}
 
   {#if p.voz_disponible}
     <Field label="Narración generada">

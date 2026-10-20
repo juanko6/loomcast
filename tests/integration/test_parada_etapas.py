@@ -132,24 +132,63 @@ def test_parar_antes_de_sintetizar_la_voz_no_deja_audio(
 
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="sin ffmpeg")
-def test_si_la_voz_ya_estaba_sintetizandose_el_log_lo_dice_y_no_encadena(
+def test_parar_mientras_carga_el_modelo_corta_antes_de_sintetizar(
     cola, session, dirs_tmp, fake_tts, monkeypatch
 ):
-    """La síntesis es una sola llamada a PyTorch: no se puede partir. Lo honesto
-    es terminarla (su audio vale), no encadenar los subtítulos y decir en el log
-    que la parada llegó tarde, en vez de aparentar que cortó."""
+    """Cargar el modelo es lo caro de arrancar, pero sintetizar es lo caro de
+    verdad: una parada que llega durante la carga se atiende antes del primer
+    tramo y no se paga ninguna síntesis."""
     from backend.clients import tts
 
     p = _proyecto_con_guion(session)
     # Se parchea el módulo, no el fake: la etapa resuelve `tts.cargar_modelo`
     # ahí (es lo que hace la fixture `fake_tts` para instalar el doble).
-    sintetizar = tts.cargar_modelo
+    cargar = tts.cargar_modelo
 
     def cargar_y_parar(repo):
-        jobs_service.parar()        # el botón, con la síntesis ya en marcha
-        return sintetizar(repo)
+        jobs_service.parar()        # el botón, con el modelo ya cargándose
+        return cargar(repo)
 
     monkeypatch.setattr(tts, "cargar_modelo", cargar_y_parar)
+    jid = queue.encolar("generar_voz", p.id, modo="design")
+
+    queue._procesar(queue._cola.get())
+
+    estado, log = _estado(jid)
+    assert estado == "cancelado" and "Parado" in log
+    assert fake_tts.llamadas == []              # no se sintetizó nada
+    assert fake_tts.liberados == 1              # pero el modelo sí se soltó
+    assert not (dirs_tmp["proyectos"] / p.slug / "voz.wav").exists()
+    assert queue._cola.empty()                  # y no encadena subtítulos
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="sin ffmpeg")
+def test_si_el_tramo_ya_estaba_sintetizandose_el_log_lo_dice_y_no_encadena(
+    cola, session, dirs_tmp, fake_tts, monkeypatch
+):
+    """La síntesis de un tramo es una sola llamada a PyTorch: no se puede
+    partir. Lo honesto es terminarla (su audio vale), no encadenar los
+    subtítulos y decir en el log que la parada llegó tarde, en vez de aparentar
+    que cortó. Con un guion de un solo tramo —los de las plantillas de hoy— ese
+    tramo es la narración entera."""
+    from backend.clients import tts
+
+    p = _proyecto_con_guion(session)
+    cargar = tts.cargar_modelo
+
+    class ParandoAlSintetizar:
+        """El modelo de mentira, pulsando "parar" ya dentro de la síntesis."""
+
+        def __init__(self, modelo):
+            self._modelo = modelo
+
+        def generate_voice_design(self, **kw):
+            jobs_service.parar()
+            return self._modelo.generate_voice_design(**kw)
+
+    monkeypatch.setattr(
+        tts, "cargar_modelo", lambda repo: ParandoAlSintetizar(cargar(repo))
+    )
     jid = queue.encolar("generar_voz", p.id, modo="design")
 
     queue._procesar(queue._cola.get())
@@ -159,3 +198,73 @@ def test_si_la_voz_ya_estaba_sintetizandose_el_log_lo_dice_y_no_encadena(
     assert "no se podía cortar a mitad" in log
     assert (dirs_tmp["proyectos"] / p.slug / "voz.wav").exists()
     assert queue._cola.empty()                  # pero no encadena subtítulos
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="sin ffmpeg")
+def test_una_narracion_por_tramos_se_corta_entre_tramos(
+    cola, session, dirs_tmp, fake_tts, monkeypatch
+):
+    """Lo que la voz por personaje trae de regalo: con varios tramos la parada
+    ya no espera a toda la narración, solo a que acabe el que está sonando. Lo
+    que quedaba no se sintetiza y no se escribe un audio a medias, que es lo que
+    se descarta al parar."""
+    import soundfile as sf2
+
+    from backend.clients import tts
+    from backend.models import Voz
+    from backend.repositories import personajes as personajes_repo
+    from backend.repositories import voces as voces_repo
+
+    p = f.proyecto(session)
+    guiones_repo.crear(session, p.id, {
+        "gancho": "Hola", "cta": "Adiós", "voz_instruct": "voz",
+        "lineas": [{"personaje": "ANA", "texto": "yo lo vi"},
+                   {"personaje": "", "texto": "y entonces se fue"}],
+    })
+    # ANA necesita voz propia para que haya tramos de verdad: sin ella sus
+    # líneas las diría el narrador y los tramos se unirían en uno.
+    for slug in ("narrador", "ana-voz"):
+        session.add(Voz(slug=slug, nombre=slug, instruct="x", estado="lista"))
+        session.commit()
+        ref = voces_repo.ruta_ref(slug)
+        ref.parent.mkdir(parents=True, exist_ok=True)
+        sf2.write(ref, [0.0] * 2400, 24000)
+    personajes_repo.crear(session, p.id, "ANA", "Ana", "a tall woman", 1,
+                          voz="ana-voz")
+    p.voz = "narrador"
+    session.commit()
+
+    cargar = tts.cargar_modelo
+    proxies = []
+
+    class ParandoEnElPrimerTramo:
+        """El modelo de mentira, pulsando "parar" dentro del primer tramo."""
+
+        def __init__(self, modelo):
+            self._modelo, self.tramos = modelo, 0
+
+        def create_voice_clone_prompt(self, **kw):
+            return self._modelo.create_voice_clone_prompt(**kw)
+
+        def generate_voice_clone(self, **kw):
+            self.tramos += 1
+            if self.tramos == 1:
+                jobs_service.parar()
+            return self._modelo.generate_voice_clone(**kw)
+
+    def cargar_proxy(repo):
+        proxies.append(ParandoEnElPrimerTramo(cargar(repo)))
+        return proxies[-1]
+
+    monkeypatch.setattr(tts, "cargar_modelo", cargar_proxy)
+    jid = queue.encolar("generar_voz", p.id)
+
+    queue._procesar(queue._cola.get())
+
+    estado, log = _estado(jid)
+    assert estado == "cancelado" and "quedaban 2 tramos" in log
+    # Solo se pagó el tramo que ya estaba en marcha, no los tres del guion
+    # (gancho, la línea de ANA, y el resto de narración con el cta pegado).
+    assert proxies[0].tramos == 1
+    assert not (dirs_tmp["proyectos"] / p.slug / "voz.wav").exists()
+    assert queue._cola.empty()

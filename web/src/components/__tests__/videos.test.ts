@@ -21,6 +21,17 @@ function proyecto(extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle {
 
 const GUION_FRASES = { gancho: "Hola", frases: ["Uno", "Dos"], cta: "Suscríbete" };
 const GUION_NARRACION = { gancho: "Hola", narracion: "Érase una vez", cta: "Fin" };
+const GUION_LINEAS = {
+  gancho: "Hola",
+  lineas: [
+    { personaje: "", texto: "lo cuento yo" },
+    { personaje: "ANA", texto: "y yo lo vi" },
+  ],
+  cta: "Fin",
+};
+const PERSONAJE = {
+  clave: "ANA", nombre: "Ana", ficha: "a tall woman", tipo: "persona", retrato: false,
+};
 
 describe("IdeasView", () => {
   const idea = (extra: Partial<Idea> = {}): Idea => ({
@@ -125,6 +136,53 @@ describe("StepGuion", () => {
     await userEvent.type(cuerpo, "!");
     await userEvent.click(screen.getByRole("button", { name: "Guardar guion" }));
     expect(onsave).toHaveBeenCalledWith({ gancho: "Hola", narracion: "Érase una vez!", cta: "Fin" });
+  });
+
+  it("formato líneas: cada tramo con su dueño, y el narrador va en blanco", async () => {
+    const onsave = vi.fn();
+    render(StepGuion, {
+      p: proyecto({ guion: GUION_LINEAS, personajes: [PERSONAJE] }),
+      onsave, onregen: vi.fn(),
+    });
+
+    expect(screen.queryByRole("button", { name: "+ Añadir frase" })).toBeNull();
+    expect((screen.getByLabelText("Personaje de la línea 1") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("Personaje de la línea 2") as HTMLInputElement).value).toBe("ANA");
+    expect((screen.getByLabelText("Texto de la línea 2") as HTMLTextAreaElement).value)
+      .toBe("y yo lo vi");
+
+    await userEvent.type(screen.getByLabelText("Texto de la línea 1"), "!");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar guion" }));
+
+    expect(onsave).toHaveBeenCalledWith({
+      gancho: "Hola",
+      cta: "Fin",
+      lineas: [
+        { personaje: "", texto: "lo cuento yo!" },
+        { personaje: "ANA", texto: "y yo lo vi" },
+      ],
+    });
+  });
+
+  it("formato líneas: añadir narración o línea de personaje, y quitar", async () => {
+    const onsave = vi.fn();
+    render(StepGuion, {
+      p: proyecto({ guion: GUION_LINEAS, personajes: [PERSONAJE] }),
+      onsave, onregen: vi.fn(),
+    });
+
+    // La línea de personaje entra con la primera clave del reparto puesta: es
+    // la que hay que escribir para que la diga su voz.
+    await userEvent.click(screen.getByRole("button", { name: "+ Añadir línea de personaje" }));
+    expect((screen.getByLabelText("Personaje de la línea 3") as HTMLInputElement).value).toBe("ANA");
+    await userEvent.click(screen.getByRole("button", { name: "+ Añadir narración" }));
+    expect((screen.getByLabelText("Personaje de la línea 4") as HTMLInputElement).value).toBe("");
+
+    await userEvent.click(screen.getAllByTitle("Quitar línea")[0]);
+    await userEvent.click(screen.getByRole("button", { name: "Guardar guion" }));
+
+    // Las dos nuevas van sin texto, así que no se guardan.
+    expect(onsave.mock.calls[0][0].lineas).toEqual([{ personaje: "ANA", texto: "y yo lo vi" }]);
   });
 
   it("regenerar avisa y 'busy' lo bloquea", async () => {

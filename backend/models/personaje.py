@@ -35,6 +35,12 @@ class Personaje(Base):
     # Semilla propia: con el mismo sujeto y la misma seed las caras se parecen
     # más entre escenas, y es la que fijará el retrato de referencia.
     seed: Mapped[int] = mapped_column(default=0)
+    # Slug de la voz del banco con la que dice sus líneas ("" = ninguna, y sus
+    # líneas las narra la voz del proyecto). Va al banco y no a un archivo
+    # propio por la misma razón que la cara va a un PNG del proyecto: una voz
+    # del banco ya se escucha, se borra y se reutiliza entre vídeos, y montar un
+    # segundo almacén de voces en paralelo solo duplicaría ese trabajo.
+    voz: Mapped[str] = mapped_column(default="")
     # Slug del miembro del reparto propio del que se trajo, o "" si nació aquí
     # (del casting o de un alta a mano). No es una referencia viva: la ficha y
     # el retrato ya están copiados y no cambian si el original cambia o se

@@ -66,6 +66,12 @@ def _migrar() -> None:
                 text("ALTER TABLE personajes ADD COLUMN tipo VARCHAR DEFAULT 'persona'")
             )
             c.commit()
+        # Con qué voz del banco dice sus líneas. Los repartos de antes de la voz
+        # por personaje se quedan en "", que es la verdad: lo narraba todo la
+        # voz del proyecto.
+        if "voz" not in cols:
+            c.execute(text("ALTER TABLE personajes ADD COLUMN voz VARCHAR DEFAULT ''"))
+            c.commit()
         # El reparto que ya existía se quedó con el default "persona", y ahí
         # había objetos: un cofre, un Motorola DynaTAC, un robot, un mapa. Con
         # ese tipo su referencia se seguiría generando con encuadre de retrato,
@@ -88,6 +94,13 @@ def _migrar() -> None:
                 {"id": pid},
             )
         if recolocadas:
+            c.commit()
+
+        # La voz del miembro del reparto propio, que viaja con él a cada vídeo
+        # nuevo igual que su ficha y su cara.
+        cols = [r[1] for r in c.execute(text("PRAGMA table_info(reparto)"))]
+        if "voz" not in cols:
+            c.execute(text("ALTER TABLE reparto ADD COLUMN voz VARCHAR DEFAULT ''"))
             c.commit()
 
         cols = [r[1] for r in c.execute(text("PRAGMA table_info(imagenes_libres)"))]

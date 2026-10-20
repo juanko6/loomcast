@@ -41,6 +41,33 @@ class GuionNarracionLLM(BaseModel):
     voz_instruct: str = Field(min_length=1)
 
 
+class LineaGuionLLM(BaseModel):
+    """Un tramo del cuerpo del guion: quién lo dice y qué dice."""
+
+    # Clave del personaje que la dice ({ANA} en los prompts de escena), o cadena
+    # vacía para el narrador. No se valida contra el reparto aquí: el casting es
+    # posterior al guion, así que la clave que escribe el LLM al escribir la
+    # historia es justo la que el casting encontrará luego en el texto.
+    personaje: str = ""
+    texto: str = Field(min_length=1)
+
+
+class GuionLineasLLM(BaseModel):
+    """Guion con líneas atribuidas (plantillas con formato_guion="lineas").
+
+    El narrador sigue llevando la historia y los personajes dicen líneas
+    puntuales: no es un diálogo por turnos. El cuerpo es la lista de tramos en
+    orden, cada uno con su dueño; el gancho y el cta siguen siendo campos
+    propios y los dice el narrador, como en los otros dos formatos.
+    """
+    gancho: str = Field(min_length=1)
+    lineas: list[LineaGuionLLM] = Field(min_length=1)
+    cta: str = Field(min_length=1)
+    # Instrucción de voz (4 bloques) adaptada a esta historia; la usa el modo de
+    # narración "design" (VoiceDesign) para que la entrega encaje con el relato.
+    voz_instruct: str = Field(min_length=1)
+
+
 class TituloLLM(BaseModel):
     # El prompt pide 35-55 chars (máx 65); el margen evita rechazar por poco
     titulo: str = Field(min_length=10, max_length=80)

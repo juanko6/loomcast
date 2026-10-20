@@ -19,13 +19,21 @@ class EstadoIdeaIn(BaseModel):
     estado: str  # propuesta | aprobada | descartada
 
 
+class LineaGuionIn(BaseModel):
+    # Clave del personaje que la dice; vacío = narrador. Se normaliza en el
+    # servicio, igual que al escribirla el LLM.
+    personaje: str = ""
+    texto: str = ""
+
+
 class GuionIn(BaseModel):
-    # Dos formas según la plantilla: {gancho, frases[], cta} o {narracion}.
-    # Todos opcionales para que la edición admita cualquiera de las dos.
+    # Tres formas según la plantilla: {gancho, frases[], cta}, {narracion} o
+    # {lineas[]}. Todos opcionales para que la edición admita cualquiera.
     gancho: str = ""
     frases: list[str] = []
     cta: str = ""
     narracion: str = ""
+    lineas: list[LineaGuionIn] = []
 
 
 class VozNuevaIn(BaseModel):
@@ -45,6 +53,15 @@ class VozGenerarIn(BaseModel):
 
 class VozSeleccionIn(BaseModel):
     voz: str  # slug de la voz del banco
+
+
+class VozPersonajeIn(BaseModel):
+    """Qué voz del banco dice las líneas de un personaje del reparto.
+
+    Cadena vacía = se queda sin voz propia y sus líneas las narra la voz del
+    proyecto, que es el comportamiento de siempre.
+    """
+    voz: str = ""
 
 
 class MusicaProyectoIn(BaseModel):

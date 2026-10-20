@@ -1,7 +1,19 @@
-"""Etapa 4 — VOZ: narra el guion COMPLETO en una sola pasada y aplica atempo.
+"""Etapa 4 — VOZ: sintetiza la narración por tramos y aplica atempo.
 
-Dos modos (la narración fluye como relato continuo y las pausas las da la
-puntuación; después atempo → voz.wav / voz.mp3):
+Un guion se parte en **tramos** (ver `guiones_repo.tramos`): el narrador lleva
+la historia y, si la plantilla usa el formato de líneas atribuidas, cada
+personaje del reparto dice las suyas con su propia voz del banco. Los tramos se
+sintetizan por separado y se unen con un silencio corto; después atempo →
+voz.wav / voz.mp3.
+
+Los formatos de guion de siempre (frases y narración continua) devuelven **un
+solo tramo** con el texto completo, así que para ellos esta etapa hace la misma
+llamada única que antes: la voz por personaje no cambia lo que ya sale bien. Y
+los tramos contiguos que acaban en la misma voz se unen (`_unir_misma_voz`), con
+lo que un guion de líneas cuyo reparto todavía no tiene voces también vuelve a
+ser una sola llamada.
+
+Dos modos de narración:
 
 - "clon" (por defecto): clona la voz elegida del banco con el modelo Base
   (generate_voice_clone). Reproduce el timbre del ref pero sin control de
@@ -10,6 +22,12 @@ puntuación; después atempo → voz.wav / voz.mp3):
   guía de entrega (tono, ritmo, intención). No usa el banco; la voz la diseña
   el modelo desde la descripción. Experimental (más expresivo, identidad menos
   estable entre vídeos).
+
+**Los tramos se agrupan por modelo y el modelo se carga una vez por grupo**, no
+una vez por tramo: en esta máquina cargar Qwen3-TTS cuesta más que sintetizar un
+tramo corto y el modelo no cabe dos veces en la memoria unificada. Como mucho se
+cargan dos (VoiceDesign para el narrador en modo expresivo y Base para los
+clones), uno después del otro.
 """
 import json
 
@@ -21,9 +39,96 @@ from ...config import PROYECTOS_DIR
 from ...db import get_session
 from ...models import avanzar_estado
 from ...repositories import guiones as guiones_repo
+from ...repositories import personajes as personajes_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
 from ...repositories import voces as voces_repo
+from .. import progreso
+
+# Silencio entre tramos: el aire que deja una persona al pasar de narrar a que
+# hable otro. Sin él los dos tramos se pegan y suena a corte de edición.
+#
+# No llega a PAUSA_CORTE_S (0,5 s en subtitulos.py) a propósito, y no hace
+# falta: cada tramo acaba en punto, interrogación o puntos suspensivos, así que
+# el bloque de subtítulos ya corta ahí por puntuación. Alargarlo hasta forzar el
+# corte por pausa solo metería segundos de silencio en un vídeo de 45.
+PAUSA_S = 0.3
+
+
+def _voces_del_reparto(s, proyecto_id: int) -> dict[str, tuple[str, str]]:
+    """{CLAVE: (slug, ref_text)} de los personajes con voz del banco utilizable.
+
+    Un personaje cuya voz todavía se está generando, falló o perdió su clip no
+    entra: sus líneas las dirá la voz del narrador, que es peor que su voz pero
+    mucho mejor que un hueco en la narración.
+    """
+    out = {}
+    for x in personajes_repo.por_proyecto(s, proyecto_id):
+        if not x.voz:
+            continue
+        v = voces_repo.por_slug(s, x.voz)
+        if v is None or v.estado != "lista" or not voces_repo.ruta_ref(v.slug).exists():
+            continue
+        out[x.clave] = (v.slug, v.ref_text)
+    return out
+
+
+def _etiqueta(claves: list[str]) -> str:
+    """Cómo se nombra un tramo en el log: su dueño, o los que se unieron."""
+    return "+".join(dict.fromkeys(c or "narrador" for c in claves))
+
+
+def _unir_misma_voz(crudos, plan):
+    """Une los tramos contiguos que acaban en la misma voz.
+
+    Hace falta porque un personaje sin voz propia dice sus líneas con la del
+    narrador: partir ahí no cambiaría el timbre, solo cortaría la prosodia y
+    pagaría otra llamada al modelo. Pasa entero la primera vez que se genera la
+    voz de un guion con líneas, porque el reparto se fija en un paso posterior y
+    todavía no hay nadie: ese caso vuelve así a ser la llamada única de siempre.
+
+    Devuelve [(claves, texto, asignación)] en orden.
+    """
+    tramos: list[tuple[list[str], str, tuple[str, str]]] = []
+    for (clave, texto), asignacion in zip(crudos, plan):
+        if tramos and tramos[-1][2] == asignacion:
+            claves, previo, _ = tramos[-1]
+            tramos[-1] = (claves + [clave], f"{previo} {texto}", asignacion)
+        else:
+            tramos.append(([clave], texto, asignacion))
+    return tramos
+
+
+def _por_modelo(plan: list[tuple[str, str]]) -> list[tuple[str, list[int]]]:
+    """Agrupa los índices de los tramos por el modelo que los sintetiza.
+
+    Conserva el orden de primera aparición para que el log y la carga sean
+    deterministas; el audio se recompone después por índice, así que agrupar no
+    reordena nada de lo que se oye.
+    """
+    grupos: dict[str, list[int]] = {}
+    for i, (tipo, _) in enumerate(plan):
+        repo = tts.MODELO_DESIGN if tipo == "design" else tts.MODELO_BASE
+        grupos.setdefault(repo, []).append(i)
+    return list(grupos.items())
+
+
+def _unir(pistas: list[np.ndarray], sr: int) -> np.ndarray:
+    """Concatena los tramos con PAUSA_S de silencio entre ellos.
+
+    Con un solo tramo devuelve el audio tal cual, sin añadirle nada: es el caso
+    de los dos formatos de guion que ya estaban, y su salida tiene que ser la
+    de siempre.
+    """
+    if len(pistas) == 1:
+        return pistas[0]
+    silencio = np.zeros(int(sr * PAUSA_S), dtype=np.float32)
+    trozos: list[np.ndarray] = []
+    for i, pista in enumerate(pistas):
+        if i:
+            trozos.append(silencio)
+        trozos.append(pista)
+    return np.concatenate(trozos)
 
 
 def generar_voz(proyecto_id: int, modo: str = "clon", instruct: str | None = None) -> str:
@@ -45,20 +150,28 @@ def generar_voz(proyecto_id: int, modo: str = "clon", instruct: str | None = Non
             if voz is None or voz.estado != "lista":
                 raise ValueError(f"La voz '{p.voz}' no está disponible")
             voz_slug, ref_text = voz.slug, voz.ref_text
+        voces_reparto = _voces_del_reparto(s, proyecto_id)
 
     g = json.loads(guion_row.contenido)
-    texto_completo = guiones_repo.texto_narrado(g)
+    crudos = guiones_repo.tramos(g)
+    if not crudos:
+        raise ValueError("El guion no tiene nada que narrar")
     pl = plantillas_repo.cargar(plantilla)
     ritmo, language = pl["ritmo"], pl["voz"]["language"]
 
     base_dir = PROYECTOS_DIR / slug
     base_dir.mkdir(parents=True, exist_ok=True)
 
-    # Último punto donde esta etapa se puede cortar: la síntesis es una sola
-    # llamada a PyTorch sin puntos de control, así que una parada que llegue
-    # después no la toca (y se paga entera). Ver SIN_CORTE en
-    # services/cancelacion.py y el aviso del botón de parada.
-    parada.comprobar("antes de sintetizar la voz")
+    # Las referencias de clonado que se van a usar, comprobadas antes de cargar
+    # nada: un ref que falta es un error de la etapa, no media carga de modelo.
+    refs: dict[str, tuple[object, str]] = {}
+    if voz_slug:
+        ref_path = voces_repo.ruta_ref(voz_slug)
+        if not ref_path.exists():
+            raise ValueError(f"Falta el clip de referencia de la voz '{voz_slug}'")
+        refs[voz_slug] = (ref_path, ref_text)
+    for slug_voz, texto_ref in voces_reparto.values():
+        refs[slug_voz] = (voces_repo.ruta_ref(slug_voz), texto_ref)
 
     if modo == "design":
         # Prioridad: instruct de la UI > el que sugirió el guion para esta
@@ -68,32 +181,80 @@ def generar_voz(proyecto_id: int, modo: str = "clon", instruct: str | None = Non
             or (g.get("voz_instruct") or "").strip()
             or pl["voz"]["instruct"]
         )
-        modelo = tts.cargar_modelo(tts.MODELO_DESIGN)
-        wavs, sr = modelo.generate_voice_design(
-            text=texto_completo,
-            language=language,
-            instruct=instruct,
-            max_new_tokens=tts.tope_tokens(texto_completo),
-        )
-        tts.liberar(modelo)
+        narrador: tuple[str, str] = ("design", instruct)
         etiqueta = "diseñada (VoiceDesign, estilo de la plantilla)"
     else:
-        ref_path = voces_repo.ruta_ref(voz_slug)
-        if not ref_path.exists():
-            raise ValueError(f"Falta el clip de referencia de la voz '{voz_slug}'")
-        ref, ref_sr = sf.read(ref_path, dtype="float32")
-        base = tts.cargar_modelo(tts.MODELO_BASE)
-        prompt = base.create_voice_clone_prompt(ref_audio=(ref, ref_sr), ref_text=ref_text)
-        wavs, sr = base.generate_voice_clone(
-            text=texto_completo,
-            language=language,
-            voice_clone_prompt=prompt,
-            max_new_tokens=tts.tope_tokens(texto_completo),
-        )
-        tts.liberar(base)
+        narrador = ("clon", voz_slug)
         etiqueta = f"clon '{voz_slug}'"
 
-    sf.write(base_dir / "voz_raw.wav", np.asarray(wavs[0], dtype=np.float32), sr)
+    # Quién dice cada tramo. Un personaje sin voz utilizable cae en la del
+    # narrador: la narración entera importa más que el timbre de una línea.
+    tramos = _unir_misma_voz(crudos, [
+        ("clon", voces_reparto[clave][0]) if clave in voces_reparto else narrador
+        for clave, _ in crudos
+    ])
+    plan = [asignacion for _, _, asignacion in tramos]
+
+    # Último punto donde esta etapa se puede cortar si el guion es de un solo
+    # tramo: la síntesis de uno es una sola llamada a PyTorch sin puntos de
+    # control. Con varios tramos se corta además entre tramo y tramo (ver
+    # SIN_CORTE en services/cancelacion.py).
+    parada.comprobar("antes de sintetizar la voz")
+
+    pistas: dict[int, np.ndarray] = {}
+    fallos: list[str] = []
+    sr = None
+    progreso.lote(0, len(tramos), "tramo")
+    for repo, indices in _por_modelo(plan):
+        modelo = tts.cargar_modelo(repo)
+        try:
+            clones: dict[str, object] = {}
+            for i in indices:
+                parada.comprobar(f"quedaban {len(tramos) - len(pistas)} tramos")
+                texto = tramos[i][1]
+                try:
+                    tipo, dato = plan[i]
+                    if tipo == "design":
+                        wavs, sr = modelo.generate_voice_design(
+                            text=texto,
+                            language=language,
+                            instruct=dato,
+                            max_new_tokens=tts.tope_tokens(texto),
+                        )
+                    else:
+                        if dato not in clones:
+                            ruta, texto_ref = refs[dato]
+                            ref, ref_sr = sf.read(ruta, dtype="float32")
+                            clones[dato] = modelo.create_voice_clone_prompt(
+                                ref_audio=(ref, ref_sr), ref_text=texto_ref
+                            )
+                        wavs, sr = modelo.generate_voice_clone(
+                            text=texto,
+                            language=language,
+                            voice_clone_prompt=clones[dato],
+                            max_new_tokens=tts.tope_tokens(texto),
+                        )
+                    pistas[i] = np.asarray(wavs[0], dtype=np.float32)
+                except parada.Parado:
+                    raise
+                except Exception as e:
+                    # Un tramo que falla no tira la narración entera: con el
+                    # formato de líneas son muchas llamadas al modelo y perder
+                    # las veinte buenas por la mala es el peor resultado
+                    # posible. El tramo se queda fuera del audio, el log dice
+                    # cuál y los subtítulos salen de lo que de verdad se oye.
+                    fallos.append(f"tramo {i + 1} ({_etiqueta(tramos[i][0])}): {e}")
+                progreso.lote(len(pistas) + len(fallos), len(tramos), "tramo")
+        finally:
+            tts.liberar(modelo)
+
+    if not pistas:
+        raise ValueError(
+            "No se pudo sintetizar ningún tramo de la narración: "
+            + "; ".join(fallos)
+        )
+
+    sf.write(base_dir / "voz_raw.wav", _unir([pistas[i] for i in sorted(pistas)], sr), sr)
 
     atempo = ritmo.get("atempo", 1.0)
     procesos.ejecutar(
@@ -112,4 +273,13 @@ def generar_voz(proyecto_id: int, modo: str = "clon", instruct: str | None = Non
         p = proyectos_repo.obtener(s, proyecto_id)
         avanzar_estado(p, "VOZ")
         s.commit()
-    return f"Voz {etiqueta}: {dur:.1f}s (atempo {atempo})"
+
+    log = f"Voz {etiqueta}: {dur:.1f}s (atempo {atempo})"
+    if len(tramos) > 1:
+        propias = sorted({c for c, _ in crudos if c in voces_reparto})
+        log += f", {len(pistas)} de {len(tramos)} tramos"
+        if propias:
+            log += f"; con voz propia: {', '.join(propias)}"
+    if fallos:
+        log += "\n\nTramos que fallaron y no están en el audio:\n" + "\n".join(fallos)
+    return log

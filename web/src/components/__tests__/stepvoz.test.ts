@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ProyectoDetalle, Voz } from "@/lib/proyectos";
+import type { Personaje, ProyectoDetalle, Voz } from "@/lib/proyectos";
 import StepVoz from "../videos/steps/StepVoz.svelte";
 
 const proy = (extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle => ({
@@ -16,7 +16,10 @@ const voz = (slug: string, extra: Partial<Voz> = {}): Voz =>
 
 const props = () => ({
   onselectvoz: vi.fn(), ongenerar: vi.fn(), oncrearvoz: vi.fn(), onclonarvoz: vi.fn(), onborrarvoz: vi.fn(),
+  onvozpersonaje: vi.fn(), oncrearvozpersonaje: vi.fn(),
 });
+const personaje = (extra: Partial<Personaje> = {}): Personaje =>
+  ({ clave: "ANA", nombre: "Ana", ficha: "a tall woman", tipo: "persona", retrato: false, ...extra });
 
 beforeEach(() => {
   vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:audio"), revokeObjectURL: vi.fn() }));
@@ -266,5 +269,82 @@ describe("banco de voces", () => {
       expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:audio");
       expect(await screen.findByText(/0.0s → 15.0s/)).toBeInTheDocument();
     });
+  });
+});
+
+describe("voces del reparto", () => {
+  it("sin reparto y sin líneas atribuidas no estorba", () => {
+    render(StepVoz, { p: proy(), voces: [voz("ana")], ...props() });
+    expect(screen.queryByText("Voces del reparto")).toBeNull();
+  });
+
+  it("cada personaje elige su voz del banco, y sin elegir la dice el narrador", async () => {
+    const p = props();
+    render(StepVoz, {
+      p: proy({ personajes: [personaje(), personaje({ clave: "LUIS", nombre: "Luis", voz: "luis-voz" })] }),
+      voces: [voz("ana"), voz("luis-voz")],
+      ...p,
+    });
+
+    const deAna = screen.getByLabelText("Voz de ANA") as HTMLSelectElement;
+    expect(deAna.value).toBe("");
+    expect([...deAna.options].map((o) => o.value)).toEqual(["", "ana", "luis-voz"]);
+    expect((screen.getByLabelText("Voz de LUIS") as HTMLSelectElement).value).toBe("luis-voz");
+
+    await userEvent.selectOptions(deAna, "ana");
+    expect(p.onvozpersonaje).toHaveBeenCalledWith("ANA", "ana");
+  });
+
+  it("quitarle la voz lo devuelve a la del narrador", async () => {
+    const p = props();
+    render(StepVoz, {
+      p: proy({ personajes: [personaje({ voz: "ana" })] }), voces: [voz("ana")], ...p,
+    });
+    await userEvent.selectOptions(screen.getByLabelText("Voz de ANA"), "");
+    expect(p.onvozpersonaje).toHaveBeenCalledWith("ANA", "");
+  });
+
+  it("quien no tiene voz la puede crear desde su ficha; sin ficha no", () => {
+    const p = props();
+    const { rerender } = render(StepVoz, {
+      p: proy({ personajes: [personaje()] }), voces: [], ...p,
+    });
+    expect(screen.getByRole("button", { name: "Crear desde su ficha" })).toBeEnabled();
+
+    rerender({ p: proy({ personajes: [personaje({ ficha: "  " })] }), voces: [], ...p });
+    expect(screen.getByRole("button", { name: "Crear desde su ficha" })).toBeDisabled();
+  });
+
+  it("crear su voz avisa con su clave", async () => {
+    const p = props();
+    render(StepVoz, { p: proy({ personajes: [personaje()] }), voces: [], ...p });
+    await userEvent.click(screen.getByRole("button", { name: "Crear desde su ficha" }));
+    expect(p.oncrearvozpersonaje).toHaveBeenCalledWith("ANA");
+  });
+
+  it("una voz recién encolada sigue siendo la suya aunque no esté lista", () => {
+    render(StepVoz, {
+      p: proy({ personajes: [personaje({ voz: "ana" })] }),
+      voces: [voz("ana", { estado: "generando", disponible: false })],
+      ...props(),
+    });
+    // Si el selector no la ofreciera, caería en "la del narrador" y parecería
+    // que la asignación se perdió.
+    const select = screen.getByLabelText("Voz de ANA") as HTMLSelectElement;
+    expect(select.value).toBe("ana");
+    // En su fila, no en la del banco de voces de abajo (que también lo dice).
+    expect(within(select.closest("div")!).getByText("(generando)")).toBeInTheDocument();
+    // Y ya no se ofrece crearla otra vez.
+    expect(screen.queryByRole("button", { name: "Crear desde su ficha" })).toBeNull();
+  });
+
+  it("un guion con líneas y el reparto sin fijar avisa de dónde se fija", () => {
+    render(StepVoz, {
+      p: proy({ guion: { gancho: "H", cta: "F", lineas: [{ personaje: "ANA", texto: "yo" }] } }),
+      voces: [],
+      ...props(),
+    });
+    expect(screen.getByText("Voces del reparto")).toBeInTheDocument();
+    expect(screen.getByText(/el reparto todavía no está fijado/)).toBeInTheDocument();
   });
 });

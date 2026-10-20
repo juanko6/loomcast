@@ -6,10 +6,12 @@ from backend.schemas import (
     DescripcionLLM,
     EscenaLLM,
     EtiquetasLLM,
+    GuionLineasLLM,
     GuionLLM,
     GuionNarracionLLM,
     IdeaLLM,
     IdeasLLM,
+    LineaGuionLLM,
     MusicaPromptLLM,
     PersonajeLLM,
     PersonajeNuevoIn,
@@ -49,6 +51,20 @@ def test_guion_narracion():
     assert GuionNarracionLLM.model_validate(ok).narracion == "n"
     with pytest.raises(ValidationError):
         GuionNarracionLLM.model_validate({**ok, "narracion": ""})
+
+
+def test_guion_lineas():
+    ok = {"gancho": "g", "cta": "c", "voz_instruct": "v",
+          "lineas": [{"personaje": "ANA", "texto": "hablo"}, {"texto": "narro"}]}
+    g = GuionLineasLLM.model_validate(ok)
+    # El personaje es opcional: sin él la línea es del narrador, que es lo
+    # normal porque la mayoría del guion la lleva él.
+    assert [(x.personaje, x.texto) for x in g.lineas] == [("ANA", "hablo"), ("", "narro")]
+    for cambio in ({"lineas": []}, {"gancho": ""}, {"cta": ""}):
+        with pytest.raises(ValidationError):
+            GuionLineasLLM.model_validate({**ok, **cambio})
+    with pytest.raises(ValidationError):
+        LineaGuionLLM.model_validate({"texto": ""})
 
 
 @pytest.mark.parametrize("n,valido", [(9, False), (10, True), (80, True), (81, False)])

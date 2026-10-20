@@ -47,7 +47,8 @@ def test_la_sintesis_de_voz_se_declara_como_no_cortable(client, session):
     """La UI lo usa para no prometer que corta lo que no puede cortar."""
     j = _job(session, tipo="generar_voz", estado="corriendo")
 
-    assert client.get(f"/api/jobs/{j.id}").json()["sin_corte"] == "la síntesis de la narración"
+    assert (client.get(f"/api/jobs/{j.id}").json()["sin_corte"]
+            == "el tramo de narración que se esté sintetizando")
 
 
 def test_cancelar_un_pendiente_lo_deja_fuera_de_la_cola(client, session, sin_comfy):

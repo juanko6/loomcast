@@ -7,9 +7,11 @@ from backend.repositories import ideas as ideas_repo
 from backend.repositories import metadatos as metadatos_repo
 from backend.repositories import proyectos as proyectos_repo
 from backend.repositories import temas as temas_repo
+from backend.repositories import plantillas as plantillas_repo
 from backend.schemas import (
     DescripcionLLM,
     EtiquetasLLM,
+    GuionLineasLLM,
     GuionLLM,
     GuionNarracionLLM,
     IdeasLLM,
@@ -90,6 +92,52 @@ def test_generar_guion_de_historia_usa_narracion_y_su_ritmo(session, fake_llm):
     session.expire_all()
     guion = json.loads(guiones_repo.ultimo(session, pid).contenido)
     assert guion["narracion"].startswith("Y entonces")
+
+
+@pytest.mark.parametrize("plantilla", ["curiosidades", "drama", "historia"])
+def test_las_plantillas_actuales_no_piden_el_guion_con_lineas(plantilla):
+    """El formato de líneas atribuidas es opt-in por plantilla y hoy no lo activa
+    ninguna: las tres que hay siguen pidiendo al LLM el esquema de siempre, que
+    es lo que decide byte a byte lo que sale de esta etapa."""
+    formato = plantillas_repo.cargar(plantilla)["formato_guion"]
+    esquema = texto.ESQUEMA_GUION.get(formato, GuionLLM)
+    assert esquema is (GuionNarracionLLM if formato == "narracion" else GuionLLM)
+    assert esquema is not GuionLineasLLM
+
+
+def test_una_plantilla_con_lineas_pide_el_esquema_atribuido_y_normaliza_las_claves(
+    session, fake_llm, monkeypatch
+):
+    """Así se activa el formato nuevo: una clave en plantilla.json. La clave del
+    personaje pasa por el normalizador del reparto, porque es el marcador con el
+    que el casting lo encontrará luego en el guion."""
+    _, pid = _tema_con_proyecto(session)
+    real = plantillas_repo.cargar
+    monkeypatch.setattr(
+        plantillas_repo, "cargar",
+        lambda nombre: {**real(nombre), "formato_guion": "lineas"},
+    )
+    fake_llm.responder(GuionLineasLLM, GuionLineasLLM(
+        gancho="Nadie lo vio venir",
+        lineas=[{"personaje": " ana ", "texto": "yo estaba allí"},
+                {"personaje": "", "texto": "y la historia siguió"}],
+        cta="Cuéntalo tú",
+        voz_instruct="voz",
+    ))
+
+    texto.generar_guion(pid)
+
+    assert fake_llm.llamadas[-1]["salida"] is GuionLineasLLM
+    session.expire_all()
+    guion = json.loads(guiones_repo.ultimo(session, pid).contenido)
+    assert guion["lineas"] == [
+        {"personaje": "ANA", "texto": "yo estaba allí"},
+        {"personaje": "", "texto": "y la historia siguió"},
+    ]
+    # Y lo que se narra (y lo que leen escenas, música y metadatos) sigue siendo
+    # el texto seguido, sin marcas de quién habla.
+    assert guiones_repo.texto_narrado(guion) == (
+        "Nadie lo vio venir yo estaba allí y la historia siguió Cuéntalo tú")
 
 
 def test_generar_metadatos_encadena_titulo_descripcion_etiquetas(session, fake_llm):
