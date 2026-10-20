@@ -38,15 +38,15 @@ def escenas(s, proyecto_id, n=2):
 
 def personaje(s, proyecto_id, clave="ANA", nombre="Ana",
               ficha="a tall woman with red hair", tipo="persona",
-              reparto_slug=""):
+              reparto_slug="", voz=""):
     personajes_repo.crear(s, proyecto_id, clave, nombre, ficha, 1, tipo,
-                          reparto_slug=reparto_slug)
+                          reparto_slug=reparto_slug, voz=voz)
     s.commit()
 
 
 def miembro_reparto(s, slug="ana-narradora", nombre="Ana narradora",
                     clave="ANA", ficha="a tall woman with red hair",
-                    tipo="persona", seed=7):
-    m = reparto_repo.crear(s, slug, nombre, clave, ficha, tipo, seed)
+                    tipo="persona", seed=7, voz=""):
+    m = reparto_repo.crear(s, slug, nombre, clave, ficha, tipo, seed, voz)
     s.commit()
     return m

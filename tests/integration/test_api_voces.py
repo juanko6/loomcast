@@ -91,11 +91,34 @@ def test_borrar_voz_desvincula_proyectos_y_borra_carpeta(client, session, dirs_t
 
     r = client.delete("/api/voces/ana")
 
-    assert r.json() == {"slug": "ana", "proyectos_desvinculados": 1}
+    assert r.json() == {"slug": "ana", "proyectos_desvinculados": 1,
+                        "personajes_desvinculados": 0, "reparto_desvinculado": 0}
     assert not carpeta.exists()
     session.expire_all()
     assert proyectos_repo.obtener(session, pid).voz is None
     assert voces_repo.por_slug(session, "ana") is None
+
+
+def test_borrar_voz_deja_sin_ella_a_los_personajes_y_al_reparto(
+    client, session, dirs_tmp
+):
+    """Una voz borrada del banco no falla al narrar: enmudece. Los tres que
+    podían estar usándola lo reflejan en vez de apuntar a un ref que no está."""
+    session.add(Voz(slug="ana", nombre="Ana", instruct="x"))
+    p = f.proyecto(session)
+    session.commit()
+    f.personaje(session, p.id, voz="ana")
+    f.miembro_reparto(session, voz="ana")
+
+    r = client.delete("/api/voces/ana")
+
+    assert r.json() == {"slug": "ana", "proyectos_desvinculados": 0,
+                        "personajes_desvinculados": 1, "reparto_desvinculado": 1}
+    session.expire_all()
+    from backend.repositories import personajes as personajes_repo
+    from backend.repositories import reparto as reparto_repo
+    assert personajes_repo.por_proyecto(session, p.id)[0].voz == ""
+    assert reparto_repo.por_slug(session, "ana-narradora").voz == ""
 
 
 def test_borrar_voz_inexistente_404(client):

@@ -72,7 +72,7 @@ def test_detalle_refleja_archivos_en_disco_y_jobs_activos(client, session, proy,
     assert [e["imagen"] for e in d["escenas"]] == [True, True]
     assert d["personajes"] == [
         {"clave": "ANA", "nombre": "Ana", "ficha": "a tall woman with red hair",
-         "tipo": "persona", "reparto_slug": "", "retrato": False}]
+         "tipo": "persona", "reparto_slug": "", "voz": "", "retrato": False}]
     assert d["versiones"][0]["nombre"] == "final_20260101.mp4"
     assert d["job_activo"] == "generar_voz" and d["jobs_activos"] == 1
 
@@ -190,6 +190,101 @@ def test_borrar_personaje_borra_tambien_su_retrato(client, session, proy, dirs_t
     r = client.delete(f"/api/proyectos/{proy.id}/personajes/ANA")
     assert r.json() == {"borrado": "ANA"} and not retrato.exists()
     assert client.delete(f"/api/proyectos/{proy.id}/personajes/ANA").status_code == 404
+
+
+# --- voz por personaje ------------------------------------------------------
+
+def _voz_banco(session, slug="ana-voz"):
+    from backend.repositories import voces as voces_repo
+
+    v = voces_repo.crear(session, slug, slug, "grave")
+    v.estado = "lista"
+    session.commit()
+    return v
+
+
+def test_asignar_y_quitar_la_voz_de_un_personaje(client, session, proy):
+    _voz_banco(session)
+    f.personaje(session, proy.id)
+
+    assert client.put(f"/api/proyectos/{proy.id}/personajes/ANA/voz",
+                      json={"voz": "ana-voz"}).json() == {"ok": True}
+    session.expire_all()
+    assert personajes_repo.por_proyecto(session, proy.id)[0].voz == "ana-voz"
+    assert client.get(f"/api/proyectos/{proy.id}").json()["personajes"][0]["voz"] == "ana-voz"
+
+    # Vacío lo deja sin voz propia: sus líneas las narra la voz del proyecto.
+    client.put(f"/api/proyectos/{proy.id}/personajes/ANA/voz", json={"voz": ""})
+    session.expire_all()
+    assert personajes_repo.por_proyecto(session, proy.id)[0].voz == ""
+
+
+def test_asignar_una_voz_que_no_existe_400_y_a_quien_no_existe_404(client, session, proy):
+    f.personaje(session, proy.id)
+    assert client.put(f"/api/proyectos/{proy.id}/personajes/ANA/voz",
+                      json={"voz": "fantasma"}).status_code == 400
+    assert client.put(f"/api/proyectos/{proy.id}/personajes/NADIE/voz",
+                      json={"voz": ""}).status_code == 404
+    assert client.put("/api/proyectos/99/personajes/ANA/voz",
+                      json={"voz": ""}).status_code == 404
+
+
+def test_crear_la_voz_de_un_personaje_desde_su_ficha(client, session, proy, jobs_encolados):
+    """Su voz sale de donde ya sale su retrato: la ficha. Queda asignada en
+    cuanto se encola, para que la UI diga de quién es mientras se sintetiza."""
+    f.personaje(session, proy.id, nombre="Ana", ficha="a tall woman with red hair")
+
+    r = client.post(f"/api/proyectos/{proy.id}/personajes/ANA/voz")
+
+    body = r.json()
+    assert body["slug"] == "ana" and jobs_encolados == [("crear_voz", body["voz_id"])]
+    session.expire_all()
+    assert personajes_repo.por_proyecto(session, proy.id)[0].voz == "ana"
+    # La voz nace en el banco como cualquier otra, con la ficha dentro del
+    # instruct de VoiceDesign y en los cuatro bloques que entiende.
+    voz = client.get("/api/voces").json()[0]
+    assert voz["slug"] == "ana" and "a tall woman with red hair" in voz["instruct"]
+    assert "[PERFIL DE VOZ]" in voz["instruct"] and "[DINÁMICA Y RITMO]" in voz["instruct"]
+
+
+def test_crear_la_voz_de_dos_personajes_con_el_mismo_nombre_no_choca(
+    client, session, proy, jobs_encolados
+):
+    """Dos vídeos pueden tener cada uno su Ana: fallar con "ya existe una voz
+    con nombre similar" obligaría a bautizarla justo cuando el nombre da igual."""
+    f.personaje(session, proy.id, clave="ANA", nombre="Ana")
+    f.personaje(session, proy.id, clave="ANA_2", nombre="Ana")
+
+    primera = client.post(f"/api/proyectos/{proy.id}/personajes/ANA/voz").json()
+    segunda = client.post(f"/api/proyectos/{proy.id}/personajes/ANA_2/voz").json()
+
+    assert (primera["slug"], segunda["slug"]) == ("ana", "ana-2")
+
+
+def test_crear_la_voz_de_un_personaje_sin_ficha_400(client, session, proy):
+    f.personaje(session, proy.id, ficha="  ")
+    assert client.post(f"/api/proyectos/{proy.id}/personajes/ANA/voz").status_code == 400
+    assert client.post(f"/api/proyectos/{proy.id}/personajes/NADIE/voz").status_code == 404
+
+
+def test_regenerar_el_casting_conserva_la_voz_elegida_a_mano(client, session, proy):
+    """Elegirle voz es una decisión del usuario, no algo que el LLM reescriba:
+    perderla al regenerar los prompts sería el mismo error que perder a los
+    traídos del reparto propio, y encima solo se notaría al oír el vídeo."""
+    _voz_banco(session)
+    f.personaje(session, proy.id, voz="ana-voz")
+
+    personajes_repo.reemplazar_todos(session, proy.id, [
+        {"orden": 0, "clave": "ANA", "nombre": "Ana", "ficha": "otra ficha",
+         "tipo": "persona", "seed": 3},
+        {"orden": 1, "clave": "LUIS", "nombre": "Luis", "ficha": "f",
+         "tipo": "persona", "seed": 4},
+    ])
+    session.commit()
+
+    session.expire_all()
+    voces = {x.clave: x.voz for x in personajes_repo.por_proyecto(session, proy.id)}
+    assert voces == {"ANA": "ana-voz", "LUIS": ""}
 
 
 def test_editar_casting_devuelve_cuantos_actualizo(client, session, proy):

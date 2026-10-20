@@ -287,13 +287,21 @@ todas (`backend/services/cancelacion.py` orquesta; la bandera vive en
    faster-whisper decodifica uno por vuelta: entre uno y otro se puede abandonar
    sin haber escrito nada.
 
-**La síntesis de voz no se puede cortar por dentro**: Qwen3-TTS es una sola
-llamada a PyTorch sin puntos de control. Esas etapas (`generar_voz`, `crear_voz`
-y la transcripción de `clonar_voz`) se paran antes de empezar, y si ya estaban en
-marcha terminan: el audio vale, no se encadena la etapa siguiente y el log del
-job lo dice. La UI tampoco promete lo que no puede hacer: el job expone
-`sin_corte` (de `cancelacion.SIN_CORTE`) y el botón avisa en la confirmación de
-que esa etapa se parará en cuanto acabe.
+**Una síntesis de voz no se puede cortar por dentro**: cada llamada a Qwen3-TTS
+es una sola llamada a PyTorch sin puntos de control. Lo que sí se puede es
+cortar **entre tramos**: la narración se sintetiza tramo a tramo (el narrador y
+las líneas de cada personaje, ver «Voz por personaje»), así que una parada
+cuesta como mucho el tramo que estuviera sonando. Con los guiones de un solo
+tramo —los de las tres plantillas de hoy— ese «como mucho» sigue siendo la
+narración entera.
+
+Si la parada llega durante la carga del modelo, no se paga ninguna síntesis: se
+atiende antes del primer tramo. Si llega con un tramo en marcha, ese tramo
+termina; con varios, lo que quedaba no se sintetiza y no se escribe un audio a
+medias. La UI no promete lo que no puede hacer: el job expone `sin_corte` (de
+`cancelacion.SIN_CORTE`), que nombra **el trozo** que no se puede partir —el
+tramo, no la etapa—, y el botón lo avisa en la confirmación. `crear_voz` y la
+transcripción de `clonar_voz` siguen siendo de una pieza.
 
 Un job parado **no encadena** la etapa siguiente, ni siquiera si el handler llegó
 a terminar justo antes del corte: encadenar sería lo contrario de lo que se
@@ -351,6 +359,11 @@ Tema → ideas → seleccionar/aprobar → y ya en el proyecto, los pasos del
 stepper: **1** guion (editar/regenerar) → **2** voz (elegir del banco o crear nueva → generar narración) → **3** metadatos → **4** escenas (reparto → generar prompts → editarlos → aceptar y generar imágenes) → **música** (opcional, se entra a mano) → **5** armar video final.
 
 Puntos de revisión humana: selección de ideas, guion, elección de voz, reparto, y **prompts de escena antes de gastar GPU en las imágenes**.
+
+El paso **2 voz** lleva además las voces del reparto: qué voz dice las líneas de
+cada personaje y el botón para crearle una desde su ficha (ver «Voz por
+personaje»). El reparto se fija en el paso 4, así que si el guion trae líneas
+atribuidas y todavía no hay nadie, el paso lo dice en vez de callarse.
 
 ### Música de la historia
 
@@ -522,7 +535,9 @@ Tres acciones, y el orden importa:
   convence, y eso pasa dentro de un vídeo. Se le pone un nombre («Ana, la
   narradora»), que es lo que lo distingue en el listado; viaja su ficha, su
   `tipo` (persona u objeto, que decide el encuadre del retrato) y su seed, para
-  que rehacerle la cara «con el mismo seed» en otro vídeo dé la misma persona.
+  que rehacerle la cara «con el mismo seed» en otro vídeo dé la misma persona, y
+  **su voz del banco**, para que un narrador recurrente que ya sonaba bien no
+  vuelva a sonar distinto (ver «Voz por personaje»).
 - **Traer** lo mete en el proyecto abierto con la ficha y la cara ya puestas.
 - **Actualizar en el reparto** sube al almacén la versión que hay en un
   proyecto. Hace falta porque **editar la ficha dentro de un proyecto no toca al
@@ -643,6 +658,73 @@ y Loomcast se usa también sin él (`--sin-comfy`).
 
 Voces reutilizables generadas con Qwen3-TTS VoiceDesign, guardadas en `voces/<slug>/ref.wav`. Cada proyecto elige una; la narración se produce clonando ese clip. Sembrar 6 de arranque: `./.venv/bin/python scripts/sembrar_voces.py`. Crear más desde la UI describiendo cómo debe sonar.
 
+El banco es el **único** almacén de voces: también las de los personajes salen
+de aquí (ver abajo). Una voz del banco ya se escucha, se reutiliza entre vídeos
+y se borra desde un sitio, así que un segundo almacén en paralelo para el
+reparto solo duplicaría ese trabajo. Borrar una voz deja sin ella a los tres que
+podían estar usándola —el proyecto que narraba con ella, el personaje que decía
+sus líneas y el miembro del reparto propio que se la llevaba a los vídeos
+nuevos—, porque una referencia colgada a un `ref.wav` que ya no está no falla:
+enmudece.
+
+### Voz por personaje
+
+La narración ya no es forzosamente una sola voz. El guion se parte en **tramos**
+y cada uno se sintetiza con la voz que le toca: el narrador lleva la historia y
+los personajes del reparto dicen sus líneas con la suya. El narrador sigue
+siendo el que cuenta; no es un diálogo por turnos.
+
+**Se activa por plantilla, y hoy no lo activa ninguna.** El formato del guion lo
+decide `formato_guion` en `plantilla.json`, que ya tenía dos valores y ahora
+tiene tres:
+
+| `formato_guion` | cuerpo del guion | quién lo usa |
+|---|---|---|
+| `frases` (por defecto) | `frases: [...]` | `curiosidades` |
+| `narracion` | `narracion: "…"` | `drama`, `historia` |
+| `lineas` | `lineas: [{personaje, texto}, …]` | nadie todavía |
+
+`lineas` es para las **series** (Fase 8), donde un personaje recurrente tiene que
+sonar igual en diez episodios. Las tres plantillas de hoy no lo declaran y su
+salida no cambia: `guiones_repo.tramos()` devuelve para ellas **un solo tramo**
+con el texto completo, o sea la misma llamada única al modelo de antes. Hay un
+test por plantilla que lo fija.
+
+Lo que se oye y lo que leen las demás etapas no cambia de forma: `texto_narrado()`
+sigue devolviendo el texto seguido (sin marcas de quién habla), que es lo que
+consumen las escenas, el brief musical y los metadatos. Los subtítulos y la
+segmentación de escenas trabajan sobre el audio final, así que varias voces no
+las descuadran: Whisper transcribe lo que de verdad se oye.
+
+Tres decisiones que explican el resto:
+
+- **La voz de un personaje es una voz del banco**, elegida en el paso de Voz. Si
+  no tiene, el botón «Crear desde su ficha» le escribe una con VoiceDesign
+  desde su **propia ficha**, que es de donde ya sale su retrato: la ficha dice la
+  edad aparente, el género y el aire del personaje, que es justo lo que decide el
+  timbre. El `instruct` se redacta con los cuatro bloques que VoiceDesign
+  interpreta bien ([PERFIL DE VOZ], [EMOCIÓN Y ACTITUD], [DINÁMICA Y RITMO],
+  [INDICACIONES DE CONTEXTO]) y es un punto de partida: la voz queda en el banco
+  como cualquier otra y se puede borrar y rehacer a mano.
+- **La voz viaja con el reparto propio**, igual que la ficha y la cara: se lleva
+  al promover y al actualizar, y entra con el personaje al traerlo a un vídeo
+  nuevo. Pero **no se copia** como el retrato —es una fila del banco, ya
+  compartida entre vídeos—, así que si se borró del banco el personaje entra sin
+  voz en vez de apuntar a un clip que no está. Regenerar el casting tampoco la
+  pierde: elegirle voz es una decisión del usuario, no algo que el LLM reescriba.
+- **El modelo se carga una vez por grupo de tramos, no uno por tramo.** En esta
+  máquina cargar Qwen3-TTS cuesta más que sintetizar un tramo corto y el modelo
+  no cabe dos veces en la memoria unificada. Se cargan como mucho dos, uno
+  después de otro: VoiceDesign si el narrador va en modo expresivo, y Base para
+  los clones. Y el prompt de clonado se construye una vez por voz distinta, no
+  una por tramo.
+
+Un tramo que falla no tira la narración entera: se queda fuera del audio, el log
+del job dice cuál y por qué, y los subtítulos salen de lo que de verdad se oye.
+Si fallan todos, la etapa falla —un `voz.wav` vacío lo darían por bueno los
+subtítulos y el montaje—. Un personaje cuya voz todavía se está generando, falló
+o perdió su clip no deja un hueco: esa línea la narra la voz del proyecto.
+
 ## Estado
 
 - ✅ Fase 0 — validación del stack completo en local
@@ -661,6 +743,7 @@ Voces reutilizables generadas con Qwen3-TTS VoiceDesign, guardadas en `voces/<sl
 - ✅ **Cola con reintentos y parada** — los fallos transitorios se reintentan solos con espera creciente, y la generación se puede detener (lo que corre, la cola entera o las dos) desde la cabecera y desde las tres secciones
 - ✅ **Plantilla `historia`** — un hecho real contado como relato: guion narrativo, voz grave y pausada, reparto y estilo de época sin personajes reconocibles. Tercer nicho junto a `curiosidades` y `drama`, y con ella se cierra la Fase 5
 - ✅ **Reparto propio** — personajes guardados aparte, con su ficha y su cara, que se traen a cualquier vídeo nuevo; la cara se copia al proyecto y editarla ahí no toca al original. Primera pieza de la Fase 6
+- ✅ **Voz por personaje** — la narración se sintetiza por tramos y cada personaje dice sus líneas con su voz del banco, que viaja con él en el reparto propio; el formato de guion con líneas atribuidas se activa por plantilla y hoy no lo usa ninguna (es para las series). Segunda pieza de la Fase 6
 - ⬜ Pendiente — empaquetado
 
 ## Imágenes

@@ -48,6 +48,9 @@ export interface Personaje {
   // Slug del miembro del reparto propio del que se trajo, o "" si nació en este
   // proyecto. No es una referencia viva: su ficha y su retrato son copias.
   reparto_slug?: string;
+  // Slug de la voz del banco con la que dice sus líneas ("" = ninguna, y sus
+  // líneas las narra la voz del proyecto).
+  voz?: string;
 }
 
 // Alguien guardado en el reparto propio: una ficha y una cara que sobreviven al
@@ -60,13 +63,26 @@ export interface MiembroReparto {
   clave: string;
   ficha: string;
   tipo: string;
+  // Su voz del banco, que viaja con él al vídeo al que se le traiga. No se
+  // copia como el retrato: una voz del banco ya es compartida entre vídeos.
+  voz?: string;
   retrato: boolean;
+}
+
+// Un tramo del cuerpo del guion en el formato de líneas atribuidas: quién lo
+// dice (clave del reparto; "" = narrador) y qué dice.
+export interface LineaGuion {
+  personaje: string;
+  texto: string;
 }
 
 export interface Guion {
   gancho: string;
   narracion?: string;
   frases?: string[];
+  // Solo en las plantillas con formato_guion "lineas": el narrador lleva la
+  // historia y los personajes dicen líneas puntuales, cada uno con su voz.
+  lineas?: LineaGuion[];
   cta: string;
 }
 
@@ -195,6 +211,21 @@ export const anadirPersonaje = (id: number, clave: string, nombre: string, ficha
 export const borrarPersonaje = (id: number, clave: string) =>
   api<{ borrado: string }>(`/proyectos/${id}/personajes/${clave}`, { method: "DELETE" });
 
+// Con qué voz del banco dice sus líneas un personaje ("" = la del proyecto).
+export const asignarVozPersonaje = (id: number, clave: string, voz: string) =>
+  api<{ ok: boolean }>(`/proyectos/${id}/personajes/${clave}/voz`, {
+    method: "PUT",
+    body: { voz },
+  });
+
+// Le crea una voz en el banco desde su propia ficha (VoiceDesign) y se la
+// asigna. Queda asignada al encolar, así que la UI ya dice de quién es.
+export const crearVozPersonaje = (id: number, clave: string) =>
+  api<{ voz_id: number; slug: string; job_id: number }>(
+    `/proyectos/${id}/personajes/${clave}/voz`,
+    { method: "POST" },
+  );
+
 export const generarRetrato = (id: number, clave: string, nuevo_seed: boolean) =>
   api<{ job_id: number }>(`/proyectos/${id}/personajes/${clave}/retrato`, {
     method: "POST",
@@ -307,7 +338,7 @@ export const actualizarEnReparto = (slug: string, proyecto_id: number, clave: st
 // `renombrado` = su clave estaba ocupada y entró con otra, que es la que hay
 // que escribir en los prompts.
 export const traerDelReparto = (slug: string, proyecto_id: number) =>
-  api<{ clave: string; renombrado: boolean; retrato: boolean }>(
+  api<{ clave: string; renombrado: boolean; retrato: boolean; voz: string }>(
     `/reparto/${slug}/traer`,
     { method: "POST", body: { proyecto_id } },
   );

@@ -18,19 +18,29 @@ esperando, porque cerrar solo una lo dejaría vivo:
      ComfyUI ni lanzan un proceso: ideas, guion, metadatos, prompts de escena y
      subtítulos.
 
-Lo único que no se puede cortar por dentro es la síntesis de voz (Qwen3-TTS): es
-una sola llamada a PyTorch sin puntos de control. Esas etapas se paran antes de
-empezar y, si ya estaban en marcha, en cuanto terminan; la UI lo dice en vez de
-prometer lo que no puede hacer (ver `SIN_CORTE` abajo y web/.../BotonParar).
+Lo único que no se puede cortar por dentro es **una** síntesis de voz
+(Qwen3-TTS): es una sola llamada a PyTorch sin puntos de control. Lo que sí se
+puede, desde la voz por personaje, es cortar **entre tramos**: la narración se
+sintetiza tramo a tramo (el narrador y las líneas de cada personaje), así que
+una parada pierde como mucho el tramo que estuviera sonando. Con los formatos de
+guion de frases y de narración continua el guion es un solo tramo, y entonces
+ese "como mucho" es toda la narración. Por eso `SIN_CORTE` sigue aquí pero habla
+del tramo y no de la etapa: la UI tiene que avisar de lo que de verdad pasa, sin
+prometer un corte que no hay ni asustar con uno más caro del que es (ver
+`SIN_CORTE` abajo y web/.../BotonParar).
 """
 from .. import parada, procesos
 from ..clients import comfy
 
-# Etapas cuyo trabajo es una sola llamada bloqueante que no se puede partir: la
-# parada las alcanza antes de empezar o al terminar, no a mitad. La UI las usa
-# para avisar, y es la razón de que el log del job lo diga.
+# Etapas con un trozo de trabajo que es una sola llamada bloqueante y no se
+# puede partir: la parada las alcanza antes de empezar, entre trozos o al
+# terminar, no a mitad de uno. Lo que dice cada entrada es **ese trozo**, porque
+# es lo que se paga al pulsar parar, y es lo que enseña la UI y el log del job.
 SIN_CORTE = {
-    "generar_voz": "la síntesis de la narración",
+    # La narración va por tramos y se corta entre ellos; lo que no se puede
+    # cortar es el tramo en curso (con los guiones de un solo tramo, que son los
+    # de las plantillas de hoy, ese tramo es la narración entera).
+    "generar_voz": "el tramo de narración que se esté sintetizando",
     "crear_voz": "la síntesis de la voz",
     "clonar_voz": "la transcripción del clip de referencia",
 }

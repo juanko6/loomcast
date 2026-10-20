@@ -172,6 +172,17 @@
       await tras(API.clonarVoz(nombre, audio, "", inicio, fin));
       voces = await API.listarVoces();
     },
+    // --- voz por personaje ---
+    // Elegirla no encola nada (es un campo del personaje); crearla sí, y además
+    // estrena voz en el banco, así que se recarga el banco en las dos.
+    vozPersonaje: async (clave: string, voz: string) => {
+      await tras(API.asignarVozPersonaje(pid(), clave, voz));
+      voces = await API.listarVoces();
+    },
+    crearVozPersonaje: async (clave: string) => {
+      await tras(API.crearVozPersonaje(pid(), clave));
+      voces = await API.listarVoces();
+    },
     // --- reparto propio ---
     // Traer y promover tocan a la vez el proyecto y el almacén, así que se
     // recargan los dos. El backend no encola nada (copiar un PNG), por eso se

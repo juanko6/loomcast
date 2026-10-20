@@ -17,6 +17,7 @@ from ..repositories import personajes as personajes_repo
 from ..repositories import plantillas as plantillas_repo
 from ..repositories import proyectos as proyectos_repo
 from ..repositories import voces as voces_repo
+from ..services import voces as voces_service
 from ..services.pipeline import casting
 from ..services.pipeline import escenas as escenas_pipeline
 from ..services.pipeline import musica as musica_pipeline
@@ -57,6 +58,10 @@ class PersonajeNoExiste(LookupError):
 
 
 class MusicaNoExiste(LookupError):
+    pass
+
+
+class SinFicha(ValueError):
     pass
 
 
@@ -159,6 +164,10 @@ def detalle(pid: int) -> dict:
                 # nació aquí): la UI ofrece actualizarlo allí en vez de volver a
                 # promoverlo, y avisa de que esa cara sobrevive al regenerar.
                 "reparto_slug": x.reparto_slug or "",
+                # Slug de la voz del banco con la que dice sus líneas ("" = sus
+                # líneas las narra la voz del proyecto). El estado de esa voz lo
+                # resuelve la UI contra /api/voces, que ya tiene.
+                "voz": x.voz or "",
                 "retrato": retratos.ruta_retrato(p.slug, x.clave).exists(),
             }
             for x in personajes_repo.por_proyecto(s, pid)
@@ -206,6 +215,10 @@ def editar_guion(pid: int, contenido: dict) -> int:
         p = proyectos_repo.obtener(s, pid)
         if p is None:
             raise ProyectoNoExiste(pid)
+        # Las claves de las líneas atribuidas se normalizan como las del
+        # reparto: lo que se teclea en el editor tiene que casar con la clave
+        # del personaje o la línea se quedaría sin su voz.
+        contenido = guiones_repo.normalizar_lineas(contenido)
         # El editor de la UI manda gancho/narración/cta (o frases), sin
         # voz_instruct; conserva el que sugirió el guion para no perderlo.
         if not contenido.get("voz_instruct"):
@@ -228,6 +241,64 @@ def seleccionar_voz(pid: int, voz_slug: str) -> None:
             raise VozNoDisponible(voz_slug)
         p.voz = voz_slug
         s.commit()
+
+
+class VozPersonajeNoDisponible(ValueError):
+    pass
+
+
+def _personaje(s, pid: int, clave: str):
+    p = proyectos_repo.obtener(s, pid)
+    if p is None:
+        raise ProyectoNoExiste(pid)
+    x = next(
+        (x for x in personajes_repo.por_proyecto(s, pid) if x.clave == clave), None
+    )
+    if x is None:
+        raise PersonajeNoExiste(clave)
+    return p, x
+
+
+def asignar_voz_personaje(pid: int, clave: str, voz_slug: str) -> None:
+    """Elige con qué voz del banco dice sus líneas un personaje del reparto.
+
+    Vacío lo deja sin voz propia: sus líneas las narra la voz del proyecto, que
+    es lo que pasaba antes de que esto existiera.
+    """
+    with get_session() as s:
+        _, personaje = _personaje(s, pid, clave)
+        if voz_slug and voces_repo.por_slug(s, voz_slug) is None:
+            raise VozPersonajeNoDisponible(voz_slug)
+        personaje.voz = voz_slug
+        s.commit()
+
+
+def generar_voz_personaje(pid: int, clave: str) -> dict:
+    """Le crea una voz en el banco desde su propia ficha y se la asigna.
+
+    La ficha es de donde ya sale su retrato, así que es de donde sale también su
+    voz: dice la edad aparente, el género y el aire del personaje, que es lo que
+    decide el timbre. La voz nace en el banco como cualquier otra —se escucha,
+    se reutiliza y se borra desde el mismo sitio—, y queda asignada en cuanto se
+    encola, de modo que la UI dice ya de quién es aunque todavía se esté
+    sintetizando.
+    """
+    with get_session() as s:
+        _, personaje = _personaje(s, pid, clave)
+        if not (personaje.ficha or "").strip():
+            raise SinFicha(clave)
+        nombre = (personaje.nombre or clave).strip()
+        instruct = voces_service.instruct_desde_ficha(
+            nombre, personaje.ficha, personaje.tipo or "persona"
+        )
+
+    creada = voces_service.crear_para_personaje(nombre, instruct)
+
+    with get_session() as s:
+        _, personaje = _personaje(s, pid, clave)
+        personaje.voz = creada["slug"]
+        s.commit()
+    return creada
 
 
 def fijar_musica(pid: int, musica_id: int | None, mezclar: bool) -> None:

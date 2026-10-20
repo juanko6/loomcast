@@ -39,7 +39,7 @@ def test_listar_dice_quien_tiene_cara(client, session, dirs_tmp):
     f.miembro_reparto(session)
     assert client.get("/api/reparto").json() == [
         {"slug": "ana-narradora", "nombre": "Ana narradora", "clave": "ANA",
-         "ficha": FICHA, "tipo": "persona", "retrato": False}]
+         "ficha": FICHA, "tipo": "persona", "voz": "", "retrato": False}]
     _retrato_reparto(dirs_tmp, "ana-narradora")
     assert client.get("/api/reparto").json()[0]["retrato"] is True
 
@@ -114,7 +114,8 @@ def test_traer_mete_al_miembro_con_su_cara_copiada(client, session, proy, dirs_t
 
     r = client.post("/api/reparto/ana-narradora/traer", json={"proyecto_id": proy.id})
 
-    assert r.json() == {"clave": "ANA", "renombrado": False, "retrato": True}
+    assert r.json() == {"clave": "ANA", "renombrado": False, "retrato": True,
+                        "voz": ""}
     assert (dirs_tmp["proyectos"] / "demo" / "personajes" / "ANA.png").read_bytes() == b"cara"
     session.expire_all()
     p = personajes_repo.por_proyecto(session, proy.id)[0]
@@ -139,7 +140,8 @@ def test_traer_con_la_clave_ocupada_no_pisa_al_que_estaba(client, session, proy,
 
     r = client.post("/api/reparto/ana-narradora/traer", json={"proyecto_id": proy.id})
 
-    assert r.json() == {"clave": "ANA_2", "renombrado": True, "retrato": True}
+    assert r.json() == {"clave": "ANA_2", "renombrado": True, "retrato": True,
+                        "voz": ""}
     session.expire_all()
     ps = personajes_repo.por_proyecto(session, proy.id)
     assert [(x.clave, x.ficha) for x in ps] == [
@@ -223,6 +225,67 @@ def test_actualizar_inexistente_404(client, session, proy, dirs_tmp):
     f.miembro_reparto(session)
     assert client.put("/api/reparto/ana-narradora",
                       json={"proyecto_id": proy.id, "clave": "NADIE"}).status_code == 404
+
+
+# --- la voz viaja con el miembro --------------------------------------------
+
+def _voz(session, slug="ana-voz"):
+    from backend.repositories import voces as voces_repo
+
+    v = voces_repo.crear(session, slug, slug, "grave")
+    v.estado = "lista"
+    session.commit()
+    return v
+
+
+def test_promover_se_lleva_la_voz_del_personaje(client, session, proy, dirs_tmp):
+    """La voz va con la ficha y la cara: un narrador recurrente que ya sonaba
+    bien no tiene por qué volver a sonar distinto en el vídeo siguiente."""
+    _voz(session)
+    f.personaje(session, proy.id, voz="ana-voz")
+
+    client.post("/api/reparto", json={"proyecto_id": proy.id, "clave": "ANA",
+                                      "nombre": "Ana narradora"})
+
+    session.expire_all()
+    assert reparto_repo.por_slug(session, "ana-narradora").voz == "ana-voz"
+
+
+def test_traer_mete_al_miembro_con_su_voz(client, session, proy, dirs_tmp):
+    _voz(session)
+    f.miembro_reparto(session, voz="ana-voz")
+
+    r = client.post("/api/reparto/ana-narradora/traer", json={"proyecto_id": proy.id})
+
+    assert r.json()["voz"] == "ana-voz"
+    session.expire_all()
+    assert personajes_repo.por_proyecto(session, proy.id)[0].voz == "ana-voz"
+
+
+def test_traer_con_la_voz_borrada_del_banco_entra_sin_voz(client, session, proy, dirs_tmp):
+    """La voz del reparto NO se copia como el retrato: es una fila del banco,
+    compartida. Si se borró de allí, apuntar a su `ref.wav` dejaría las líneas
+    mudas sin decir por qué."""
+    f.miembro_reparto(session, voz="fantasma")
+
+    r = client.post("/api/reparto/ana-narradora/traer", json={"proyecto_id": proy.id})
+
+    assert r.json()["voz"] == ""
+    session.expire_all()
+    assert personajes_repo.por_proyecto(session, proy.id)[0].voz == ""
+
+
+def test_actualizar_sube_tambien_la_voz(client, session, proy, dirs_tmp):
+    _voz(session, "otra-voz")
+    f.miembro_reparto(session, voz="ana-voz")
+    client.post("/api/reparto/ana-narradora/traer", json={"proyecto_id": proy.id})
+    client.put(f"/api/proyectos/{proy.id}/personajes/ANA/voz", json={"voz": "otra-voz"})
+
+    client.put("/api/reparto/ana-narradora",
+               json={"proyecto_id": proy.id, "clave": "ANA"})
+
+    session.expire_all()
+    assert reparto_repo.por_slug(session, "ana-narradora").voz == "otra-voz"
 
 
 # --- borrar y retrato -------------------------------------------------------

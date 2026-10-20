@@ -42,4 +42,11 @@ class MiembroReparto(Base):
     # Semilla del retrato guardado. Viaja para que rehacerle la cara en un
     # proyecto nuevo "con el mismo seed" dé la misma persona que ya tenía.
     seed: Mapped[int] = mapped_column(default=0)
+    # Slug de su voz en el banco. Viaja con él igual que la ficha y la cara: un
+    # narrador recurrente que ya sonaba bien no tiene por qué volver a sonar
+    # distinto en el vídeo siguiente. A diferencia del retrato **no se copia**,
+    # porque una voz del banco ya es un recurso compartido entre proyectos y
+    # duplicar su `ref.wav` por vídeo serían megas por nada; si la voz se borra
+    # del banco, el miembro se queda sin ella (ver desvincular_voz).
+    voz: Mapped[str] = mapped_column(default="")
     created_at: Mapped[datetime] = mapped_column(default=now_utc)

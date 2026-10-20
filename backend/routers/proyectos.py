@@ -12,6 +12,7 @@ from ..schemas import (
     RegenerarImagenIn,
     VideoIn,
     VozGenerarIn,
+    VozPersonajeIn,
     VozSeleccionIn,
 )
 from ..services import proyectos as proyectos_service
@@ -160,6 +161,35 @@ def generar_retrato(pid: int, clave: str, body: RegenerarImagenIn):
             pid, "generar_retrato", clave=clave, nuevo_seed=body.nuevo_seed
         )
     }
+
+
+@router.put("/{pid}/personajes/{clave}/voz")
+def asignar_voz_personaje(pid: int, clave: str, body: VozPersonajeIn):
+    """Con qué voz del banco dice sus líneas (vacío = la voz del proyecto)."""
+    try:
+        proyectos_service.asignar_voz_personaje(pid, clave, body.voz)
+        return {"ok": True}
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+    except proyectos_service.PersonajeNoExiste:
+        raise HTTPException(404, "El proyecto no tiene ese personaje")
+    except proyectos_service.VozPersonajeNoDisponible:
+        raise HTTPException(400, "Voz no disponible")
+
+
+@router.post("/{pid}/personajes/{clave}/voz")
+def generar_voz_personaje(pid: int, clave: str):
+    """Le crea una voz en el banco desde su ficha (VoiceDesign) y se la asigna."""
+    try:
+        return proyectos_service.generar_voz_personaje(pid, clave)
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+    except proyectos_service.PersonajeNoExiste:
+        raise HTTPException(404, "El proyecto no tiene ese personaje")
+    except proyectos_service.SinFicha:
+        raise HTTPException(
+            400, "Ese personaje no tiene ficha; su voz se escribe desde ella."
+        )
 
 
 @router.get("/{pid}/personajes/{clave}/retrato")

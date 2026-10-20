@@ -14,6 +14,10 @@ Dos decisiones de diseño que explican casi todo lo de abajo:
 - **Editar la ficha dentro de un proyecto no toca al original.** Un retoque para
   una escena concreta no debe cambiar al personaje en todos los vídeos futuros:
   para eso hay que pedirlo (`actualizar`), que es una acción aparte.
+- **Su voz viaja con él, pero no se copia.** La cara es un PNG del proyecto y la
+  voz es una fila del banco, que ya es compartida entre vídeos: lo que viaja es
+  el slug. Si esa voz se borró del banco, el personaje entra sin voz en vez de
+  apuntar a un `ref.wav` que no está.
 
 A diferencia del banco de voces, aquí no se encola nada: promover y traer son
 copiar un PNG y escribir una fila, sin GPU ni LLM de por medio, así que van en
@@ -27,6 +31,7 @@ from ..db import get_session
 from ..repositories import personajes as personajes_repo
 from ..repositories import proyectos as proyectos_repo
 from ..repositories import reparto as reparto_repo
+from ..repositories import voces as voces_repo
 from ..services.pipeline import retratos
 
 
@@ -60,6 +65,7 @@ def _dict(m) -> dict:
     return {
         "slug": m.slug, "nombre": m.nombre, "clave": m.clave,
         "ficha": m.ficha, "tipo": m.tipo or "persona",
+        "voz": m.voz or "",
         "retrato": reparto_repo.ruta_retrato(m.slug).exists(),
     }
 
@@ -116,7 +122,7 @@ def promover(proyecto_id: int, clave: str, nombre: str = "") -> dict:
             raise SlugOcupado(slug)
         reparto_repo.crear(s, slug, nombre, personaje.clave,
                            personaje.ficha, personaje.tipo or "persona",
-                           personaje.seed)
+                           personaje.seed, personaje.voz or "")
         # Queda enlazado para que la UI ofrezca "actualizar en el reparto" en vez
         # de volver a promoverlo y acabar con dos copias del mismo narrador.
         personaje.reparto_slug = slug
@@ -151,6 +157,7 @@ def actualizar(slug: str, proyecto_id: int, clave: str) -> dict:
         m.tipo = personaje.tipo or "persona"
         m.seed = personaje.seed
         m.clave = personaje.clave
+        m.voz = personaje.voz or ""
         personaje.reparto_slug = slug
         proyecto_slug, nombre = proyecto.slug, m.nombre
         s.commit()
@@ -179,8 +186,13 @@ def traer(slug: str, proyecto_id: int) -> dict:
         if p is None:
             raise ProyectoNoExiste(proyecto_id)
         clave = personajes_repo.clave_libre(s, proyecto_id, m.clave)
+        # La voz solo entra si sigue en el banco: borrarla de allí la pierde
+        # para todos, y meter el slug de una voz que ya no existe dejaría sus
+        # líneas mudas sin decir por qué.
+        voz = m.voz if m.voz and voces_repo.por_slug(s, m.voz) else ""
         personajes_repo.crear(s, proyecto_id, clave, m.nombre, m.ficha,
-                              m.seed, m.tipo or "persona", reparto_slug=slug)
+                              m.seed, m.tipo or "persona", reparto_slug=slug,
+                              voz=voz)
         s.commit()
         proyecto_slug, renombrado = p.slug, clave != m.clave
 
@@ -188,7 +200,8 @@ def traer(slug: str, proyecto_id: int) -> dict:
         reparto_repo.ruta_retrato(slug),
         retratos.ruta_retrato(proyecto_slug, clave),
     )
-    return {"clave": clave, "renombrado": renombrado, "retrato": con_retrato}
+    return {"clave": clave, "renombrado": renombrado, "retrato": con_retrato,
+            "voz": voz}
 
 
 def borrar(slug: str) -> dict:

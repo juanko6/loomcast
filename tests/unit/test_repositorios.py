@@ -22,9 +22,56 @@ from tests import factories as f
     ({"gancho": "G", "narracion": "   ", "frases": ["f"], "cta": ""}, "G f"),
     ({}, ""),
     ({"frases": ["", "  ", "x"]}, "x"),
+    # Con líneas atribuidas se narra lo mismo que se oye, sin decir quién lo
+    # dice: es lo que esperan las escenas, la música y los metadatos.
+    ({"gancho": "G", "cta": "C", "lineas": [
+        {"personaje": "", "texto": "narro"},
+        {"personaje": "ANA", "texto": "hablo"}]}, "G narro hablo C"),
+    # Las líneas mandan sobre los otros dos cuerpos, como la narración sobre
+    # las frases: un guion tiene un solo formato.
+    ({"gancho": "G", "narracion": "n", "frases": ["f"], "cta": "C",
+      "lineas": [{"texto": "L"}]}, "G L C"),
 ])
 def test_texto_narrado(guion, esperado):
     assert guiones_repo.texto_narrado(guion) == esperado
+
+
+@pytest.mark.parametrize("guion,esperado", [
+    # Los dos formatos de siempre son UN tramo con el texto completo: la etapa
+    # de voz hace con ellos la misma llamada única de antes.
+    ({"gancho": "G", "frases": ["a", "b"], "cta": "C"}, [("", "G a b C")]),
+    ({"gancho": "G", "narracion": "cuerpo", "cta": "C"}, [("", "G cuerpo C")]),
+    ({}, []),
+    # El gancho y el cta son del narrador, y los tramos seguidos del mismo
+    # dueño se unen (el narrador no suena a frases cortadas y son menos
+    # llamadas al modelo).
+    ({"gancho": "G", "cta": "C", "lineas": [
+        {"personaje": "ANA", "texto": "yo lo vi"},
+        {"personaje": "ANA", "texto": "de verdad"},
+        {"personaje": "", "texto": "y se fue"}]},
+     [("", "G"), ("ANA", "yo lo vi de verdad"), ("", "y se fue C")]),
+    # La clave se normaliza como la del reparto, y un texto vacío no es tramo.
+    ({"lineas": [{"personaje": " ana ", "texto": "x"},
+                 {"personaje": "LUIS", "texto": "  "}]}, [("ANA", "x")]),
+])
+def test_tramos(guion, esperado):
+    assert guiones_repo.tramos(guion) == esperado
+
+
+def test_normalizar_lineas_limpia_claves_y_tira_los_textos_vacios():
+    g = {"gancho": "G", "lineas": [
+        {"personaje": "ana maría", "texto": " hablo "},
+        {"personaje": "LUIS", "texto": ""},
+    ]}
+    # La tilde se cae (normalizar_clave solo deja A-Z0-9_), y eso es justo lo
+    # que hace que la línea y el personaje casen: el casting normaliza su clave
+    # con la misma función.
+    assert guiones_repo.normalizar_lineas(g) == {
+        "gancho": "G", "lineas": [{"personaje": "ANA_MARA", "texto": "hablo"}]
+    }
+    # Un guion de los otros formatos pasa intacto, sin inventarle la clave.
+    viejo = {"gancho": "G", "frases": ["a"], "cta": "C"}
+    assert guiones_repo.normalizar_lineas(viejo) == viejo
 
 
 def test_guiones_se_versionan(session):

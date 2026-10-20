@@ -13,6 +13,7 @@ from ...repositories import temas as temas_repo
 from ...schemas import (
     DescripcionLLM,
     EtiquetasLLM,
+    GuionLineasLLM,
     GuionLLM,
     GuionNarracionLLM,
     IdeasLLM,
@@ -20,6 +21,13 @@ from ...schemas import (
 )
 
 N_IDEAS = 8
+# Qué esquema de guion pide cada `formato_guion` de la plantilla. Lo que no esté
+# aquí (incluida una plantilla que no declare el campo) va a GuionLLM, que es el
+# formato de frases de siempre.
+ESQUEMA_GUION = {
+    "narracion": GuionNarracionLLM,
+    "lineas": GuionLineasLLM,
+}
 # Español narrado ágil ≈ 2.2–2.7 palabras/segundo
 PALABRAS_POR_SEGUNDO = (2.2, 2.7)
 
@@ -66,13 +74,17 @@ def generar_guion(proyecto_id: int) -> str:
         f"Idea del video:\n- Título: {titulo}\n"
         f"- Gancho propuesto: {gancho}\n- Resumen: {resumen}"
     )
-    # La plantilla elige el formato: narración continua o lista de frases.
-    esquema = GuionNarracionLLM if pl.get("formato_guion") == "narracion" else GuionLLM
+    # La plantilla elige el formato: frases, narración continua o líneas
+    # atribuidas a un personaje.
+    esquema = ESQUEMA_GUION.get(pl.get("formato_guion"), GuionLLM)
     guion = llm.chat(system, user, esquema)
+    # Las claves que escribió al atribuir las líneas pasan por el normalizador
+    # del reparto: son los marcadores con los que el casting lo encontrará.
+    contenido = guiones_repo.normalizar_lineas(guion.model_dump())
 
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)
-        g = guiones_repo.crear(s, proyecto_id, guion.model_dump())
+        g = guiones_repo.crear(s, proyecto_id, contenido)
         avanzar_estado(p, "GUION")
         s.commit()
         return f"Guion v{g.version} generado"
