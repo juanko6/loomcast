@@ -3,6 +3,7 @@
 // componente se suscriba sin pasar props en cadena.
 import { writable, get } from "svelte/store";
 import { api } from "./api";
+import { loteVivo, type Lote } from "./autopiloto";
 import type { Salud, ModeloLLM, Job, JobHistorial, StudioMode } from "./types";
 
 export const modo = writable<StudioMode>("videos");
@@ -20,6 +21,11 @@ export const salud = writable<Salud | null>(null);
 export const modelos = writable<ModeloLLM[]>([]);
 export const modeloActivo = writable<string>("");
 export const jobs = writable<Job[]>([]);
+
+// Los lotes con algo por hacer. Se consultan con la cola porque es la misma
+// pregunta —"¿qué está pasando?"— y porque un lote de diez vídeos es lo que
+// explica por qué la cola no se vacía.
+export const lotes = writable<Lote[]>([]);
 
 // Señal que se incrementa cada vez que la cola se vacía un poco (un job
 // terminó): las vistas se suscriben para refrescarse solas, como hacía el
@@ -63,6 +69,16 @@ export async function refrescarJobs(): Promise<void> {
   }
 }
 
+/** Los lotes vivos. Falla en silencio: es información, y sin ella el resto de
+ * la cabecera sigue sirviendo. */
+export async function refrescarLotes(): Promise<void> {
+  try {
+    lotes.set((await api<Lote[]>("/lotes")).filter(loteVivo));
+  } catch {
+    /* ignorar */
+  }
+}
+
 /** Cancela un job: si espera turno se descarta, y si corre se corta en caliente. */
 export async function cancelarJob(id: number): Promise<void> {
   await api(`/jobs/${id}/cancelar`, { method: "POST" });
@@ -82,6 +98,7 @@ export async function pararCola(
     body: { corriendo: true, pendientes: true, ...opciones },
   });
   await refrescarJobs();
+  await refrescarLotes();
 }
 
 /** Los últimos trabajos terminados (hechos, con error o parados). */
@@ -102,6 +119,10 @@ let generacion = 0;
 // 3.600 peticiones por hora para no ver nada.
 async function cicloJobs(gen: number): Promise<void> {
   await refrescarJobs();
+  // Un lote cambia de proyecto cada varios minutos, así que no hace falta
+  // preguntarlo al ritmo de la barra de progreso: basta cuando hay cola, que es
+  // justo cuando puede haber un lote en marcha.
+  if (get(jobs).length || get(lotes).length) await refrescarLotes();
   if (gen !== generacion) return;
   timerJobs = setTimeout(() => cicloJobs(gen), get(jobs).length ? 1000 : 2500);
 }
@@ -111,6 +132,7 @@ async function cicloJobs(gen: number): Promise<void> {
 export function iniciarPolling(): void {
   detenerPolling();
   refrescarSalud();
+  refrescarLotes();
   timerSalud = setInterval(refrescarSalud, 15000);
   cicloJobs(generacion);
 }

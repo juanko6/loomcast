@@ -1,11 +1,13 @@
 """Contratos Pydantic por ámbito: API HTTP, LLMs y plantillas."""
 from .api import (
+    AutopilotoIn,
     EscenaPromptIn,
     EscenasIn,
     GaleriaFinalIn,
     GaleriaGenerarIn,
     GaleriaPreviewsIn,
     GaleriaPromptIn,
+    LoteIn,
     ModoEscenaIn,
     ModosEscenasIn,
     MusicaCamposIn,
@@ -61,8 +63,9 @@ from .plantilla import (
 )
 
 __all__ = [
-    "EscenaPromptIn", "EscenasIn", "GaleriaFinalIn", "GaleriaGenerarIn",
-    "GaleriaPreviewsIn", "GaleriaPromptIn", "ModoEscenaIn", "ModosEscenasIn",
+    "AutopilotoIn", "EscenaPromptIn", "EscenasIn", "GaleriaFinalIn",
+    "GaleriaGenerarIn", "GaleriaPreviewsIn", "GaleriaPromptIn", "LoteIn",
+    "ModoEscenaIn", "ModosEscenasIn",
     "MusicaCamposIn", "MusicaGenerarIn", "MusicaLanzarIn", "MusicaProyectoIn",
     "ParadaIn", "PersonajeIn", "PersonajeNuevoIn", "PersonajesIn",
     "RegenerarClipIn", "RegenerarImagenIn", "RepartoDesdeProyectoIn",

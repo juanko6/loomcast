@@ -12,6 +12,7 @@ from .routers import (
     galeria,
     ideas,
     jobs,
+    lotes,
     musica,
     proyectos,
     reparto,
@@ -70,6 +71,7 @@ app.include_router(reparto.router)
 app.include_router(series.router)
 app.include_router(proyectos.router)
 app.include_router(jobs.router)
+app.include_router(lotes.router)
 app.include_router(galeria.router)
 app.include_router(musica.router)
 

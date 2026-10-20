@@ -19,6 +19,13 @@ class Job(Base):
     params: Mapped[str] = mapped_column(Text, default="{}")
     # pendiente | corriendo | ok | error | cancelado
     estado: Mapped[str] = mapped_column(default="pendiente")
+    # Quién va antes en la cola: 0 lo que se pide a mano, 10 lo que encola un
+    # autopiloto (ver workers/queue.PRIORIDAD_*). Con diez vídeos en cola, que
+    # rehacer una imagen del que estás mirando tuviera que esperar a que acabe
+    # el lote convertía la cola en una lista de espera. Vive en la columna y no
+    # solo en memoria porque `recuperar_pendientes()` re-encola tras un
+    # reinicio y el orden tiene que sobrevivirlo.
+    prioridad: Mapped[int] = mapped_column(default=0)
     # Intentos gastados. Un job que falla por algo transitorio se reintenta
     # (ver workers/queue.py), y sin este número el historial no distinguiría
     # "falló a la primera" de "falló tres veces seguidas".

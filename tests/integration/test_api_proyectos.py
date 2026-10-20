@@ -35,7 +35,9 @@ def test_listar_incluye_titulo_de_la_idea(client, proy):
         {"id": proy.id, "slug": "demo", "estado": "IDEA",
          "plantilla": "curiosidades", "titulo": "Una idea",
          # Un vídeo suelto: sin serie y sin número de episodio.
-         "serie": None, "episodio": 0}]
+         "serie": None, "episodio": 0,
+         # Y sin autopiloto: se conduce a mano, como siempre.
+         "autopiloto": None}]
 
 
 def test_detalle_inexistente_404(client):

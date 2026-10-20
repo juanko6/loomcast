@@ -1,5 +1,6 @@
 <script lang="ts">
   import Stepper from "./Stepper.svelte";
+  import AutopilotoPanel from "./AutopilotoPanel.svelte";
   import StepGuion from "./steps/StepGuion.svelte";
   import StepVoz from "./steps/StepVoz.svelte";
   import StepMetadatos from "./steps/StepMetadatos.svelte";
@@ -93,6 +94,15 @@
       <BotonParar />
     {/if}
   </header>
+
+  <AutopilotoPanel
+    {p}
+    {voces}
+    {busy}
+    onlanzar={acciones.lanzarAutopiloto}
+    oncontinuar={acciones.continuarAutopiloto}
+    ondetener={acciones.detenerAutopiloto}
+  />
 
   <Stepper {pasos} {activo} onselect={(id) => (elegido = id)} />
 

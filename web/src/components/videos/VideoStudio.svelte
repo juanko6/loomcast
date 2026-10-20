@@ -11,9 +11,11 @@
   import { jobs, jobsDrenados, refrescarJobs, seleccionPendiente } from "@/lib/stores";
   import { currentTrack } from "@/lib/player";
   import * as API from "@/lib/proyectos";
+  import * as Auto from "@/lib/autopiloto";
   import * as SeriesAPI from "@/lib/series";
   import type { Idea, MiembroReparto, ProyectoDetalle, Voz } from "@/lib/proyectos";
   import type { SerieDetalle, SerieResumen } from "@/lib/series";
+  import type { OpcionesAutopiloto } from "@/lib/autopiloto";
   import type { ProyectoResumen, TemaResumen } from "@/lib/types";
 
   // --- estado ---
@@ -255,6 +257,32 @@
         fallo(e);
       }
     },
+    // Un proyecto por idea, cada uno con su autopiloto y encolados uno detrás
+    // de otro. Se confirma porque son horas de GPU: con ocho ideas y el modo
+    // i2v, media tarde.
+    lote: async (o: OpcionesAutopiloto) => {
+      if (vista?.tipo !== "tema") return;
+      const sinParadas = !o.paradas?.length;
+      if (
+        !confirm(
+          "¿Producir en lote las ideas de este tema?\n\n" +
+            (sinParadas
+              ? "Sin paradas de revisión: cada vídeo irá hasta el final sin preguntar nada.\n\n"
+              : "Cada vídeo llegará hasta su primera parada de revisión y te esperará ahí.\n\n") +
+            "Se producen de uno en uno y puedes pararlo todo cuando quieras.",
+        )
+      )
+        return;
+      try {
+        const lote = await Auto.lanzarLote(vista.id, o);
+        error = "";
+        await refrescarListas();
+        refrescarJobs();
+        if (lote.actual) irA("proyecto", lote.actual.proyecto_id);
+      } catch (e) {
+        fallo(e);
+      }
+    },
   };
 
   // --- acciones del pipeline (se inyectan en ProjectView) ---
@@ -415,6 +443,20 @@
     },
     borrarProyecto: () =>
       borrarProyecto(pid(), proyecto?.idea?.titulo ?? proyecto?.slug ?? ""),
+    // --- autopiloto ---
+    lanzarAutopiloto: (o: OpcionesAutopiloto) => tras(Auto.lanzarAutopiloto(pid(), o)),
+    continuarAutopiloto: () => tras(Auto.continuarAutopiloto(pid())),
+    detenerAutopiloto: async () => {
+      if (
+        !confirm(
+          "¿Apagar el autopiloto de este vídeo?\n\n" +
+            "Se cancela la etapa que tenga en la cola; lo ya terminado se conserva. " +
+            "Si es parte de un lote, los demás vídeos siguen su turno.",
+        )
+      )
+        return;
+      await tras(Auto.detenerAutopiloto(pid()));
+    },
   };
 
   function abrirVisor(html: string, pie: string) {
@@ -592,6 +634,13 @@
             {#if pr.serie}
               <Chip tone="accent">EP {pr.episodio}</Chip>
             {/if}
+            <!-- Un proyecto en automático se reconoce desde la lista: con diez
+                 en marcha, cuáles esperan que alguien los lea es la pregunta. -->
+            {#if pr.autopiloto}
+              <Chip tone={pr.autopiloto === "esperando" ? "warn" : "accent"}>
+                {pr.autopiloto === "esperando" ? "revisar" : "auto"}
+              </Chip>
+            {/if}
             <Chip>{pr.estado}</Chip>
           </button>
           <span class="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
@@ -630,12 +679,14 @@
       <div class="min-h-0 flex-1 overflow-y-auto p-6">
         <IdeasView
           {ideas}
-          busy={false}
+          {voces}
+          busy={hayTrabajo}
           onaprobar={accIdeas.aprobar}
           ondescartar={(id) => accIdeas.estado(id, "descartada")}
           onrestaurar={(id) => accIdeas.estado(id, "propuesta")}
           onabrirproyecto={(id) => irA("proyecto", id)}
           onmas={accIdeas.mas}
+          onlote={accIdeas.lote}
         />
       </div>
     {:else if vista.tipo === "serie"}

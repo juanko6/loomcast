@@ -18,6 +18,8 @@ from ..repositories import plantillas as plantillas_repo
 from ..repositories import proyectos as proyectos_repo
 from ..repositories import series as series_repo
 from ..repositories import voces as voces_repo
+from ..repositories import autopilotos as autopilotos_repo
+from ..services import autopiloto as autopiloto_service
 from ..services import voces as voces_service
 from ..services.pipeline import casting
 from ..services.pipeline import escenas as escenas_pipeline
@@ -72,9 +74,15 @@ def listar() -> list[dict]:
         for p in proyectos_repo.listar(s):
             idea = ideas_repo.obtener(s, p.idea_id)
             serie = series_repo.obtener(s, p.serie_id) if p.serie_id else None
+            auto = autopilotos_repo.vivo_de_proyecto(s, p.id)
             out.append({
                 "id": p.id, "slug": p.slug, "estado": p.estado,
                 "plantilla": p.plantilla, "titulo": idea.titulo if idea else "",
+                # Estado de su autopiloto si tiene uno en marcha (corriendo,
+                # esperando una revisión o esperando turno en su lote), o None.
+                # El listado es desde donde se ve que de diez vídeos tres están
+                # esperando que alguien lea su guion.
+                "autopiloto": auto.estado if auto else None,
                 # Nombre de la serie y número de episodio, o None: el listado
                 # distingue un episodio de un vídeo suelto de un vistazo.
                 "serie": serie.nombre if serie else None,
@@ -184,6 +192,7 @@ def detalle(pid: int) -> dict:
         base_dir = PROYECTOS_DIR / p.slug
         srt = base_dir / "subtitulos.srt"
         en_cola = jobs_repo.escenas_en_cola(s, pid)
+        ultimo_auto = autopilotos_repo.ultimo_de_proyecto(s, pid)
         escenas = [_escena_dict(e, base_dir, en_cola)
                    for e in escenas_repo.por_proyecto(s, pid)]
         personajes = [
@@ -243,6 +252,12 @@ def detalle(pid: int) -> dict:
             "versiones": _versiones(base_dir),
             "jobs_activos": activos,
             "job_activo": job_activo,
+            # Su última tirada automática (o None si nunca tuvo una). Va la
+            # última y no solo la viva porque cómo acabó la anterior —un fallo,
+            # una parada— es justo lo que hay que leer antes de relanzarla.
+            "autopiloto": (
+                autopiloto_service.a_dict(ultimo_auto) if ultimo_auto else None
+            ),
         }
 
 
@@ -612,28 +627,17 @@ def fijar_modo_escenas(pid: int, modos: dict[int, str]) -> int:
         return n
 
 
-# Modo de video → job con el que arranca. El estático es un solo job; el de
-# movimiento (Ken Burns) es una cadena upscale → clips → armado.
-MODOS_VIDEO = {
-    "estatico": "armar_estatico",
-    "kenburns": "generar_upscale",
-    "i2v": "generar_i2v",
-    # Respeta el modo elegido en cada escena: el video puede mezclarlos.
-    "mixto": "generar_clips_mixto",
-}
-
-
 class ModoVideoInvalido(ValueError):
     pass
 
 
 def generar_video(pid: int, modo: str, motor: str = "") -> int:
-    if modo not in MODOS_VIDEO:
+    if modo not in queue.MODOS_VIDEO:
         raise ModoVideoInvalido(modo)
     # El motor solo llega a los modos que animan con i2v; a los demás les
     # sobraría como kwarg y el handler lo rechazaría.
     extra = {"motor": motor} if motor and modo in ("i2v", "mixto") else {}
-    return queue.encolar(MODOS_VIDEO[modo], pid, **extra)
+    return queue.encolar(queue.MODOS_VIDEO[modo], pid, **extra)
 
 
 def motores_i2v() -> list[dict]:

@@ -214,7 +214,7 @@ cd web && pnpm dev
 
 ## Arquitectura del backend
 
-Capas (de HTTP hacia abajo): `routers/` (controllers: validación y JSON, cero lógica) → `services/` (reglas de negocio; `services/pipeline/` son las etapas de generación) → `repositories/` (consultas a SQLite y carga de plantillas) → `models.py` (ORM + máquina de estados). Transversales: `clients/` (adaptadores a llama-server y Qwen3-TTS), `workers/queue.py` (cola de jobs en un hilo, uno a la vez, con encadenado, recuperación y reintentos), `services/progreso.py` (por dónde va el job en curso), `parada.py` + `services/cancelacion.py` (la bandera de parada y el corte en caliente del job que corre), `schemas.py` (contratos Pydantic de la API).
+Capas (de HTTP hacia abajo): `routers/` (controllers: validación y JSON, cero lógica) → `services/` (reglas de negocio; `services/pipeline/` son las etapas de generación) → `repositories/` (consultas a SQLite y carga de plantillas) → `models.py` (ORM + máquina de estados). Transversales: `clients/` (adaptadores a llama-server y Qwen3-TTS), `workers/queue.py` (cola de jobs en un hilo, uno a la vez, con prioridad, encadenado, recuperación y reintentos), `services/autopiloto.py` (la tirada automática de un proyecto y los lotes), `services/progreso.py` (por dónde va el job en curso), `parada.py` + `services/cancelacion.py` (la bandera de parada y el corte en caliente del job que corre), `schemas.py` (contratos Pydantic de la API).
 
 ### Progreso de la cola
 
@@ -313,6 +313,157 @@ un estado propio y se lee «Parado», distinto de «Error»: pararlo fue una
 decisión, no un fallo.
 
 
+## Autopiloto y lotes
+
+Loomcast se conduce paso a paso: cada etapa es un botón del stepper y entre
+botón y botón hay una persona mirando. Eso es lo que quieres mientras afinas una
+plantilla, y lo que no quieres cuando ya sabes lo que sale: diez vídeos son
+ciento diez clics. El **autopiloto** encadena las etapas de un proyecto hasta su
+`final.mp4`, y un **lote** produce varias ideas de un tema, una detrás de otra.
+
+```
+POST   /api/proyectos/{id}/autopiloto            lanzar (modo, motor, voz, paradas)
+POST   /api/proyectos/{id}/autopiloto/continuar  seguir tras una revisión
+DELETE /api/proyectos/{id}/autopiloto            apagarlo y cortar lo que tenga en cola
+POST   /api/lotes          {tema_id, modo, motor, voz, paradas}
+GET    /api/lotes          en qué proyecto va cada lote, en qué etapa y cuántos quedan
+```
+
+El modo de montaje y la voz se eligen **al lanzarlo**, igual que se eligen a mano
+en el paso de vídeo y en el de voz: son las mismas dos decisiones y ninguna tiene
+un valor obvio. Sin voz elegida no arranca, y lo dice ahí mismo en vez de fallar
+dos minutos después al generar la narración.
+
+### Las paradas de revisión, y por qué por defecto se respetan
+
+Son las tres que ya tiene el flujo a mano, las tres donde corregir es barato y el
+error se propaga caro:
+
+| parada | qué revisa | qué cuesta saltársela |
+|---|---|---|
+| `idea` | qué ideas se producen | producir ocho vídeos de ocho ideas mediocres |
+| `guion` | el texto que lo decide todo | media hora de GPU sobre un guion malo |
+| `escenas` | los prompts antes de las imágenes | la etapa cara, hecha sobre planos que no querías |
+
+El autopiloto llega hasta la siguiente parada, **deja el proyecto esperando y lo
+dice** («Esperando que revises el guion»); seguir es un botón, *Visto, continuar*.
+Que paren por defecto es deliberado: es lo que hace hoy el flujo a mano. Quien
+quiera producción sin manos las desactiva al lanzar, o cambia
+`[autopiloto].paradas` en `config.toml` para que el valor por defecto sea otro.
+
+En un lote, la parada de `idea` es la que decide **qué entra**: con ella puesta
+solo se producen las ideas aprobadas a mano; sin ella entran también las
+propuestas, y entonces es «tema → vídeos» sin tocar nada. Las descartadas no
+entran nunca: descartarlas ya fue una decisión. En el autopiloto de un proyecto
+suelto esa parada ya está pasada, porque el proyecto existe justo porque alguien
+aprobó su idea.
+
+### Qué etapa toca ahora
+
+No hay una escalera fija de pasos: el autopiloto **pregunta qué le falta al
+proyecto**, que es lo mismo que mira el stepper. Por eso una tirada lanzada sobre
+un proyecto a medias arranca donde esté y no rehace lo que ya hay, y por eso
+retomarla tras un fallo es volver a lanzarla. El orden que sale es el de siempre:
+
+```
+guion → metadatos → voz → subtítulos → reparto → retratos → escenas → imágenes → [montaje]
+```
+
+La voz encadena los subtítulos y el montaje encadena lo suyo (upscale → clips →
+armado, o i2v → armado) por la cadena de la cola de siempre, no por una vía
+aparte. La música no entra: es opcional y se escribe desde la historia, así que
+se entra a ella a mano. Los **retratos** sí, con una etapa nueva
+(`generar_retratos`) que retrata de una tirada a todo el reparto que no tenga
+cara: a mano se piden uno a uno porque uno mira la cara que salió y decide si la
+rehace, y en automático eso serían N clics. Suelta la memoria una vez al final y
+no tras cada personaje, que sería descargar y recargar ~19 GB por cara.
+
+Si lo que falta sigue siendo lo que acaba de terminar, la tirada se detiene y lo
+dice en vez de repetir la etapa para siempre; y hay un tope de etapas por tirada
+para el caso de un ciclo de dos (un montaje que dice que terminó sin dejar el
+`final.mp4` vuelve al primer job del modo, y ese otra vez al montaje).
+
+### El lote es secuencial
+
+Un lote es un `Autopiloto` por proyecto y un orden. **Solo uno produce a la vez**,
+porque la cola de jobs es de un solo hilo a propósito: las etapas se pelean por la
+misma memoria unificada, y meter dos modelos grandes a la vez es justo lo que mata
+al backend. Cuando el que corría deja la línea —acabó, falló o se paró en una
+revisión— entra el siguiente. Que una parada de revisión **libere la línea** es lo
+que hace útil el lote con las paradas puestas: si no, un lote de diez se quedaría
+clavado en el primer guion y los otros nueve no empezarían nunca; así la máquina
+sigue trabajando mientras revisas.
+
+**Un vídeo que sale mal no tira los otros nueve.** Un fallo que no se arregla
+repitiendo (los reintentos de lo transitorio siguen siendo los de la cola, y el
+autopiloto no se entera de ellos hasta que el job acaba) detiene **su** tirada,
+deja el motivo escrito —«Falló «generar_voz»: Falta el clip de referencia de la
+voz 'narrador'»— y la línea sigue con el proyecto siguiente.
+
+### Lo que se pide a mano adelanta
+
+La cola pasa a ordenar por **prioridad y luego llegada**: 0 lo que pide una
+persona, 10 lo que encola un autopiloto. Con diez vídeos en producción, rehacer
+una imagen del proyecto que estás mirando tardaba lo que quedara del lote —media
+tarde—, y eso convertía la cola en una lista de espera. Dentro de cada prioridad
+sigue siendo una FIFO, así que un lote conserva su orden interno, y una cadena
+hereda la prioridad de quien la abrió (un upscale pedido a mano no pierde el sitio
+al llegar a los clips). La prioridad vive también en la columna del job para que
+`recuperar_pendientes()` restituya el orden tras un reinicio.
+
+Los reintentos no cambian: un job reintenta **dentro de su turno**, sin
+re-encolarse, así que no pierde su sitio ni su cuenta de intentos.
+
+### Parar para de verdad
+
+Esto es lo delicado y es donde está puesto el cuidado. Un autopiloto que volviera
+a encolar la etapa siguiente por su cuenta sería algo que no se puede detener: la
+parada corta el job que corre y vacía la cola, y él la volvería a llenar. Por eso:
+
+- **El autopiloto es estado, no un job largo.** Vive en la tabla `autopilotos` y
+  quien lo mueve es el worker: al terminar bien una etapa le pregunta qué falta.
+  El único que encola es el worker, y solo tras una etapa que terminó bien **y**
+  sin que se pidiera parar. Ninguna etapa encola nada desde dentro.
+- **«Parar todo» apaga todos los autopilotos**, y lo hace *antes* de cancelar los
+  jobs: así, cuando el worker termine de cortar la etapa en curso y venga a
+  preguntar qué toca, ya no hay a quién seguir. Los que esperaban revisión también
+  se apagan —el botón dice parar—, y relanzarlos es un clic que retoma cada
+  proyecto donde esté. La confirmación dice cuántas tiradas se apagan.
+- **«Detener lo actual» no apaga la línea**: corta una etapa, no el lote. El
+  autopiloto de ese proyecto se detiene igual (su etapa sube como cancelada y el
+  worker se lo dice) y el lote sigue con el siguiente.
+- Un job cancelado **antes** de correr no pasa por el handler, pero su autopiloto
+  se entera igual; si no, se quedaría «corriendo» sin nada en la cola, o sea
+  colgado para siempre.
+
+### La memoria
+
+El autopiloto encadena LLM → TTS → ComfyUI una y otra vez, que es exactamente la
+secuencia que mató al backend con `Killed: 9` el 2026-10-19. No hay atajo: las
+etapas que encola pasan por la cola de siempre, o sea por la descarga del
+llama-server antes de cualquier etapa que no sea de texto y por la espera **real**
+de memoria de `llm_runtime` (que no lanza el modelo hasta comprobar que ComfyUI
+soltó; ver «Antes de lanzar un modelo se comprueba que cabe»). Hay un test que lo
+fija: una tirada entera tiene que pasar por esa puerta en cada etapa, y el día que
+alguien encole desde dentro de un pipeline, falla.
+
+En un lote largo tampoco se van acumulando modelos: cada etapa de GPU suelta lo
+suyo al terminar, y el vigilante de inactividad descarga el llama-server cuando
+lleva un rato sin usarse, incluso con la tirada parada en una revisión.
+
+### Qué cuenta la interfaz
+
+El chip de la cola pasa a decir por qué vídeo va el lote (*imagen 3 de 11 · ~6 min
+· vídeo 2 de 8*), y su panel lleva un bloque con el tema, cuántos van hechos, en
+qué proyecto y en qué etapa está, cuántos quedan por empezar, cuántos esperan
+revisión y cuántos fallaron. El listado de proyectos marca con un chip los que
+están en automático (`auto`) y los que esperan que alguien los lea (`revisar`).
+Dentro del proyecto, encima del stepper, hay una tira que dice qué está haciendo
+la tirada, por qué se detuvo si se detuvo, y los botones de *Visto, continuar* y
+*Detener autopiloto*. El stepper sigue estando y sigue funcionando a mano: lo que
+se pulse ahí adelanta en la cola a lo que esté encolando el autopiloto.
+
+
 ## Plantillas de estilo
 
 Una plantilla define el sabor completo de un nicho y vive en
@@ -363,6 +514,10 @@ Tema → ideas → seleccionar/aprobar → y ya en el proyecto, los pasos del
 stepper: **1** guion (editar/regenerar) → **2** voz (elegir del banco o crear nueva → generar narración) → **3** metadatos → **4** escenas (reparto → generar prompts → editarlos → aceptar y generar imágenes) → **música** (opcional, se entra a mano) → **5** armar video final.
 
 Puntos de revisión humana: selección de ideas, guion, elección de voz, reparto, y **prompts de escena antes de gastar GPU en las imágenes**.
+
+Ese mismo recorrido se puede dejar en automático —de donde esté el proyecto hasta
+el `final.mp4`, parando en las revisiones— y producir varias ideas de un tema
+seguidas (ver «Autopiloto y lotes»).
 
 Si la historia continúa, el proyecto puede ser el **episodio de una serie**: el
 reparto y el resumen del capítulo anterior entran solos, y el resto del flujo es
@@ -848,6 +1003,7 @@ o perdió su clip no deja un hueco: esa línea la narra la voz del proyecto.
 - ✅ **Reparto propio** — personajes guardados aparte, con su ficha y su cara, que se traen a cualquier vídeo nuevo; la cara se copia al proyecto y editarla ahí no toca al original. Primera pieza de la Fase 6
 - ✅ **Voz por personaje** — la narración se sintetiza por tramos y cada personaje dice sus líneas con su voz del banco, que viaja con él en el reparto propio; el formato de guion con líneas atribuidas se activa por plantilla y hoy no lo usa ninguna (es para las series). Segunda pieza de la Fase 6
 - ✅ **Series** — episodios con continuidad: reparto fijo que viaja a cada capítulo, resumen del episodio anterior como contexto del guion siguiente, plantilla `serie` con guion de líneas atribuidas y marca «SERIE · EP n» en el vídeo. Cierra la Fase 8
+- ✅ **Autopiloto y lotes** — un proyecto va solo de donde esté hasta su `final.mp4`, parando en las tres revisiones de siempre (configurables, y desactivables para producción sin manos), y varias ideas de un tema se producen una detrás de otra; lo que se pide a mano adelanta en la cola, parar apaga las tiradas enteras y un vídeo que falla no tira los demás. Cierra la Fase 9
 - ⬜ Pendiente — empaquetado
 
 ## Imágenes

@@ -122,6 +122,10 @@ def _migrar() -> None:
             # Intentos del job: los de antes de los reintentos quedan en 0, que
             # es lo que de verdad se sabe de ellos.
             "intentos": "INTEGER DEFAULT 0",
+            # Orden en la cola. Los jobs de antes de la prioridad quedan en 0,
+            # o sea "pedido a mano", que es lo que eran todos: el autopiloto no
+            # existía.
+            "prioridad": "INTEGER DEFAULT 0",
         }
         for col, tipo in nuevas.items():
             if col not in cols:

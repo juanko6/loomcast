@@ -81,7 +81,7 @@ def test_parar_a_mitad_de_una_etapa_de_texto_la_corta_sin_esperarla(
                                        headers={"content-type": "text/event-stream"}))
     jid = queue.encolar("generar_guion", p.id)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     estado, log = _estado(jid)
     assert estado == "cancelado" and "generando texto" in log
@@ -152,7 +152,7 @@ def test_parar_mientras_carga_el_modelo_corta_antes_de_sintetizar(
     monkeypatch.setattr(tts, "cargar_modelo", cargar_y_parar)
     jid = queue.encolar("generar_voz", p.id, modo="design")
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     estado, log = _estado(jid)
     assert estado == "cancelado" and "Parado" in log
@@ -191,7 +191,7 @@ def test_si_el_tramo_ya_estaba_sintetizandose_el_log_lo_dice_y_no_encadena(
     )
     jid = queue.encolar("generar_voz", p.id, modo="design")
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     estado, log = _estado(jid)
     assert estado == "ok"                       # el audio está entero
@@ -259,7 +259,7 @@ def test_una_narracion_por_tramos_se_corta_entre_tramos(
     monkeypatch.setattr(tts, "cargar_modelo", cargar_proxy)
     jid = queue.encolar("generar_voz", p.id)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     estado, log = _estado(jid)
     assert estado == "cancelado" and "quedaban 2 tramos" in log

@@ -68,7 +68,7 @@ def test_job_ok_pasa_params_como_kwargs_y_guarda_log(cola):
     queue.HANDLERS["armar_video"] = lambda ref, **kw: "armado"
     jid = queue.encolar("generar_clips", 7, orden=3)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     assert recibido == {"ref": 7, "orden": 3}
     assert _estado(jid) == ("ok", "hecho")
@@ -83,7 +83,7 @@ def test_job_con_excepcion_queda_en_error_y_no_encadena(cola):
     queue.HANDLERS["generar_clips"] = roto
     jid = queue.encolar("generar_clips", 1)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     estado, log = _estado(jid)
     assert estado == "error" and "boom" in log
@@ -94,9 +94,9 @@ def test_job_ok_encadena_el_siguiente(cola):
     queue.HANDLERS["generar_clips"] = lambda ref: "ok"
     jid = queue.encolar("generar_clips", 5)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
-    siguiente = queue._cola.get_nowait()
+    siguiente = queue._tomar()
     assert siguiente != jid
     from backend.db import get_session
 
@@ -120,7 +120,7 @@ def test_job_de_llm_usa_en_uso_y_no_libera(cola, monkeypatch):
     queue.HANDLERS["generar_ideas"] = lambda ref: "ideas"
     jid = queue.encolar("generar_ideas", 1)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     assert entradas == ["entra"] and cola == []
     assert _estado(jid) == ("ok", "ideas")
@@ -137,7 +137,7 @@ def test_fallo_transitorio_se_reintenta_hasta_el_tope_y_acaba_en_error(cola, ses
     queue.HANDLERS["generar_imagenes"] = _comfy_caido(intentos)
     jid = queue.encolar("generar_imagenes", p.id)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     assert len(intentos) == queue.INTENTOS == 3
     estado, log = _estado(jid)
@@ -160,7 +160,7 @@ def test_fallo_de_validacion_no_se_reintenta(cola, session):
     queue.HANDLERS["generar_imagenes"] = sin_escenas
     jid = queue.encolar("generar_imagenes", p.id)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     assert len(intentos) == 1
     estado, log = _estado(jid)
@@ -182,7 +182,7 @@ def test_un_archivo_que_falta_no_se_reintenta(cola, session):
     queue.HANDLERS["armar_video"] = sin_ffmpeg
     jid = queue.encolar("armar_video", p.id)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     assert len(intentos) == 1 and _estado(jid)[0] == "error"
 
@@ -202,12 +202,12 @@ def test_la_cadena_sale_una_sola_vez_y_tras_el_intento_bueno(cola, session):
     queue.HANDLERS["generar_clips"] = a_la_tercera
     jid = queue.encolar("generar_clips", p.id)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     assert len(intentos) == 3
     assert _estado(jid) == ("ok", "clips hechos")
     assert _job(jid).intentos == 3
-    siguiente = queue._cola.get_nowait()
+    siguiente = queue._tomar()
     assert _job(siguiente).tipo == "armar_video"
     assert queue._cola.empty()          # una sola vez, no una por intento
 
@@ -218,7 +218,7 @@ def test_no_se_reintenta_si_el_proyecto_ya_no_existe(cola):
     queue.HANDLERS["generar_imagenes"] = _comfy_caido(intentos)
     jid = queue.encolar("generar_imagenes", 999)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     assert len(intentos) == 1
     estado, log = _estado(jid)
@@ -235,7 +235,7 @@ def test_la_espera_entre_intentos_crece(cola, session, monkeypatch):
     queue.HANDLERS["generar_imagenes"] = _comfy_caido([])
     queue.encolar("generar_imagenes", p.id)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     assert esperas == [20, 40]          # la última vez ya no espera: no reintenta
 
@@ -252,7 +252,7 @@ def test_un_job_cancelado_mientras_esperaba_se_salta(cola, session):
         jobs_repo.cancelar(s, jobs_repo.obtener(s, jid), "Parado desde la interfaz")
         s.commit()
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     assert llamado == []
     assert _estado(jid) == ("cancelado", "Parado desde la interfaz")
@@ -278,7 +278,7 @@ def test_parar_el_job_en_curso_lo_corta_y_no_encadena(cola, session):
     queue.HANDLERS["generar_clips"] = lote
     jid = queue.encolar("generar_clips", p.id)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     assert hechos == [0, 1]             # lo ya hecho se queda hecho
     estado, log = _estado(jid)
@@ -303,7 +303,7 @@ def test_un_fallo_provocado_por_la_parada_cuenta_como_cancelado(cola, session):
     queue.HANDLERS["generar_imagenes"] = cortado
     jid = queue.encolar("generar_imagenes", p.id)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     assert len(intentos) == 1           # tampoco se reintenta
     estado, log = _estado(jid)
@@ -323,7 +323,7 @@ def test_un_job_que_termina_justo_antes_del_corte_no_encadena(cola, session):
     queue.HANDLERS["generar_clips"] = termina_y_para
     jid = queue.encolar("generar_clips", p.id)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     assert _estado(jid)[0] == "ok"      # el trabajo está hecho y se dice
     assert queue._cola.empty()          # pero la etapa siguiente no sale
@@ -343,7 +343,7 @@ def test_el_log_del_job_recoge_los_apuntes(cola):
     queue.HANDLERS["generar_ideas"] = handler
     jid = queue.encolar("generar_ideas", 1)
 
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
 
     estado, log = _estado(jid)
     assert estado == "ok"
@@ -364,8 +364,8 @@ def test_los_apuntes_no_se_arrastran_al_job_siguiente(cola):
     primero = queue.encolar("generar_ideas", 1)
     segundo = queue.encolar("generar_guion", 1)
 
-    queue._procesar(queue._cola.get())
-    queue._procesar(queue._cola.get())
+    queue._procesar(queue._tomar())
+    queue._procesar(queue._tomar())
 
     assert "algo del primero" in _estado(primero)[1]
     assert _estado(segundo) == ("ok", "guion")

@@ -65,6 +65,9 @@ export interface ProyectoResumen {
   serie: string | null;
   // Número de episodio; 0 cuando no es un episodio.
   episodio: number;
+  // Estado de su autopiloto si tiene uno en marcha, o null. El listado es desde
+  // donde se ve que de diez vídeos tres están esperando que alguien los lea.
+  autopiloto: string | null;
 }
 
 export type TipoGaleria = "generar" | "editar" | "quitarfondo";

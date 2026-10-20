@@ -25,8 +25,9 @@ def borrar(s: Session, pid: int) -> None:
     """Borra el proyecto y todo lo que cuelga de él (escenas, personajes,
     guiones, metadatos y sus jobs). SQLite aquí no tiene ON DELETE CASCADE, así
     que las dependencias se limpian a mano o quedarían filas huérfanas."""
-    from ..models import Escena, Guion, Job, Metadatos, Personaje
+    from ..models import Autopiloto, Escena, Guion, Job, Metadatos, Personaje
 
+    s.query(Autopiloto).filter(Autopiloto.proyecto_id == pid).delete()
     for modelo in (Escena, Personaje, Guion, Metadatos):
         s.query(modelo).filter(modelo.proyecto_id == pid).delete()
     s.query(Job).filter(Job.ref_id == pid).delete()

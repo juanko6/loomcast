@@ -15,6 +15,7 @@ export const NOMBRE_JOB: Record<string, string> = {
   generar_subtitulos: "Subtítulos",
   generar_casting: "Reparto",
   generar_retrato: "Retrato de personaje",
+  generar_retratos: "Retratos del reparto",
   generar_escenas: "Escenas",
   generar_imagenes: "Imágenes de escena",
   regenerar_imagen: "Imagen de una escena",

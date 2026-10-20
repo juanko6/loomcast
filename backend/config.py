@@ -81,6 +81,13 @@ _cola = _cfg.get("cola", {})
 COLA_INTENTOS: int = _cola.get("intentos", 3)
 COLA_ESPERA_S: float = _cola.get("espera_s", 20)
 
+# Autopiloto: qué paradas de revisión respeta por defecto (ver [autopiloto] en
+# config.toml). Las tres de siempre, porque es lo que ya hace el flujo a mano.
+_autopiloto = _cfg.get("autopiloto", {})
+AUTOPILOTO_PARADAS: tuple[str, ...] = tuple(
+    _autopiloto.get("paradas", ["idea", "guion", "escenas"])
+)
+
 _stt = _cfg.get("stt", {})
 STT_MODELO: str = _stt.get("modelo", "turbo")
 STT_DISPOSITIVO: str = _stt.get("dispositivo", "auto")

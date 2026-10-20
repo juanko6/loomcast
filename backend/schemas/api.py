@@ -179,6 +179,33 @@ class VideoIn(BaseModel):
     motor: str = ""
 
 
+class AutopilotoIn(BaseModel):
+    """Con qué se lanza una tirada automática.
+
+    El modo de montaje y la voz se piden aquí porque son las dos decisiones que
+    el flujo a mano también pide (el paso de vídeo y el paso de voz) y ninguna
+    tiene un valor obvio: la voz, además, es lo primero con lo que se tropezaría
+    la narración si faltara.
+
+    `paradas` None = las de [autopiloto] de config.toml, que son las tres de
+    siempre. Una lista vacía es producción sin manos, y por eso no se puede
+    confundir con "no dijo nada".
+    """
+    modo: str = "kenburns"  # estatico | kenburns | i2v | mixto
+    # Motor i2v ([i2v.motores] de config.toml). Vacío = el de [i2v].motor.
+    motor: str = ""
+    # Slug de la voz del banco con la que narrar. Vacío = la que ya tenga el
+    # proyecto elegida.
+    voz: str = ""
+    # idea | guion | escenas
+    paradas: list[str] | None = None
+
+
+class LoteIn(AutopilotoIn):
+    """Un lote: las ideas de un tema produciéndose una detrás de otra."""
+    tema_id: int
+
+
 class GaleriaGenerarIn(BaseModel):
     idea: str
     width: int = 768

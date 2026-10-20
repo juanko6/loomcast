@@ -1,4 +1,16 @@
-"""Cola de jobs en un hilo: las etapas LLM/GPU corren una a la vez."""
+"""Cola de jobs en un hilo: las etapas LLM/GPU corren una a la vez.
+
+El orden no es el de llegada, es el de **prioridad y luego llegada**: lo que se
+pide a mano adelanta a lo que encola un autopiloto. Con un lote de diez vídeos
+produciéndose, rehacer una imagen del proyecto que estás mirando tardaba lo que
+quedara del lote, o sea media tarde, y eso convertía la cola en una lista de
+espera. La prioridad va dentro del elemento de la cola y también en la columna
+del job, para que `recuperar_pendientes()` restituya el orden tras un reinicio.
+
+Nada de esto toca los reintentos ni la parada: un job reintenta **dentro de su
+turno** (no se re-encola, así que no pierde el sitio), y quien para sigue
+vaciando la cola entera sin mirar prioridades.
+"""
 import json
 import queue as _queue
 import threading
@@ -47,6 +59,7 @@ HANDLERS = {
     "generar_casting": casting.generar_casting,
     "generar_resumen_episodio": series.generar_resumen_episodio,
     "generar_retrato": retratos.generar_retrato,
+    "generar_retratos": retratos.generar_retratos,
     "generar_escenas": escenas.generar_escenas,
     "generar_imagenes": imagenes.generar_imagenes,
     "regenerar_imagen": imagenes.regenerar_imagen,
@@ -106,6 +119,18 @@ CADENA = {
 # Los dos armados. Al terminar cualquiera de ellos, un episodio de serie que
 # todavía no tenga resumen se cierra solo (ver `_encadenado`).
 ARMADOS = ("armar_video", "armar_estatico")
+
+# Modo de video → job con el que arranca. El estático es un solo job; el de
+# movimiento (Ken Burns) es una cadena upscale → clips → armado, y los demás los
+# resuelve `CADENA` igual. Vive aquí, al lado de la cadena, porque es lo mismo
+# que ella: qué job hace qué. Lo leen el paso de vídeo (a mano) y el autopiloto.
+MODOS_VIDEO = {
+    "estatico": "armar_estatico",
+    "kenburns": "generar_upscale",
+    "i2v": "generar_i2v",
+    # Respeta el modo elegido en cada escena: el video puede mezclarlos.
+    "mixto": "generar_clips_mixto",
+}
 
 
 def _encadenado(tipo: str, ref_id: int) -> str | None:
@@ -180,20 +205,41 @@ _REF_POR_MODELO = {
 }
 REF_MODELO = {tipo: modelo for modelo, tipos in _REF_POR_MODELO.items() for tipo in tipos}
 
-_cola: "_queue.Queue[int]" = _queue.Queue()
+# Orden de la cola. Lo que pide una persona va primero porque está delante de
+# la pantalla esperándolo; lo que encola un autopiloto puede esperar, que para
+# eso es automático. Son números y no un booleano para poder meter algo en medio
+# el día que haga falta sin volver a tocar a todos los que encolan.
+PRIORIDAD_MANUAL = 0
+PRIORIDAD_AUTOPILOTO = 10
+
+# La cola ordena por (prioridad, job_id). El id sirve de desempate y da el orden
+# de llegada gratis: lo pone la base y crece siempre, así que dentro de una
+# prioridad sigue siendo una FIFO, y un lote conserva su orden interno.
+_cola: "_queue.PriorityQueue[tuple[int, int]]" = _queue.PriorityQueue()
 
 
-def encolar(tipo: str, ref_id: int, **params) -> int:
+def encolar(tipo: str, ref_id: int, *, prioridad: int = PRIORIDAD_MANUAL,
+            **params) -> int:
     """Encola un job. Los `params` extra se guardan en JSON y llegan al handler
-    como kwargs: sirven para jobs que actúan sobre una escena concreta."""
+    como kwargs: sirven para jobs que actúan sobre una escena concreta.
+
+    `prioridad` es de palabra clave a propósito: así no puede colarse por error
+    como un kwarg del handler, que es lo que son todos los demás.
+    """
     if tipo not in HANDLERS:
         raise ValueError(f"Tipo de job desconocido: {tipo}")
     with get_session() as s:
-        job = jobs_repo.crear(s, tipo, ref_id, json.dumps(params))
+        job = jobs_repo.crear(s, tipo, ref_id, json.dumps(params), prioridad)
         s.commit()
         job_id = job.id
-    _cola.put(job_id)
+    _cola.put((prioridad, job_id))
     return job_id
+
+
+def _tomar() -> int:
+    """El siguiente job de la cola: el de más prioridad y, a igualdad, el que
+    llegó antes. Espera si no hay ninguno."""
+    return _cola.get()[1]
 
 
 def _ejecutar(tipo: str, ref_id: int, params: dict) -> str:
@@ -276,13 +322,23 @@ def _intentar(job_id: int, tipo: str, ref_id: int, params: dict) -> tuple[str, s
 
 
 def _procesar(job_id: int) -> None:
+    # El autopiloto se importa aquí dentro: el worker le pregunta qué toca ahora
+    # y él encola, así que a nivel de módulo el ciclo sería real. La dirección
+    # buena es la del playbook (servicio → cola); esta es la de vuelta.
+    from ..services import autopiloto
+
     with get_session() as s:
         job = jobs_repo.obtener(s, job_id)
-        # Cancelado mientras esperaba su turno: se salta tal cual. Su estado y
-        # su log ya los escribió quien lo canceló.
-        if job is None or job.estado == "cancelado":
+        if job is None:
             return
-        tipo, ref_id = job.tipo, job.ref_id
+        tipo, ref_id, prioridad = job.tipo, job.ref_id, job.prioridad
+        # Cancelado mientras esperaba su turno: se salta tal cual. Su estado y
+        # su log ya los escribió quien lo canceló. Lo que sí hace falta es
+        # decírselo al autopiloto: si era su etapa, se quedaría "corriendo" sin
+        # nada en la cola, o sea colgado para siempre.
+        if job.estado == "cancelado":
+            autopiloto.tras_corte(ref_id, tipo, "cancelado", job.log)
+            return
         params = json.loads(job.params or "{}")
     parada.iniciar(job_id)
     progreso.iniciar(job_id, tipo)
@@ -318,15 +374,31 @@ def _procesar(job_id: int) -> None:
     # entero en cada retoque costaría más que el propio retoque. Un job parado
     # tampoco: la etapa siguiente trabajaría sobre material a medias, y si se
     # paró es justo lo que no se quería.
+    #
+    # El autopiloto se mueve justo aquí, en el hilo del worker y después de que
+    # el job esté finalizado en la base: es el único sitio desde el que encola.
+    # Las etapas no lo hacen por su cuenta a propósito (ver models/autopiloto),
+    # porque entonces parar no pararía nada.
     if estado == "ok" and not parado:
         siguiente = _encadenado(tipo, ref_id)
         if siguiente:
-            encolar(siguiente, ref_id)
+            # La cadena hereda la prioridad: una tirada del autopiloto no debe
+            # adelantar a lo que se pida a mano por el hecho de ir encadenada, y
+            # un upscale pedido a mano no debe perder su sitio al llegar a los
+            # clips.
+            encolar(siguiente, ref_id, prioridad=prioridad)
+            return
+        autopiloto.tras_etapa(ref_id, tipo)
+        return
+    # Falló, se canceló o terminó justo cuando se pidió parar: en los tres casos
+    # su autopiloto se detiene y deja la línea libre para el proyecto siguiente
+    # del lote. Que un vídeo salga mal no puede tirar los otros nueve.
+    autopiloto.tras_corte(ref_id, tipo, estado, log)
 
 
 def _loop() -> None:
     while True:
-        _procesar(_cola.get())
+        _procesar(_tomar())
 
 
 def arrancar_worker() -> None:
@@ -341,4 +413,4 @@ def recuperar_pendientes() -> None:
             j.estado = "pendiente"
         s.commit()
     for j in pendientes:
-        _cola.put(j.id)
+        _cola.put((j.prioridad, j.id))
