@@ -86,7 +86,7 @@
                 bind:value={lineas[i].personaje}
               />
               <textarea
-                class="control"
+                class="control min-w-0 flex-1"
                 rows="2"
                 aria-label={`Texto de la línea ${i + 1}`}
                 bind:value={lineas[i].texto}
