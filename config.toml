@@ -514,6 +514,16 @@ memoria_modelo_gb = 8
 # el valor por defecto: al lanzar un autopiloto o un lote se pueden elegir otras.
 paradas = ["idea", "guion", "escenas"]
 
+# Banda sonora. El autopiloto hace también el paso de música: el LLM la escribe
+# desde esta historia (estilo, tempo y secciones, con la duración de la
+# narración), la pista queda en la biblioteca de Música como cualquier otra y
+# además suena bajo la voz en el vídeo final. A mano esa mezcla es un
+# interruptor aparte, pero en automático no hay nadie que lo pulse y una pista
+# escrita para el vídeo que no suena en él no sirve de nada.
+#
+# A false, el autopiloto se salta la música y el vídeo sale solo con narración.
+musica = true
+
 [paths]
 proyectos = "proyectos"
 plantillas = "plantillas"

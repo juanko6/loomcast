@@ -422,6 +422,7 @@ export const ETAPA_VIDEO: Record<string, string> = {
   generar_retrato: "Retratando al personaje…",
   generar_escenas: "Proponiendo las escenas…",
   generar_musica_proyecto: "Escribiendo la música de la historia…",
+  sintetizar_musica_proyecto: "Generando la pista de música…",
   generar_imagenes: "Generando las imágenes…",
   armar_estatico: "Armando vídeo estático…",
   generar_upscale: "Reescalando imágenes (ESRGAN)…",

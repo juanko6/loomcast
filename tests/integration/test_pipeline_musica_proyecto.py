@@ -62,8 +62,8 @@ def test_el_brief_sale_de_la_historia_y_dura_lo_que_la_voz(
     # Lleva narración encima: nada cantado, así que el idioma del LLM se ignora.
     assert m.idioma == "en"
     assert m.estado == "nueva"
-    # La pista no se queda en el brief: la síntesis va a la cola.
-    assert ("generar_musica", m.id) in jobs_encolados
+    # El brief no encola nada: la síntesis sale sola detrás, por la cadena.
+    assert jobs_encolados == []
 
 
 def test_sin_voz_todavia_cae_a_la_duracion_por_defecto(
@@ -107,6 +107,46 @@ def test_sin_guion_no_hay_musica(session, dirs_tmp, fake_llm):
     assert fake_llm.llamadas == []
 
 
-def test_el_job_esta_registrado_y_pasa_por_el_llm():
+# --- la síntesis, detrás del brief ------------------------------------------
+
+def test_la_sintesis_hace_la_pista_del_proyecto_y_pide_su_portada(
+    session, historia, monkeypatch, jobs_encolados
+):
+    """La segunda mitad de la música: sintetiza la pista que el brief encargó.
+
+    Lleva el id del PROYECTO aunque la pista tenga el suyo, y eso es lo que la
+    hace una etapa del vídeo: el autopiloto sigue lo que termina, y lo que
+    termina habla de su proyecto.
+    """
+    m = musica_repo.crear(session, "instrumental", "bso", "ambient", "[Intro]",
+                          5, 88, "E minor", "4/4", "en")
+    session.flush()
+    proyectos_repo.obtener(session, historia).musica_id = m.id
+    session.commit()
+    sintetizadas = []
+    monkeypatch.setattr(musica_proyecto.musica_pipeline, "generar",
+                        lambda mid: sintetizadas.append(mid) or "Pista generada")
+
+    log = musica_proyecto.sintetizar_musica_proyecto(historia)
+
+    assert sintetizadas == [m.id]
+    assert f"#{m.id}" in log
+    # La portada sí va aparte y con el id de la pista: es de ella y el vídeo no
+    # la espera.
+    assert ("generar_portada_musica", m.id) in jobs_encolados
+
+
+def test_la_sintesis_sin_brief_previo_lo_dice(session, historia, jobs_encolados):
+    with pytest.raises(ValueError, match="no tiene pista"):
+        musica_proyecto.sintetizar_musica_proyecto(historia)
+
+
+def test_los_jobs_estan_registrados_y_cada_uno_con_su_modelo():
+    """Dos jobs y no uno porque son dos modelos que no caben juntos: el brief
+    habla con el llama-server y la síntesis con ComfyUI. Entre uno y otro, la
+    cola descarga el LLM."""
     assert queue.HANDLERS["generar_musica_proyecto"] is musica_proyecto.generar_musica_proyecto
     assert "generar_musica_proyecto" in queue.JOBS_LLM
+    assert queue.HANDLERS["sintetizar_musica_proyecto"] is musica_proyecto.sintetizar_musica_proyecto
+    assert "sintetizar_musica_proyecto" not in queue.JOBS_LLM
+    assert queue.CADENA["generar_musica_proyecto"] == "sintetizar_musica_proyecto"

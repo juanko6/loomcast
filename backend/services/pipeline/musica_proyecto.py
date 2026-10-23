@@ -14,12 +14,22 @@ suelta:
      mezcle bajo la voz en el video final es un interruptor aparte
      (`Proyecto.musica_mezclar`), que mira el armado.
 
-La síntesis no se reimplementa: al terminar el brief se encola el mismo job
-`generar_musica` de la sección de Música, que a su vez encadena la portada.
+La síntesis no se reimplementa: es la misma de la sección de Música. Lo que sí
+es de aquí es **quién la pide**: el brief habla con el LLM y la síntesis con
+ComfyUI, y en esta máquina los dos modelos no caben a la vez, así que son dos
+jobs y no uno. Entre job y job es la cola quien descarga el llama-server, que
+es el único sitio donde eso está escrito una vez.
+
+Los dos llevan el id del proyecto, y eso es lo que los hace etapas del vídeo:
+van encadenados en la cola como voz → subtítulos, y lo que termina habla de su
+proyecto, así que el autopiloto lo sigue sin saber nada de pistas. La portada
+se encola al final con el id de la pista, porque es de la pista y nadie la
+espera para montar el vídeo.
 """
 import json
 import math
 
+from ... import parada
 from ...clients import llm
 from ...config import MUSICA_DURACION_S, PROYECTOS_DIR, VIDEO_COLA_FINAL_S
 from ...db import get_session
@@ -150,11 +160,37 @@ def generar_musica_proyecto(proyecto_id: int) -> str:
         s.commit()
         musica_id = m.id
 
-    # La síntesis es el job de la sección de Música, que además encadena la
-    # portada. Se importa aquí dentro porque la cola importa este módulo: a
-    # nivel de módulo el ciclo sería real.
-    from ...workers import queue
-
-    queue.encolar("generar_musica", musica_id)
+    # La síntesis sale sola detrás de esta (`CADENA`), en su propio job y con
+    # el mismo id de proyecto: así la cola descarga el LLM antes de que ComfyUI
+    # pida la memoria, y hereda la prioridad de quien pidió la música.
     return (f"Brief musical escrito para «{titulo}» ({duracion_s} s, "
             f"{campos['bpm']} BPM, {campos['keyscale']}); pista #{musica_id} en cola")
+
+
+def sintetizar_musica_proyecto(proyecto_id: int) -> str:
+    """Sintetiza la pista que el brief dejó encargada.
+
+    Es la síntesis de la sección de Música llamada con el id del proyecto. Dar
+    el rodeo (un job de proyecto que llama a la pista) en vez de encolar
+    `generar_musica` a secas es lo que mantiene la música dentro del flujo del
+    vídeo: ese job lleva el id de la pista, y una etapa que termina hablando de
+    otra cosa deja al autopiloto esperando algo que nunca le llega.
+    """
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, proyecto_id)
+        if p is None:
+            raise ValueError(f"Proyecto {proyecto_id} no existe")
+        musica_id = p.musica_id
+    if musica_id is None:
+        raise ValueError("El proyecto no tiene pista todavía: la escribe "
+                         "«generar_musica_proyecto»")
+
+    parada.comprobar("el brief musical ya estaba escrito")
+    nota = musica_pipeline.generar(musica_id)
+
+    # La portada va aparte y con el id de la pista: es de ella, es cosmética y
+    # el vídeo no la espera.
+    from ...workers import queue
+
+    queue.encolar("generar_portada_musica", musica_id)
+    return f"{nota} (pista #{musica_id})"

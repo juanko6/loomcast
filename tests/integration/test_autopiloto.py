@@ -16,6 +16,7 @@ from backend.repositories import escenas as escenas_repo
 from backend.repositories import guiones as guiones_repo
 from backend.repositories import jobs as jobs_repo
 from backend.repositories import metadatos as metadatos_repo
+from backend.repositories import proyectos as proyectos_repo
 from backend.services import autopiloto, cancelacion
 from backend.services import jobs as jobs_service
 from backend.workers import queue
@@ -73,7 +74,11 @@ def _etapas(base_dir, hechas=None):
                          "texto": "t", "prompt": "p"},
                     ])
                 s.commit()
-            if tipo == "generar_voz":
+            if tipo == "generar_musica_proyecto":
+                _encargar_pista(ref)
+            elif tipo == "sintetizar_musica_proyecto":
+                _sintetizar_pista(ref)
+            elif tipo == "generar_voz":
                 (carpeta / "voz.mp3").write_bytes(b"mp3")
             elif tipo == "generar_subtitulos":
                 (carpeta / "palabras.json").write_text("[]")
@@ -88,11 +93,41 @@ def _etapas(base_dir, hechas=None):
 
     for tipo in ("generar_guion", "generar_metadatos", "generar_voz",
                  "generar_subtitulos", "generar_casting", "generar_retratos",
-                 "generar_escenas", "generar_imagenes", "generar_upscale",
+                 "generar_escenas", "generar_imagenes", "generar_musica_proyecto",
+                 "sintetizar_musica_proyecto", "generar_upscale",
                  "generar_clips", "generar_i2v", "generar_clips_mixto",
                  "armar_video", "armar_estatico"):
         queue.HANDLERS[tipo] = anotar(tipo)
     return hechas
+
+
+def _encargar_pista(pid):
+    """Lo que deja el brief musical: la fila de `musicas` que el proyecto apunta,
+    todavía sin audio."""
+    from backend.db import get_session
+    from backend.repositories import musica as musica_repo
+    from backend.repositories import proyectos as proyectos_repo
+
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        m = musica_repo.crear(s, "instrumental", "banda sonora", "ambient",
+                              "[Intro]", 30, 90, "C major", "4/4", "en")
+        s.flush()
+        p.musica_id = m.id
+        s.commit()
+
+
+def _sintetizar_pista(pid):
+    """Y lo que deja la síntesis: el audio de esa pista en la carpeta de Música."""
+    from backend.db import get_session
+    from backend.repositories import proyectos as proyectos_repo
+    from backend.services.pipeline import musica as musica_pipeline
+
+    with get_session() as s:
+        musica_id = proyectos_repo.obtener(s, pid).musica_id
+    car = musica_pipeline.carpeta(musica_id)
+    car.mkdir(parents=True, exist_ok=True)
+    (car / "musica.flac").write_bytes(b"flac")
 
 
 def _correr(tope=40):
@@ -143,7 +178,9 @@ def test_sin_paradas_llega_del_guion_al_video(cola, session):
     assert hechas == [
         "generar_guion", "generar_metadatos", "generar_voz",
         "generar_subtitulos", "generar_casting", "generar_escenas",
-        "generar_imagenes", "generar_upscale", "generar_clips", "armar_video",
+        "generar_imagenes", "generar_musica_proyecto",
+        "sintetizar_musica_proyecto", "generar_upscale", "generar_clips",
+        "armar_video",
     ]
     assert (_auto(p.id).estado, _auto(p.id).motivo) == ("hecho", autopiloto.MOTIVO_HECHO)
 
@@ -184,7 +221,10 @@ def test_continuar_sigue_hasta_la_parada_de_las_escenas(cola, session):
     autopiloto.continuar(p.id)
     _correr()
 
-    assert hechas == ["generar_imagenes", "armar_estatico"]
+    assert hechas == [
+        "generar_imagenes", "generar_musica_proyecto",
+        "sintetizar_musica_proyecto", "armar_estatico",
+    ]
     assert _auto(p.id).estado == "hecho"
 
 
@@ -222,6 +262,7 @@ def test_arranca_donde_este_el_proyecto_y_no_rehace_lo_hecho(cola, session):
 
     assert hechas == [
         "generar_casting", "generar_escenas", "generar_imagenes",
+        "generar_musica_proyecto", "sintetizar_musica_proyecto",
         "armar_estatico",
     ]
 
@@ -320,6 +361,64 @@ def test_el_motor_i2v_elegido_llega_a_la_etapa(cola, session):
     _correr()
 
     assert recibido == {"motor": "ltx25"}
+
+
+# --- música -----------------------------------------------------------------
+
+def test_la_musica_suena_en_el_video_que_hizo_el_autopiloto(cola, session):
+    """A mano la mezcla es un interruptor aparte; en automático no hay quien lo
+    pulse, y una banda sonora escrita para esta historia que no suena en su
+    vídeo sería media etapa."""
+    p = _proyecto_con_voz(session)
+    _etapas(cola)
+
+    autopiloto.arrancar(p.id, "estatico", paradas=[])
+    _correr()
+
+    session.expire_all()
+    p = proyectos_repo.obtener(session, p.id)
+    assert p.musica_id is not None
+    assert p.musica_mezclar is True
+
+
+def test_una_pista_elegida_a_mano_no_se_rehace(cola, session):
+    """Si alguien ya le puso música de la biblioteca, el autopiloto no la toca:
+    elegirla fue una decisión."""
+    from backend.repositories import musica as musica_repo
+    from backend.services.pipeline import musica as musica_pipeline
+
+    p = _proyecto_con_voz(session)
+    m = musica_repo.crear(session, "instrumental", "una de la biblioteca",
+                          "ambient", "[Intro]", 30, 90, "C major", "4/4", "en")
+    session.flush()
+    p.musica_id = m.id
+    session.commit()
+    car = musica_pipeline.carpeta(m.id)
+    car.mkdir(parents=True, exist_ok=True)
+    (car / "musica.flac").write_bytes(b"flac")
+    hechas = _etapas(cola)
+
+    autopiloto.arrancar(p.id, "estatico", paradas=[])
+    _correr()
+
+    assert "generar_musica_proyecto" not in hechas
+    assert hechas[-1] == "armar_estatico"
+
+
+def test_sin_musica_en_config_el_video_sale_solo_con_narracion(
+    cola, session, monkeypatch
+):
+    monkeypatch.setattr(autopiloto, "AUTOPILOTO_MUSICA", False)
+    p = _proyecto_con_voz(session)
+    hechas = _etapas(cola)
+
+    autopiloto.arrancar(p.id, "estatico", paradas=[])
+    _correr()
+
+    assert "generar_musica_proyecto" not in hechas
+    assert _auto(p.id).estado == "hecho"
+    session.expire_all()
+    assert proyectos_repo.obtener(session, p.id).musica_mezclar is False
 
 
 # --- parar ------------------------------------------------------------------
@@ -463,9 +562,12 @@ def test_las_etapas_del_autopiloto_pasan_por_la_puerta_de_la_memoria(cola, sessi
 
     # Las de texto entran por `en_uso` (que espera memoria antes de lanzar el
     # modelo) y cada etapa de GPU o de proceso externo lo descarga primero.
-    assert puerta.count(("en_uso",)) == 4          # guion, metadatos, casting, escenas
+    # La música son dos: el brief es texto y la síntesis es ComfyUI, y por eso
+    # van en jobs separados y no en uno.
+    assert puerta.count(("en_uso",)) == 5   # guion, metadatos, casting, escenas, brief
     assert ("liberar", "empieza generar_voz") in puerta
     assert ("liberar", "empieza generar_imagenes") in puerta
+    assert ("liberar", "empieza sintetizar_musica_proyecto") in puerta
     assert ("liberar", "empieza armar_estatico") in puerta
 
 

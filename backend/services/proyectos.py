@@ -33,15 +33,16 @@ TIPOS_JOB_PROYECTO = [
     "generar_escenas", "generar_imagenes", "generar_upscale", "generar_clips",
     "generar_i2v", "armar_video", "armar_estatico",
     "regenerar_imagen", "regenerar_clip", "generar_clips_mixto",
-    "generar_musica_proyecto", "generar_resumen_episodio",
+    "generar_musica_proyecto", "sintetizar_musica_proyecto",
+    "generar_resumen_episodio",
 ]
 
 # Jobs de la cola que trabajan sobre una pista de música (su ref_id es el id de
 # la pista, no del proyecto): lo que hace falta para saber si la música del
 # proyecto está en marcha.
 TIPOS_JOB_MUSICA = [
-    "generar_musica_proyecto", "generar_musica", "generar_portada_musica",
-    "mejorar_prompt_musica",
+    "generar_musica_proyecto", "sintetizar_musica_proyecto", "generar_musica",
+    "generar_portada_musica", "mejorar_prompt_musica",
 ]
 
 # El estado del proyecto NO retrocede, pero editar escenas invalida imágenes

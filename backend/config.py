@@ -96,6 +96,9 @@ _autopiloto = _cfg.get("autopiloto", {})
 AUTOPILOTO_PARADAS: tuple[str, ...] = tuple(
     _autopiloto.get("paradas", ["idea", "guion", "escenas"])
 )
+# Si el autopiloto le pone banda sonora al vídeo. Puesto, la escribe desde la
+# historia y la mezcla bajo la voz; quitado, el vídeo sale solo con narración.
+AUTOPILOTO_MUSICA: bool = bool(_autopiloto.get("musica", True))
 
 # --- memoria de PyTorch en MPS ----------------------------------------------
 # Lo que de verdad mandaba la voz al swap. El asignador de MPS **cachea** los
