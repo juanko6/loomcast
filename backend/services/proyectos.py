@@ -216,7 +216,14 @@ def detalle(pid: int) -> dict:
         ]
         todas_imagenes = bool(escenas) and all(e["imagen"] for e in escenas)
         voz_mp3 = base_dir / "voz.mp3"
-        guion_dict = json.loads(guion.contenido) if guion else None
+        # Normalizado al leerlo, no solo al guardarlo: los guiones escritos
+        # antes llevan el nombre del personaje dentro del texto y la etapa de
+        # voz ya no lo narra, así que el editor tiene que enseñar la línea como
+        # se va a oír y no como se guardó.
+        guion_dict = (
+            guiones_repo.normalizar_lineas(json.loads(guion.contenido))
+            if guion else None
+        )
         # Instruct por defecto del modo expresivo: el que sugirió el guion para
         # esta historia y, si no lo hay, el de la plantilla.
         voz_instruct = (guion_dict or {}).get("voz_instruct") or ""

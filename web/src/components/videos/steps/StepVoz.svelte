@@ -20,6 +20,7 @@
     onborrarvoz,
     onvozpersonaje,
     oncrearvozpersonaje,
+    ongenerarcasting,
   }: {
     p: ProyectoDetalle;
     voces: Voz[];
@@ -31,14 +32,16 @@
     onborrarvoz: (slug: string, nombre: string) => void;
     onvozpersonaje: (clave: string, voz: string) => void;
     oncrearvozpersonaje: (clave: string) => void;
+    ongenerarcasting: () => void;
   } = $props();
 
   const disponibles = $derived(voces.filter((v) => v.disponible));
   const vozSel = $derived(disponibles.find((v) => v.slug === p.voz));
 
   // El guion trae líneas atribuidas, así que hay personajes que hablan. El
-  // reparto se fija en el paso de Escenas, de modo que aquí puede no haber
-  // nadie todavía: por eso se avisa en vez de no enseñar nada.
+  // reparto se fija antes de narrar, pero puede no estar hecho todavía (un
+  // proyecto a medias, o uno que viene de antes): por eso se avisa y se ofrece
+  // fijarlo aquí mismo en vez de no enseñar nada.
   const conLineas = $derived((p.guion?.lineas ?? []).length > 0);
 
   // Qué voz dice las líneas de cada personaje, resuelta contra el banco: una
@@ -144,9 +147,10 @@
       <div>
         <p class="text-sm">Voces del reparto</p>
         <p class="text-xs text-muted">
-          Lo que no tenga voz propia lo narra la voz del proyecto. Su voz sale del banco,
-          se puede crear desde su ficha, y <strong>viaja con él</strong> si lo guardas en el
-          reparto propio.
+          Al generar la narración, a quien hable y no tenga voz <strong>se le escribe una
+          desde su ficha</strong> y queda aquí para cambiarla o volver a oírla. Sin ficha lo
+          narra la voz del proyecto. Su voz sale del banco y <strong>viaja con él</strong> si
+          lo guardas en el reparto propio.
         </p>
       </div>
 
@@ -195,9 +199,13 @@
 
       {#if !p.personajes.length}
         <p class="text-xs text-muted">
-          Este guion tiene líneas atribuidas, pero el reparto todavía no está fijado: se
-          hace en el paso «Escenas e imágenes». Hasta entonces las dirá la voz del proyecto.
+          Este guion tiene líneas atribuidas, pero el reparto todavía no está fijado, y sin
+          fichas no hay de dónde escribirles la voz: hasta entonces todas las líneas las
+          dice la voz del proyecto.
         </p>
+        <Button variant="secondary" size="sm" disabled={busy} onclick={ongenerarcasting}>
+          Fijar el reparto
+        </Button>
       {/if}
     </div>
   {/if}

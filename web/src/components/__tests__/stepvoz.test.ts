@@ -17,7 +17,7 @@ const voz = (slug: string, extra: Partial<Voz> = {}): Voz =>
 
 const props = () => ({
   onselectvoz: vi.fn(), ongenerar: vi.fn(), oncrearvoz: vi.fn(), onclonarvoz: vi.fn(), onborrarvoz: vi.fn(),
-  onvozpersonaje: vi.fn(), oncrearvozpersonaje: vi.fn(),
+  onvozpersonaje: vi.fn(), oncrearvozpersonaje: vi.fn(), ongenerarcasting: vi.fn(),
 });
 const personaje = (extra: Partial<Personaje> = {}): Personaje =>
   ({ clave: "ANA", nombre: "Ana", ficha: "a tall woman", tipo: "persona", retrato: false, ...extra });
@@ -339,13 +339,18 @@ describe("voces del reparto", () => {
     expect(screen.queryByRole("button", { name: "Crear desde su ficha" })).toBeNull();
   });
 
-  it("un guion con líneas y el reparto sin fijar avisa de dónde se fija", () => {
+  it("un guion con líneas y el reparto sin fijar deja fijarlo desde aquí", async () => {
+    const p = props();
     render(StepVoz, {
       p: proy({ guion: { gancho: "H", cta: "F", lineas: [{ personaje: "ANA", texto: "yo" }] } }),
       voces: [],
-      ...props(),
+      ...p,
     });
     expect(screen.getByText("Voces del reparto")).toBeInTheDocument();
     expect(screen.getByText(/el reparto todavía no está fijado/)).toBeInTheDocument();
+    // Sin fichas no hay de dónde escribirles la voz, así que el paso de Voz
+    // ofrece el casting en vez de mandar a otro paso.
+    await userEvent.click(screen.getByRole("button", { name: "Fijar el reparto" }));
+    expect(p.ongenerarcasting).toHaveBeenCalled();
   });
 });

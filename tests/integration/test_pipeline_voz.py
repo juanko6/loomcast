@@ -180,15 +180,44 @@ def test_los_tramos_se_unen_con_una_pausa_entre_ellos(
     assert crudo == pytest.approx(3 * 0.5 + 2 * voz.PAUSA_S, abs=0.02)
 
 
-def test_un_personaje_sin_voz_lo_narra_la_voz_del_proyecto(
+def test_a_quien_habla_sin_voz_se_le_escribe_una_desde_su_ficha(
     session, proy_lineas, dirs_tmp, fake_tts
 ):
-    """Quedarse sin su timbre es mucho mejor que un hueco en la narración. Y al
-    acabar los tres tramos en la misma voz se unen en uno: partirlos no
-    cambiaría el timbre, solo cortaría la prosodia y pagaría dos llamadas más.
-    Es lo que pasa la primera vez que se genera la voz de un guion con líneas,
-    porque el reparto se fija en un paso posterior."""
+    """Es lo que hace que un guion de líneas se oiga a varias voces sin pulsar
+    nada: antes de narrar, quien habla y no tiene voz la recibe, escrita desde
+    su ficha y sintetizada en la misma etapa."""
     personajes_repo.por_proyecto(session, proy_lineas)[0].voz = ""
+    session.commit()
+
+    log = voz.generar_voz(proy_lineas)
+
+    # La voz nació en el banco, lista y con su clip, y quedó asignada a ANA.
+    session.expire_all()
+    ana = personajes_repo.por_proyecto(session, proy_lineas)[0]
+    assert ana.voz and ana.voz != "narrador"
+    nueva = voces_repo.por_slug(session, ana.voz)
+    assert nueva.estado == "lista" and voces_repo.ruta_ref(ana.voz).exists()
+    # Escrita desde la ficha del personaje, no desde el estilo de la plantilla.
+    assert "a tall woman with red hair" in nueva.instruct
+
+    # Un VoiceDesign para escribirla (uno solo, aunque fueran varios) y luego
+    # el Base para narrar los tres tramos.
+    assert fake_tts.cargados == [voz.tts.MODELO_DESIGN, voz.tts.MODELO_BASE]
+    textos = [kw["text"] for n, kw in fake_tts.llamadas
+              if n == "generate_voice_clone"]
+    assert textos == ["Hola esto lo cuento yo", "y yo lo vi", "siguió contando Adiós"]
+    assert "con voz propia: ANA" in log and "Voz escrita desde su ficha para: ANA" in log
+
+
+def test_un_personaje_sin_ficha_lo_narra_la_voz_del_proyecto(
+    session, proy_lineas, dirs_tmp, fake_tts
+):
+    """Sin ficha no hay de dónde escribirle la voz. Quedarse sin su timbre es
+    mucho mejor que un hueco en la narración, y al acabar los tres tramos en la
+    misma voz se unen en uno: partirlos no cambiaría el timbre, solo cortaría la
+    prosodia y pagaría dos llamadas más."""
+    ana = personajes_repo.por_proyecto(session, proy_lineas)[0]
+    ana.voz, ana.ficha = "", ""
     session.commit()
 
     log = voz.generar_voz(proy_lineas)
@@ -196,9 +225,33 @@ def test_un_personaje_sin_voz_lo_narra_la_voz_del_proyecto(
     textos = [kw["text"] for n, kw in fake_tts.llamadas
               if n == "generate_voice_clone"]
     assert textos == ["Hola esto lo cuento yo y yo lo vi siguió contando Adiós"]
-    assert "con voz propia" not in log
+    assert "con voz propia" not in log and fake_tts.cargados == [voz.tts.MODELO_BASE]
     # Y sin tramos no hay pausas que añadir: el audio es el de una sola pasada.
     assert sf.info(dirs_tmp["proyectos"] / "demo" / "voz_raw.wav").duration == pytest.approx(0.5, abs=0.01)
+
+
+def test_una_voz_del_reparto_que_falla_no_deja_al_personaje_pegado_a_ella(
+    session, proy_lineas, dirs_tmp, fake_tts, monkeypatch
+):
+    """Si su voz se queda a medias, el personaje tiene que quedar como estaba:
+    una voz muerta pegada a él no se oiría igual y además taparía el hueco, así
+    que la próxima pasada ya no se la volvería a escribir."""
+    def falla(self, **kw):
+        raise RuntimeError("se fue de memoria")
+
+    monkeypatch.setattr(FakeModeloTTS, "generate_voice_design", falla)
+    ana = personajes_repo.por_proyecto(session, proy_lineas)[0]
+    ana.voz = ""
+    session.commit()
+
+    log = voz.generar_voz(proy_lineas)
+
+    session.expire_all()
+    assert personajes_repo.por_proyecto(session, proy_lineas)[0].voz == ""
+    assert [v.slug for v in voces_repo.listar(session)] == ["narrador", "ana-voz"]
+    # La narración se entrega igual, entera con la voz del proyecto.
+    assert (dirs_tmp["proyectos"] / "demo" / "voz.mp3").exists()
+    assert "ANA: se fue de memoria" in log
 
 
 @pytest.mark.parametrize("estado,con_ref", [("generando", True), ("lista", False)])

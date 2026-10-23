@@ -53,9 +53,33 @@ def test_texto_narrado(guion, esperado):
     # La clave se normaliza como la del reparto, y un texto vacío no es tramo.
     ({"lineas": [{"personaje": " ana ", "texto": "x"},
                  {"personaje": "LUIS", "texto": "  "}]}, [("ANA", "x")]),
+    # El nombre delante de la frase no llega al TTS ni en los guiones que se
+    # guardaron con él dentro: esta es la última puerta antes de narrar.
+    ({"lineas": [{"personaje": "ANA", "texto": "ANA ¿y si no existo?"}]},
+     [("ANA", "¿y si no existo?")]),
 ])
 def test_tramos(guion, esperado):
     assert guiones_repo.tramos(guion) == esperado
+
+
+@pytest.mark.parametrize("clave,texto,esperado", [
+    # Lo que de verdad llegaba al TTS, y se oía: el nombre delante de la frase.
+    ("ANA", "ANA ¿Y si soy yo la que no existe?", "¿Y si soy yo la que no existe?"),
+    ("VECINO", "VECINO Es tarde para arrepentimientos.", "Es tarde para arrepentimientos."),
+    ("ANA", "Ana: no he cogido nada", "no he cogido nada"),
+    ("ANA", "(ANA) ¿y por qué estaba cerrada?", "¿y por qué estaba cerrada?"),
+    ("EL_VECINO", "EL VECINO — es tarde", "es tarde"),
+    ("ANA", "ANA: ANA no he cogido nada", "no he cogido nada"),
+    ("", "NARRADOR el hombre no se mueve", "el hombre no se mueve"),
+    # Y lo que NO es una etiqueta: el narrador hablando de Ana, y Ana diciendo
+    # su propio nombre dentro de la frase. Quitarlo se cargaría la frase.
+    ("", "Ana decide borrar la mentira que la sostiene.",
+     "Ana decide borrar la mentira que la sostiene."),
+    ("ANA", "Ana no está aquí.", "Ana no está aquí."),
+    ("ANA", "Anatomía de un error.", "Anatomía de un error."),
+])
+def test_sin_etiqueta(clave, texto, esperado):
+    assert guiones_repo.sin_etiqueta(clave, texto) == esperado
 
 
 def test_normalizar_lineas_limpia_claves_y_tira_los_textos_vacios():
@@ -63,6 +87,7 @@ def test_normalizar_lineas_limpia_claves_y_tira_los_textos_vacios():
         {"personaje": "ana maría", "texto": " hablo "},
         {"personaje": "LUIS", "texto": ""},
     ]}
+    # (y el nombre delante de la frase se queda fuera: ver test_sin_etiqueta)
     # La tilde se cae (normalizar_clave solo deja A-Z0-9_), y eso es justo lo
     # que hace que la línea y el personaje casen: el casting normaliza su clave
     # con la misma función.

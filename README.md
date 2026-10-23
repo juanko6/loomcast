@@ -374,9 +374,14 @@ un proyecto a medias arranca donde esté y no rehace lo que ya hay, y por eso
 retomarla tras un fallo es volver a lanzarla. El orden que sale es el de siempre:
 
 ```
-guion → metadatos → voz → subtítulos → reparto → retratos → escenas → imágenes
+guion → reparto → metadatos → voz → subtítulos → retratos → escenas → imágenes
       → música (brief → pista) → [montaje]
 ```
+
+El **reparto va antes de la voz** y no después: con el formato de líneas el
+guion ya dice quién habla, y cada uno dice las suyas con su propia voz, que se
+escribe desde su ficha. Fijarlo después dejaba el episodio entero narrado por
+una sola voz, porque al narrar todavía no había nadie en el reparto.
 
 La voz encadena los subtítulos, la música encadena su pista y el montaje encadena
 lo suyo (upscale → clips → armado, o i2v → armado) por la cadena de la cola de
@@ -1019,19 +1024,18 @@ y cada uno se sintetiza con la voz que le toca: el narrador lleva la historia y
 los personajes del reparto dicen sus líneas con la suya. El narrador sigue
 siendo el que cuenta; no es un diálogo por turnos.
 
-**Se activa por plantilla, y hoy no lo activa ninguna.** El formato del guion lo
-decide `formato_guion` en `plantilla.json`, que ya tenía dos valores y ahora
-tiene tres:
+**Se activa por plantilla.** El formato del guion lo decide `formato_guion` en
+`plantilla.json`, que ya tenía dos valores y ahora tiene tres:
 
 | `formato_guion` | cuerpo del guion | quién lo usa |
 |---|---|---|
 | `frases` (por defecto) | `frases: [...]` | `curiosidades` |
 | `narracion` | `narracion: "…"` | `drama`, `historia` |
-| `lineas` | `lineas: [{personaje, texto}, …]` | nadie todavía |
+| `lineas` | `lineas: [{personaje, texto}, …]` | `serie` |
 
-`lineas` es para las **series** (Fase 8), donde un personaje recurrente tiene que
-sonar igual en diez episodios. Las tres plantillas de hoy no lo declaran y su
-salida no cambia: `guiones_repo.tramos()` devuelve para ellas **un solo tramo**
+`lineas` es para las **series**, donde un personaje recurrente tiene que sonar
+igual en diez episodios. Las otras tres plantillas no lo declaran y su salida no
+cambia: `guiones_repo.tramos()` devuelve para ellas **un solo tramo**
 con el texto completo, o sea la misma llamada única al modelo de antes. Hay un
 test por plantilla que lo fija.
 
@@ -1043,14 +1047,18 @@ las descuadran: Whisper transcribe lo que de verdad se oye.
 
 Tres decisiones que explican el resto:
 
-- **La voz de un personaje es una voz del banco**, elegida en el paso de Voz. Si
-  no tiene, el botón «Crear desde su ficha» le escribe una con VoiceDesign
-  desde su **propia ficha**, que es de donde ya sale su retrato: la ficha dice la
-  edad aparente, el género y el aire del personaje, que es justo lo que decide el
-  timbre. El `instruct` se redacta con los cuatro bloques que VoiceDesign
-  interpreta bien ([PERFIL DE VOZ], [EMOCIÓN Y ACTITUD], [DINÁMICA Y RITMO],
-  [INDICACIONES DE CONTEXTO]) y es un punto de partida: la voz queda en el banco
-  como cualquier otra y se puede borrar y rehacer a mano.
+- **La voz de un personaje es una voz del banco**, y quien habla y no tiene
+  ninguna la recibe **al generar la narración**, sin pulsar nada: la etapa de voz
+  se la escribe con VoiceDesign desde su **propia ficha**, que es de donde ya sale
+  su retrato (dice la edad aparente, el género y el aire, que es justo lo que
+  decide el timbre), y la deja asignada, así que regenerar la narración no la
+  vuelve a escribir. El `instruct` se redacta con los cuatro bloques que
+  VoiceDesign interpreta bien ([PERFIL DE VOZ], [EMOCIÓN Y ACTITUD], [DINÁMICA Y
+  RITMO], [INDICACIONES DE CONTEXTO]) y es un punto de partida: la voz queda en
+  el banco como cualquier otra, se cambia por otra en el selector del paso de Voz
+  y se rehace con «Crear desde su ficha». El VoiceDesign se carga **una vez para
+  todas** las que haya que escribir, no una por personaje. Quien no tenga ficha
+  se queda sin voz propia: sus líneas las dice la del proyecto.
 - **La voz viaja con el reparto propio**, igual que la ficha y la cara: se lleva
   al promover y al actualizar, y entra con el personaje al traerlo a un vídeo
   nuevo. Pero **no se copia** como el retrato —es una fila del banco, ya
@@ -1067,8 +1075,21 @@ Tres decisiones que explican el resto:
 Un tramo que falla no tira la narración entera: se queda fuera del audio, el log
 del job dice cuál y por qué, y los subtítulos salen de lo que de verdad se oye.
 Si fallan todos, la etapa falla —un `voz.wav` vacío lo darían por bueno los
-subtítulos y el montaje—. Un personaje cuya voz todavía se está generando, falló
-o perdió su clip no deja un hueco: esa línea la narra la voz del proyecto.
+subtítulos y el montaje—. Un personaje cuya voz todavía se está generando o
+perdió su clip no deja un hueco: esa línea la narra la voz del proyecto. Una que
+**falló** sí se rehace en la siguiente pasada: una voz muerta pegada al
+personaje no suena y además taparía el hueco, así que se borra del banco y se le
+escribe otra.
+
+Y el **nombre del personaje no se narra**. El prompt del guion prohíbe escribirlo
+delante de la frase y el LLM lo cuela igual ("ANA ¿Y si soy yo la que no
+existe?"); lo que se queda en el texto se oye, porque el TTS dice lo que hay. Se
+quita al normalizar el guion —así el editor enseña la línea tal y como se va a
+narrar— y otra vez en `tramos()`, que es la última puerta antes del TTS y recoge
+los guiones que se guardaron con el nombre dentro. Solo se quita la etiqueta de
+**quien dice esa línea**, y solo cuando viene como etiqueta (en mayúsculas igual
+que la clave, o seguida de dos puntos o raya): una línea del narrador que empieza
+por "Ana decide borrar la mentira" no lleva etiqueta, lleva a Ana de sujeto.
 
 ## Estado
 

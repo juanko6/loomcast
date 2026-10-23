@@ -176,8 +176,8 @@ def test_sin_paradas_llega_del_guion_al_video(cola, session):
     _correr()
 
     assert hechas == [
-        "generar_guion", "generar_metadatos", "generar_voz",
-        "generar_subtitulos", "generar_casting", "generar_escenas",
+        "generar_guion", "generar_casting", "generar_metadatos", "generar_voz",
+        "generar_subtitulos", "generar_escenas",
         "generar_imagenes", "generar_musica_proyecto",
         "sintetizar_musica_proyecto", "generar_upscale", "generar_clips",
         "armar_video",
@@ -212,8 +212,8 @@ def test_continuar_sigue_hasta_la_parada_de_las_escenas(cola, session):
     _correr()
 
     assert hechas == [
-        "generar_metadatos", "generar_voz", "generar_subtitulos",
-        "generar_casting", "generar_escenas",
+        "generar_casting", "generar_metadatos", "generar_voz",
+        "generar_subtitulos", "generar_escenas",
     ]
     assert _auto(p.id).motivo == "Esperando que revises los prompts de escena"
 
@@ -528,7 +528,7 @@ def test_un_fallo_transitorio_se_reintenta_antes_de_rendirse(cola, session):
     _correr()
 
     assert len(intentos) == 2
-    assert hechas[:2] == ["generar_guion", "generar_metadatos"]
+    assert hechas[:2] == ["generar_guion", "generar_casting"]
     assert _auto(p.id).estado == "hecho"
 
 
@@ -772,7 +772,7 @@ def test_el_lote_cuenta_por_donde_va(cola, session):
 
     actual = autopiloto.ver_lote(lote["id"])["actual"]
     assert actual["posicion"] == 1
-    assert actual["etapa"] == "generar_metadatos"
+    assert actual["etapa"] == "generar_casting"
     assert actual["titulo"] == "Idea 0"
     assert autopiloto.listar_lotes()[0]["pendientes"] == 2
 
