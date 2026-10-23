@@ -179,3 +179,25 @@ def ping(url: str | None = None) -> bool:
             return client.get(f"{url or _activo.url}/v1/models").status_code < 400
     except httpx.HTTPError:
         return False
+
+
+def que_hay(url: str | None = None) -> tuple[str, float] | None:
+    """Qué modelo sirve esa url y cuántos GiB de pesos tiene dentro, según él.
+
+    Sale de `/v1/models` de llama-server: `data[0].id` es el alias (`-a`) y
+    `meta.size` los bytes del gguf cargado. Hace falta porque todos tus modelos
+    comparten el 9876, así que lo que de verdad escucha ahí puede no ser el que
+    marca la UI, y porque al pararlo hay que esperar *su* memoria y no la que
+    declare config.toml de otro.
+
+    None si no responde o no lo cuenta: es información para el log, no una
+    condición, así que nunca lanza.
+    """
+    try:
+        with httpx.Client(timeout=3) as client:
+            r = client.get(f"{url or _activo.url}/v1/models")
+            r.raise_for_status()
+            datos = r.json()["data"][0]
+        return str(datos["id"]), float(datos["meta"]["size"]) / (1024**3)
+    except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError):
+        return None

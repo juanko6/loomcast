@@ -30,10 +30,16 @@ def crear_voz(voz_id: int) -> str:
 
     try:
         design = tts.cargar_modelo(tts.MODELO_DESIGN)
-        wavs, sr = design.generate_voice_design(
-            text=ref_text, language="Spanish", instruct=instruct
-        )
-        tts.liberar(design)
+        try:
+            wavs, sr = design.generate_voice_design(
+                text=ref_text, language="Spanish", instruct=instruct
+            )
+        finally:
+            # En `finally` y soltando la referencia de aquí: si la síntesis
+            # falla, el modelo se quedaba dentro hasta que el job terminara de
+            # morirse (ver `tts.liberar`).
+            design = None
+            tts.liberar()
         ref = voces_repo.ruta_ref(slug)
         ref.parent.mkdir(parents=True, exist_ok=True)
         sf.write(ref, np.asarray(wavs[0], dtype=np.float32), sr)
