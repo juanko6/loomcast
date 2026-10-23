@@ -46,6 +46,38 @@ def test_generar_casting_guarda_personajes_normalizados(session, proy, fake_llm)
     assert ps[0].ficha.endswith("red coat, green eyes") and ps[0].seed
 
 
+def test_el_casting_sabe_quien_habla_en_el_guion(session, fake_llm):
+    """El texto narrado no lleva marcas de quién dice cada cosa —es lo que se
+    oye—, así que quien solo existe porque tiene líneas no se vería. Y la clave
+    tiene que ser la suya: es con la que la etapa de voz le busca voz."""
+    p = f.proyecto(session)
+    guiones_repo.crear(session, p.id, {"gancho": "G", "cta": "C", "lineas": [
+        {"personaje": "", "texto": "El vaso cayó al suelo."},
+        # Sin dueño y con el nombre delante: lo rescata `tramos`, así que el
+        # casting se entera igual.
+        {"personaje": "", "texto": "MARTA: ¿Quién ha tocado la puerta?"},
+        {"personaje": "CARLOS", "texto": "Nadie debería estar aquí."},
+    ]})
+    session.commit()
+    fake_llm.responder(CastingLLM, {"personajes": [
+        {"clave": "MARTA", "nombre": "Marta", "ficha": FICHA}]})
+
+    casting.generar_casting(p.id)
+
+    user = fake_llm.llamadas[-1]["user"]
+    assert "exactly this clave: CARLOS, MARTA" in user
+    # Y el nombre no viaja dentro del texto del guion, que es lo que se narra.
+    assert "MARTA:" not in user.split("Characters with spoken lines")[0]
+
+
+def test_sin_lineas_el_casting_pregunta_como_siempre(session, proy, fake_llm):
+    """Un guion de frases o de narración continua no tiene a quién atribuir
+    nada: la petición es la de siempre, sin bloque de más."""
+    fake_llm.responder(CastingLLM, {"personajes": []})
+    casting.generar_casting(proy)
+    assert "Characters with spoken lines" not in fake_llm.llamadas[-1]["user"]
+
+
 def test_casting_descarta_claves_repetidas_o_vacias(session, proy, fake_llm):
     fake_llm.responder(CastingLLM, {"personajes": [
         {"clave": "ana", "nombre": "A", "ficha": FICHA},

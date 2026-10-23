@@ -51,12 +51,76 @@ def sin_etiqueta(clave: str, texto: str) -> str:
     return texto
 
 
+# El nombre al principio de una línea **sin dueño**: "ANA: Es una broma",
+# "MARC: Mira estas marcas". El LLM escribe el cuerpo en formato teatro en vez
+# de poner la clave en su campo —se lo pide el prompt y lo ignora— y entonces
+# pasan las dos cosas a la vez: la línea se queda sin quien la diga, así que la
+# narra el narrador, y el nombre se oye en el audio.
+#
+# El nombre es lo único que dice quién habla, así que no se tira: se pasa al
+# campo que le tocaba. Dos formas, y la segunda es la estricta a propósito:
+# con dos puntos basta con que el nombre empiece por mayúscula ("Ana: …"),
+# porque los dos puntos ya son la marca; sin ellos tiene que venir en
+# MAYÚSCULAS y en una sola palabra ("ANA ¿Y si…"), que es como se escribe una
+# acotación y no como empieza una frase normal del narrador.
+_SUELTA_CON_DOS_PUNTOS = re.compile(
+    r"[(\[]?\s*(?P<clave>[^\W\d_][\w'’-]*(?:[ _][^\W\d_][\w'’-]*){0,2})"
+    r"\s*[)\]]?\s*[:：]\s+",
+)
+# Sin dos puntos se pide además que lo que sigue arranque como arranca una
+# frase dicha —mayúscula o signo de apertura—: así "ANA ¿Y si…" y "VECINO Es
+# tarde" entran, y un énfasis del narrador en mayúsculas ("ESTO no es de
+# dentro") se queda donde está en vez de convertirse en un personaje.
+_SUELTA_EN_MAYUSCULAS = re.compile(
+    r"(?P<clave>[^\W\d_a-zà-öø-ÿ]{2,20})\s+(?=[^\W\d_a-zà-öø-ÿ]|[¿¡—–\"«'])"
+)
+
+
+def _dueño_suelto(texto: str) -> tuple[str, str]:
+    """(clave, resto) si la línea lleva delante el nombre de quien la dice.
+
+    Devuelve ("", texto) si no lo lleva, y también si lo que lleva delante es
+    el propio narrador ("NARRADOR: …"): ese no es un personaje al que darle
+    voz, es la etiqueta de que no hay ninguno.
+    """
+    for patron in (_SUELTA_CON_DOS_PUNTOS, _SUELTA_EN_MAYUSCULAS):
+        m = patron.match(texto)
+        if m is None:
+            continue
+        resto = texto[m.end():].lstrip()
+        if not resto:
+            continue
+        clave = normalizar_clave(m.group("clave"))
+        if not clave:
+            continue
+        if clave in _ETIQUETAS_NARRADOR:
+            return "", resto
+        return clave, resto
+    return "", texto
+
+
+def dueño_y_texto(clave: str, texto: str) -> tuple[str, str]:
+    """Quién dice la línea y qué dice, con el nombre fuera del texto.
+
+    Es el único sitio donde se decide eso, y lo usan los tres caminos: el guion
+    que se guarda, el que lee el editor y los tramos que se narran.
+    """
+    texto = (texto or "").strip()
+    if clave:
+        return clave, sin_etiqueta(clave, texto)
+    dueño, resto = _dueño_suelto(texto)
+    if dueño:
+        return dueño, resto
+    return "", sin_etiqueta("", resto)
+
+
 def _cuerpo(g: dict) -> list[str]:
     """El cuerpo del guion como lista de textos, en cualquiera de los formatos."""
     lineas = g.get("lineas") or []
     if lineas:
         return [
-            sin_etiqueta(normalizar_clave(x.get("personaje") or ""), x.get("texto") or "")
+            dueño_y_texto(normalizar_clave(x.get("personaje") or ""),
+                          x.get("texto") or "")[1]
             for x in lineas
         ]
     narracion = (g.get("narracion") or "").strip()
@@ -103,10 +167,9 @@ def tramos(g: dict) -> list[tuple[str, str]]:
     # que esto existiera siguen guardados con el nombre dentro del texto.
     crudos = [("", sin_etiqueta("", g.get("gancho", "")))]
     crudos += [
-        (clave, sin_etiqueta(clave, x.get("texto") or ""))
-        for clave, x in (
-            (normalizar_clave(x.get("personaje") or ""), x) for x in lineas
-        )
+        dueño_y_texto(normalizar_clave(x.get("personaje") or ""),
+                      x.get("texto") or "")
+        for x in lineas
     ]
     crudos.append(("", sin_etiqueta("", g.get("cta", ""))))
 
@@ -134,9 +197,11 @@ def normalizar_lineas(contenido: dict) -> dict:
     if not lineas:
         return contenido
     limpias = [
-        {"personaje": clave, "texto": sin_etiqueta(clave, x.get("texto") or "")}
-        for clave, x in (
-            (normalizar_clave(x.get("personaje") or ""), x) for x in lineas
+        {"personaje": clave, "texto": texto}
+        for clave, texto in (
+            dueño_y_texto(normalizar_clave(x.get("personaje") or ""),
+                          x.get("texto") or "")
+            for x in lineas
         )
     ]
     return {**contenido, "lineas": [x for x in limpias if x["texto"]]}

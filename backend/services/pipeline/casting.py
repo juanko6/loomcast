@@ -114,10 +114,20 @@ def generar_casting(proyecto_id: int) -> str:
             f"La plantilla '{plantilla}' no tiene prompts/casting.md; "
             "sin él no se puede fijar el reparto."
         )
-    user = (
-        f"Full video context:\n```markdown\n{guion_texto}\n```\n\n"
-        f"Template visual style: {pl['estilo_visual']}"
-    )
+    # Quién habla en el guion, con la clave con la que habla. Hace falta
+    # decirlo aparte porque el texto narrado no lleva marcas de quién dice
+    # cada cosa —es lo que se oye—, así que un personaje que solo existe
+    # porque tiene líneas no se vería por ningún lado. Y las claves tienen que
+    # ser estas y no otras: son con las que la etapa de voz busca su voz.
+    quien_habla = sorted({clave for clave, _ in guiones_repo.tramos(g) if clave})
+    partes = [f"Full video context:\n```markdown\n{guion_texto}\n```"]
+    if quien_habla:
+        partes.append(
+            "Characters with spoken lines in this script. Each one MUST be in "
+            "your answer, with exactly this clave: " + ", ".join(quien_habla)
+        )
+    partes.append(f"Template visual style: {pl['estilo_visual']}")
+    user = "\n\n".join(partes)
     r = llm.chat(system, user, CastingLLM)
 
     # Claves repetidas o vacías tras normalizar harían que dos personajes

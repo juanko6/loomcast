@@ -82,6 +82,57 @@ def test_sin_etiqueta(clave, texto, esperado):
     assert guiones_repo.sin_etiqueta(clave, texto) == esperado
 
 
+@pytest.mark.parametrize("texto,esperado", [
+    # Lo que escribe el LLM cuando pasa del campo `personaje` y redacta el
+    # cuerpo en formato teatro: el nombre es lo único que dice quién habla, así
+    # que no se tira, se pasa a su campo.
+    ("ANA: Es una broma, ¿verdad?", ("ANA", "Es una broma, ¿verdad?")),
+    ("MARTA: ¿Quién ha tocado la puerta?", ("MARTA", "¿Quién ha tocado la puerta?")),
+    ("Ana: no he cogido nada", ("ANA", "no he cogido nada")),
+    # Sin dos puntos hace falta que venga en mayúsculas y que lo que sigue
+    # arranque como una frase dicha.
+    ("ANA ¿Y si soy yo la que no existe?", ("ANA", "¿Y si soy yo la que no existe?")),
+    ("VECINO Es tarde para arrepentimientos.", ("VECINO", "Es tarde para arrepentimientos.")),
+    # El narrador etiquetado no es un personaje al que darle voz: es la
+    # etiqueta de que no hay ninguno.
+    ("NARRADOR: el hombre no se mueve", ("", "el hombre no se mueve")),
+    # Y lo que no es una etiqueta se queda entero y sin dueño: un énfasis del
+    # narrador en mayúsculas, y una frase suya que empieza por un nombre.
+    ("ESTO no es de dentro, alguien vino.", ("", "ESTO no es de dentro, alguien vino.")),
+    ("Ana decide borrar la mentira.", ("", "Ana decide borrar la mentira.")),
+    ("El maletín. Lo reconoce por el cierre.", ("", "El maletín. Lo reconoce por el cierre.")),
+])
+def test_dueño_suelto_rescatado(texto, esperado):
+    assert guiones_repo.dueño_y_texto("", texto) == esperado
+
+
+def test_la_linea_con_dueno_no_se_lo_cambia_el_texto():
+    """Si ya tiene dueño manda él: el nombre de delante solo se quita."""
+    assert guiones_repo.dueño_y_texto("VECINO", "ANA: y yo lo vi") == (
+        "VECINO", "ANA: y yo lo vi"
+    )
+    assert guiones_repo.dueño_y_texto("ANA", "ANA ¿y si no existo?") == (
+        "ANA", "¿y si no existo?"
+    )
+
+
+def test_normalizar_lineas_rescata_al_dueno_que_el_llm_dejo_en_el_texto():
+    """El fallo real: el LLM deja `personaje` vacío y escribe "ANA: …". Sin
+    rescatarlo la línea se queda sin quien la diga —la narra el narrador— y
+    encima el nombre acaba en el audio."""
+    g = {"lineas": [
+        {"personaje": "", "texto": "ANA: Es una broma."},
+        {"personaje": "", "texto": "El vaso cayó al suelo."},
+    ]}
+    assert guiones_repo.normalizar_lineas(g)["lineas"] == [
+        {"personaje": "ANA", "texto": "Es una broma."},
+        {"personaje": "", "texto": "El vaso cayó al suelo."},
+    ]
+    # Y los tramos que se narran salen ya con la voz de cada uno.
+    assert guiones_repo.tramos(g) == [("ANA", "Es una broma."),
+                                      ("", "El vaso cayó al suelo.")]
+
+
 def test_normalizar_lineas_limpia_claves_y_tira_los_textos_vacios():
     g = {"gancho": "G", "lineas": [
         {"personaje": "ana maría", "texto": " hablo "},

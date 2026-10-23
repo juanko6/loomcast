@@ -1082,14 +1082,30 @@ personaje no suena y además taparía el hueco, así que se borra del banco y se
 escribe otra.
 
 Y el **nombre del personaje no se narra**. El prompt del guion prohíbe escribirlo
-delante de la frase y el LLM lo cuela igual ("ANA ¿Y si soy yo la que no
-existe?"); lo que se queda en el texto se oye, porque el TTS dice lo que hay. Se
-quita al normalizar el guion —así el editor enseña la línea tal y como se va a
-narrar— y otra vez en `tramos()`, que es la última puerta antes del TTS y recoge
-los guiones que se guardaron con el nombre dentro. Solo se quita la etiqueta de
-**quien dice esa línea**, y solo cuando viene como etiqueta (en mayúsculas igual
-que la clave, o seguida de dos puntos o raya): una línea del narrador que empieza
-por "Ana decide borrar la mentira" no lleva etiqueta, lleva a Ana de sujeto.
+delante de la frase y el LLM lo cuela igual; lo que se queda en el texto se oye,
+porque el TTS dice lo que hay. `dueño_y_texto()` decide de una vez quién dice la
+línea y qué dice, y lo usan los tres caminos: el guion que se guarda, el que lee
+el editor y los tramos que se narran —esto último recoge los guiones que ya
+estaban guardados con el nombre dentro—. Dos casos:
+
+- **La línea tiene dueño y además lleva su nombre delante** ("ANA" / "ANA ¿Y si
+  soy yo la que no existe?"): se quita el nombre. Solo el de *su* dueño y solo
+  cuando viene como etiqueta —en mayúsculas igual que la clave, o seguida de dos
+  puntos o raya—, porque una línea del narrador que empieza por "Ana decide
+  borrar la mentira" no lleva etiqueta, lleva a Ana de sujeto.
+- **La línea no tiene dueño y el nombre es lo único que dice quién habla** ("" /
+  "ANA: Es una broma"): el nombre pasa al campo que le tocaba. El LLM redacta el
+  cuerpo en formato teatro en vez de rellenar `personaje` —se lo pide el prompt y
+  lo ignora—, y entonces fallan las dos cosas a la vez: nadie dice la línea, así
+  que la narra el narrador, y encima el nombre se oye. Con dos puntos basta una
+  inicial mayúscula; sin ellos el nombre tiene que venir en MAYÚSCULAS y lo que
+  sigue arrancar como una frase dicha, para que un énfasis del narrador ("ESTO no
+  es de dentro") no se convierta en un personaje.
+
+Como el texto narrado no lleva marcas de quién dice cada cosa, al casting se le
+pasan aparte las claves de quien tiene líneas, con la orden de devolverlas tal
+cual: sin eso, un personaje que solo existe porque habla no tendría ficha, y sin
+ficha no hay de dónde escribirle la voz.
 
 ## Estado
 
