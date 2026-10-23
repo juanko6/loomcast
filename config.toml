@@ -200,6 +200,28 @@ timeout_s = 1800
 # pero si ComfyUI está acabando un workflow no mira la bandera hasta terminarlo.
 espera_liberacion_s = 20
 
+[voz]
+# Topes del asignador de memoria de PyTorch en MPS, como fracción de
+# `recommended_max_memory` (37,4 GiB en este M3 Max de 48). Al cruzar el alto,
+# el asignador suelta lo que tenía cacheado hasta bajar del bajo.
+#
+# No es un ajuste fino: es la diferencia entre narrar y pelearse con el swap. El
+# asignador cachea los bloques que libera y en una generación autorregresiva
+# cada paso pide una forma distinta de la del anterior, así que no reutiliza
+# nada y crece mil veces. Medido con el guion de un episodio (200 palabras,
+# ~90 s de audio), en un proceso a solas:
+#
+#   sin topes: pico de 53,1 GiB, +76,2 GiB de swapouts, 212 s
+#   con topes: pico de 15,6 GiB,  +0,0 GiB de swapouts,  95 s
+#
+# Y con 400 palabras el pico sigue en 16,3 GiB: queda plano por largo que sea el
+# texto. Súbelos si alguna vez ves "MPS backend out of memory" (0,55 son 20,6
+# GiB aquí, con holgura sobre los 16 que pide de verdad); bájalos si tu Mac
+# tiene menos memoria. Si exportas tú PYTORCH_MPS_*_WATERMARK_RATIO, manda lo
+# tuyo y esto se ignora.
+mps_tope = 0.55
+mps_tope_bajo = 0.40
+
 [stt]
 # Transcripción (subtítulos y el ref_text del clonado de voz), con
 # faster-whisper. A diferencia del mlx-whisper de antes, esto corre igual en
@@ -464,6 +486,16 @@ intentos = 3
 # 40 s). Crece porque lo que suele fallar es un servicio que está arrancando o
 # recuperándose, y volver a llamarlo de inmediato lo encuentra igual de ocupado.
 espera_s = 20
+# GiB de memoria unificada libres que la cola espera a ver antes de dejar que
+# una etapa cargue un modelo DENTRO del backend (Qwen3-TTS, whisper). No reserva
+# nada y no bloquea nada: pide el /free a ComfyUI y espera a MEDIR la bajada,
+# porque el /free con el que la etapa anterior soltó al terminar es a ciegas
+# (vuelve en 1 ms con los pesos todavía dentro). Si la memoria no llega, el
+# historial del job dice cuánta había, que es lo que hace falta cuando una
+# narración de 77 s tarda cinco minutos.
+#
+# 8 le sobra al TTS en fp16 (3,4 GiB de pesos, pico medido de 4,2).
+memoria_modelo_gb = 8
 
 [autopiloto]
 # Paradas de revisión humana que respeta el autopiloto. Son las tres que ya

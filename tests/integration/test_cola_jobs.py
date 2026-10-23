@@ -21,6 +21,9 @@ def cola(engine, monkeypatch):
 
     llamadas = []
     monkeypatch.setattr(llm_runtime, "liberar", lambda motivo: llamadas.append(("liberar", motivo)))
+    # «Sin llama-server» también por arriba: `asegurar` mide la memoria y lanza
+    # el proceso, y lo que estos tests prueban es la cola, no eso.
+    monkeypatch.setattr(llm_runtime, "asegurar", lambda: llamadas.append(("asegurar",)))
     monkeypatch.setattr(queue, "HANDLERS", dict(queue.HANDLERS))
     monkeypatch.setattr(queue, "ESPERA_BASE_S", 0)
     monkeypatch.setattr(cancelacion.comfy, "interrumpir", lambda: llamadas.append(("interrumpir",)))
@@ -369,3 +372,87 @@ def test_los_apuntes_no_se_arrastran_al_job_siguiente(cola):
 
     assert "algo del primero" in _estado(primero)[1]
     assert _estado(segundo) == ("ok", "guion")
+
+
+# --- memoria antes de cargar un modelo dentro del backend -------------------
+# La otra mitad del error que ya estaba arreglado por el lado del LLM: el
+# `/free` con el que una etapa de ComfyUI suelta al terminar es a ciegas (vuelve
+# en 1 ms con los pesos todavía dentro), así que la etapa de voz cargaba el TTS
+# sobre una memoria que nadie había liberado.
+
+def _mide(monkeypatch, antes=16.4, despues=27.0):
+    pedido = []
+
+    def liberar_memoria(hasta_gb=None):
+        pedido.append(hasta_gb)
+        return comfy.Liberacion(antes, despues, 1.7, 1, True)
+
+    monkeypatch.setattr(queue.comfy, "liberar_memoria", liberar_memoria)
+    return pedido
+
+
+def test_una_etapa_que_carga_su_modelo_espera_la_memoria(cola, monkeypatch):
+    pedido = _mide(monkeypatch)
+    queue.HANDLERS["generar_voz"] = lambda ref: "voz lista"
+    jid = queue.encolar("generar_voz", 1)
+
+    queue._procesar(queue._tomar())
+
+    assert pedido == [queue.COLA_MEMORIA_MODELO_GB]
+    estado, log = _estado(jid)
+    # Y la medición queda en el historial: es lo que hace falta leer el día que
+    # una narración de 77 s tarda cinco minutos.
+    assert estado == "ok" and "16.4 → 27.0" in log
+
+
+def test_si_la_memoria_no_llega_la_etapa_de_voz_corre_igual(cola, monkeypatch):
+    """Al contrario que el LLM, que se niega: allí lo que venía detrás eran
+    22 GiB y arrancarlos a ciegas mataba al backend. Aquí son 4, que caben casi
+    siempre, y negarse no los haría caber."""
+    monkeypatch.setattr(
+        queue.comfy,
+        "liberar_memoria",
+        lambda hasta_gb=None: comfy.Liberacion(6.0, 6.0, 20.0, 2, False),
+    )
+    queue.HANDLERS["generar_voz"] = lambda ref: "voz lista"
+    jid = queue.encolar("generar_voz", 1)
+
+    queue._procesar(queue._tomar())
+
+    estado, log = _estado(jid)
+    assert estado == "ok" and "6.0 → 6.0" in log
+
+
+def test_una_etapa_de_texto_no_pasa_por_esa_puerta(cola, monkeypatch):
+    """El LLM tiene la suya, y pide los GiB que declare su modelo."""
+    monkeypatch.setattr(
+        queue.comfy,
+        "liberar_memoria",
+        lambda hasta_gb=None: pytest.fail("esa puerta no era para el LLM"),
+    )
+    queue.HANDLERS["generar_ideas"] = lambda ref: "ideas"
+    queue.encolar("generar_ideas", 1)
+
+    queue._procesar(queue._tomar())
+
+
+def test_en_un_fallo_las_notas_van_delante_del_error(cola):
+    """El motivo que escribe el autopiloto es la última línea del log
+    (`autopiloto._resumen`), así que con las notas detrás el motivo de una
+    etapa caída pasó a ser la medición de memoria en vez del error."""
+    from backend.services import apuntes
+
+    def handler(ref):
+        apuntes.anotar("Memoria para generar_voz (8 GiB): 16.4 → 27.0 GiB libres")
+        raise ValueError("El proyecto no tiene escenas")
+
+    queue.HANDLERS["generar_ideas"] = handler
+    jid = queue.encolar("generar_ideas", 1)
+
+    queue._procesar(queue._tomar())
+
+    estado, log = _estado(jid)
+    lineas = [x for x in log.splitlines() if x.strip()]
+    assert estado == "error"
+    assert lineas[0].startswith("Memoria para")
+    assert "no tiene escenas" in lineas[-1]

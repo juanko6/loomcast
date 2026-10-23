@@ -21,7 +21,7 @@ import httpx
 
 from .. import parada, procesos
 from ..clients import comfy, llm, rife
-from ..config import COLA_ESPERA_S, COLA_INTENTOS
+from ..config import COLA_ESPERA_S, COLA_INTENTOS, COLA_MEMORIA_MODELO_GB
 from ..db import get_session
 from ..models import ImagenLibre, Musica, Proyecto, Tema, Voz
 from ..repositories import jobs as jobs_repo
@@ -93,6 +93,19 @@ JOBS_LLM = {
     "mejorar_prompt_musica",
     "generar_musica_proyecto",
     "generar_resumen_episodio",
+}
+
+# Etapas que cargan su modelo DENTRO del backend (Qwen3-TTS, whisper). No le
+# piden nada a ComfyUI, pero se pelean con él por la misma memoria unificada, y
+# el `/free` con el que la etapa anterior soltó al acabar es a ciegas: vuelve en
+# 1 ms con los pesos todavía dentro. Antes de cargar lo nuestro se espera a ver
+# la memoria de verdad (`_hacer_sitio`), que es la mitad que faltaba del mismo
+# error que ya se arregló por el lado del LLM.
+JOBS_MODELO_PROPIO = {
+    "generar_voz",
+    "crear_voz",
+    "clonar_voz",
+    "generar_subtitulos",
 }
 
 # Etapas que se disparan solas al terminar la anterior:
@@ -242,12 +255,29 @@ def _tomar() -> int:
     return _cola.get()[1]
 
 
+def _hacer_sitio(tipo: str) -> None:
+    """Espera a tener memoria libre antes de cargar un modelo en el backend.
+
+    No lanza nunca, al contrario que su gemelo de `llm_runtime`: allí lo que
+    venía detrás eran 22 GiB y arrancarlos a ciegas mataba al backend con
+    `Killed: 9`, así que negarse era lo correcto. Aquí lo que viene son 4, que
+    caben casi siempre; lo que hace falta es no cargarlos encima de algo que
+    está a punto de irse al swap, y dejar dicho cuánta memoria había si pasa.
+    """
+    lib = comfy.liberar_memoria(hasta_gb=COLA_MEMORIA_MODELO_GB)
+    linea = f"Memoria para {tipo} ({COLA_MEMORIA_MODELO_GB:.0f} GiB): {lib}"
+    print(f"[cola] {linea}", flush=True)
+    apuntes.anotar(linea)
+
+
 def _ejecutar(tipo: str, ref_id: int, params: dict) -> str:
     """Un intento del handler, con el llama-server donde toque."""
     if tipo in JOBS_LLM:
         with llm_runtime.en_uso():
             return HANDLERS[tipo](ref_id, **params)
     llm_runtime.liberar(f"empieza {tipo}")
+    if tipo in JOBS_MODELO_PROPIO:
+        _hacer_sitio(tipo)
     return HANDLERS[tipo](ref_id, **params)
 
 
@@ -357,7 +387,15 @@ def _procesar(job_id: int) -> None:
         parada.limpiar()
         apuntes.limpiar()
     if notas:
-        log = "\n\n".join(filter(None, [log, "\n".join(notas)]))
+        # En un fallo las notas van DELANTE del error, no detrás: son el
+        # contexto del fallo (cuánta memoria había, qué soltó ComfyUI) y el
+        # error tiene que quedar al final, que es de donde el autopiloto saca
+        # el motivo que escribe (`autopiloto._resumen`). Con las notas al final
+        # el motivo de una etapa caída era la medición de memoria.
+        partes = [log, "\n".join(notas)]
+        if estado == "error":
+            partes.reverse()
+        log = "\n\n".join(filter(None, partes))
     if estado == "ok" and parado:
         # Pasa en las etapas que no se pueden cortar a mitad (la síntesis de voz
         # es una sola llamada a PyTorch): se pidió parar, la etapa terminó de

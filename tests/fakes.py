@@ -204,7 +204,7 @@ class FakeTTS:
         self.cargados.append(repo)
         return FakeModeloTTS(repo, self.llamadas)
 
-    def liberar(self, modelo):
+    def liberar(self):
         self.liberados += 1
 
 

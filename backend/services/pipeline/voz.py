@@ -246,7 +246,10 @@ def generar_voz(proyecto_id: int, modo: str = "clon", instruct: str | None = Non
                     fallos.append(f"tramo {i + 1} ({_etiqueta(tramos[i][0])}): {e}")
                 progreso.lote(len(pistas) + len(fallos), len(tramos), "tramo")
         finally:
-            tts.liberar(modelo)
+            # `modelo = None` y no `tts.liberar(modelo)`: la referencia que hay
+            # que soltar es esta, la del que llama (ver `tts.liberar`).
+            modelo = None
+            tts.liberar()
 
     if not pistas:
         raise ValueError(

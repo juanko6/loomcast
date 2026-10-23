@@ -449,3 +449,43 @@ def test_clonar_voz_sin_origen_o_inexistente(session, dirs_tmp, fake_stt):
         crear_voz.clonar_voz(vid)
     with pytest.raises(ValueError, match="no existe"):
         crear_voz.clonar_voz(99)
+
+
+def test_el_tts_no_se_queda_referenciado_al_acabar(
+    session, proy_lineas, dirs_tmp, fake_tts, monkeypatch
+):
+    """La etapa tiene que soltar el modelo de verdad, no solo llamar a liberar.
+
+    `tts.liberar(modelo)` hacía `del modelo` sobre su propio parámetro, que
+    borra el nombre de *esa* función y deja intacto el del que llama: el
+    `gc.collect()` corría con el modelo todavía vivo y no liberaba nada. En
+    modo "design", que carga dos modelos uno detrás de otro, eso significaba
+    construir el segundo con el primero aún referenciado — los dos Qwen3-TTS
+    dentro de la memoria unificada a la vez.
+
+    Se mira con `weakref` porque es lo único que distingue «lo soltó» de «llamó
+    a liberar»: un doble de `liberar` no recoge nada, así que contar llamadas
+    daba verde con el fallo puesto.
+    """
+    import gc
+    import weakref
+
+    sueltos = []
+    cargar = voz.tts.cargar_modelo
+
+    def espiando(repo):
+        # El sitio donde se ve: al construir el segundo modelo, el primero ya
+        # no puede estar vivo. Comprobarlo al final del todo no vale, porque al
+        # volver `generar_voz` se muere su marco y con él la referencia que se
+        # había quedado colgada.
+        gc.collect()
+        assert [r() for r in sueltos] == [None] * len(sueltos)
+        modelo = cargar(repo)
+        sueltos.append(weakref.ref(modelo))
+        return modelo
+
+    monkeypatch.setattr(voz.tts, "cargar_modelo", espiando)
+
+    voz.generar_voz(proy_lineas, modo="design")
+
+    assert len(sueltos) == 2

@@ -215,3 +215,85 @@ def http_mock(monkeypatch):
         return vistas
 
     return instalar
+
+
+@pytest.fixture(autouse=True)
+def ningun_llama_server_de_verdad(monkeypatch):
+    """Hace cierta la primera línea de este fichero por el lado del LLM.
+
+    Hizo falta el 2026-10-23. Mientras `llm_runtime` «adoptaba y no tocaba» el
+    servidor que encontrase puesto, la suite era inofensiva por accidente: no
+    había camino que matara un proceso. Al pasar a hacerse cargo de él
+    (`_tomar_el_mando`, que es lo que arregla los 18 GiB de swap de la voz) ese
+    camino existe, y una tanda de tests mató el llama-server que había en el
+    9876 y lanzó otro de 17 GiB llamando a `~/Models/*.sh` de verdad.
+
+    Se tapa el borde entero —procesos y red—, no un caso. Un test que quiera
+    probar esos caminos pone sus propios dobles y gana, porque su monkeypatch
+    se aplica después de este.
+    """
+    from backend.clients import comfy, llm
+    from backend.services import llm_runtime
+    from backend.workers import queue
+
+    # Se sustituye el nombre con el que `llm_runtime` ve al cliente, y no las
+    # funciones del cliente: así los tests del propio cliente siguen probando
+    # las de verdad.
+    monkeypatch.setattr(llm_runtime, "llm", _ClienteSinServidor(llm))
+    # Igual con ComfyUI: los dos sitios que esperan memoria antes de cargar un
+    # modelo le mandan un /free, y en los tests eso iba al ComfyUI de verdad —
+    # y además ataba el resultado a cuánta memoria tuviera la máquina.
+    monkeypatch.setattr(llm_runtime, "comfy", _ComfySinModelos(comfy))
+    monkeypatch.setattr(queue, "comfy", _ComfySinModelos(comfy))
+    monkeypatch.setattr(llm_runtime, "_pids_en_puerto", lambda url: [])
+    monkeypatch.setattr(llm_runtime, "_lanzar", lambda modelo: _ProcDeTest())
+    monkeypatch.setattr(llm_runtime, "_matar", lambda proc: None)
+    monkeypatch.setattr(llm_runtime, "_matar_pgid", lambda pgid: None)
+    monkeypatch.setattr(llm_runtime, "_rematar_el_puerto", lambda url: None)
+    monkeypatch.setattr(llm_runtime, "_anotar_pid", lambda modelo, proc: None)
+    monkeypatch.setattr(llm_runtime, "_olvidar_pid", lambda: None)
+    # El estado del módulo es global y la cola corre de verdad en varios tests:
+    # sin esto, un test que deja un modelo «cargado» se lo pasa al siguiente.
+    monkeypatch.setattr(llm_runtime, "_proc", None)
+    monkeypatch.setattr(llm_runtime, "_proc_modelo", "")
+    monkeypatch.setattr(llm_runtime, "_tomado", None)
+    monkeypatch.setattr(llm_runtime, "_tomado_gb", 0.0)
+
+
+class _ClienteSinServidor:
+    """El cliente del LLM visto por `llm_runtime`: nadie escucha en ningún
+    puerto. Lo demás lo pasa al cliente de verdad."""
+
+    def __init__(self, real):
+        self._real = real
+
+    def __getattr__(self, nombre):
+        return getattr(self._real, nombre)
+
+    def ping(self, url=None):
+        return False
+
+    def que_hay(self, url=None):
+        return None
+
+
+class _ComfySinModelos:
+    """ComfyUI visto por quien va a cargar un modelo: no responde, así que no
+    retiene nada ni se le manda un /free de verdad. Lo demás lo pasa al
+    cliente real."""
+
+    def __init__(self, real):
+        self._real = real
+
+    def __getattr__(self, nombre):
+        return getattr(self._real, nombre)
+
+    def liberar_memoria(self, hasta_gb=None):
+        return self._real.Liberacion(None, None, 0.0, 0, True)
+
+
+class _ProcDeTest:
+    """Un llama-server que no existe pero está «vivo»."""
+
+    def poll(self):
+        return None

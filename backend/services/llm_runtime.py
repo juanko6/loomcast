@@ -7,9 +7,13 @@ prompts de escena). ComfyUI y Qwen3-TTS ya sueltan sus pesos al terminar; esto
 hace lo propio con llama-server, que hasta ahora se quedaba residente.
 
 Reglas:
-  - Solo se para lo que Loomcast arrancó. Si encuentra un llama-server ya
-    escuchando en la url del modelo, lo adopta y no lo toca: puede ser tuyo.
-  - Un modelo sin `comando` en config.toml es externo y nunca se gestiona.
+  - **Loomcast solo usa lo que puede parar.** Si encuentra un llama-server ya
+    escuchando en la url de un modelo con `comando`, se hace cargo de él (ver
+    `_tomar_el_mando`) y lo para antes de la voz como si lo hubiera lanzado.
+  - Un modelo sin `comando` en config.toml es externo y nunca se gestiona: ni
+    se arranca ni se para. Ahí lo único que se puede hacer es decir cuánta
+    memoria ocupa, y se dice.
+  - Al salir, en cambio, solo se para lo que Loomcast arrancó (ver `apagar`).
   - El modelo activo se elige desde la UI y se guarda en la BD.
 """
 import contextlib
@@ -52,7 +56,9 @@ class LLMProcesoError(RuntimeError):
 
 _lock = threading.RLock()
 _proc: subprocess.Popen | None = None  # solo si lo arrancamos nosotros
-_proc_modelo: str = ""  # id del modelo que corre en _proc
+_tomado: int | None = None  # pgid de uno que encontramos puesto y usamos
+_tomado_gb: float = 0.0  # GiB que dijo tener dentro, para esperar su memoria
+_proc_modelo: str = ""  # id del modelo al que sirve _proc o _tomado
 _ultimo_uso: float = 0.0
 _en_curso: int = 0  # etapas de texto en vuelo
 
@@ -207,6 +213,24 @@ def _esperar_puerto_libre(url: str, limite_s: float = 15) -> bool:
     return not llm.ping(url)
 
 
+def _pids_en_puerto(url: str) -> list[int]:
+    """Quién escucha en el puerto de esa url. El puerto es lo único que sabemos
+    seguro de un servidor que no arrancamos: la línea de comandos no vale,
+    porque el `sh -c` hace exec sobre el binario y deja de parecerse al comando
+    que escribiste."""
+    puerto = urlparse(url).port
+    if not puerto:
+        return []
+    try:
+        salida = subprocess.run(
+            ["lsof", "-ti", f"tcp:{puerto}", "-sTCP:LISTEN"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return [int(x) for x in salida.split() if x.isdigit()]
+
+
 def _rematar_el_puerto(url: str) -> None:
     """Mata a quien siga escuchando en ese puerto tras pedirle que muera.
 
@@ -214,19 +238,10 @@ def _rematar_el_puerto(url: str) -> None:
     grupo no bastaron, que es lo que puede pasar cuando el comando del modelo
     no es un script sino el binario directo (`mlx_lm.server --model …`): ahí el
     `sh -c` hace exec y, si el proceso se reparentó, el grupo que mataríamos ya
-    no es el suyo. Se busca por el puerto, que es lo único que sabemos seguro.
+    no es el suyo.
     """
     puerto = urlparse(url).port
-    if not puerto:
-        return
-    try:
-        salida = subprocess.run(
-            ["lsof", "-ti", f"tcp:{puerto}", "-sTCP:LISTEN"],
-            capture_output=True, text=True, timeout=5,
-        ).stdout
-    except (OSError, subprocess.SubprocessError):
-        return
-    for pid in [int(x) for x in salida.split() if x.isdigit()]:
+    for pid in _pids_en_puerto(url):
         print(f"[llm] el puerto {puerto} sigue servido por el pid {pid} tras "
               "pedirle parar: lo remato", flush=True)
         apuntes.anotar(
@@ -274,22 +289,31 @@ def _lanzar(modelo: ModeloLLM) -> subprocess.Popen:
 
 
 def _detener(motivo: str) -> None:
-    """Para el llama-server gestionado. Asume el lock tomado."""
-    global _proc, _proc_modelo
-    if _proc is None:
+    """Para el llama-server del modelo activo: el que arrancamos o el que
+    encontramos puesto y tomamos. Asume el lock tomado."""
+    global _proc, _proc_modelo, _tomado, _tomado_gb
+    if _proc is None and _tomado is None:
         return
     modelo = por_id(_proc_modelo)
-    if _proc.poll() is None:
-        print(f"[llm] parando «{_proc_modelo}»: {motivo}", flush=True)
-        _matar(_proc)
-        if modelo and not _esperar_puerto_libre(modelo.url):
-            # Sigue sirviendo después de matarlo: o se reparentó y el grupo que
-            # matamos no era el suyo, o alguien levantó otro en el mismo puerto.
-            # Dejarlo vivo sería peor que matarlo, porque el próximo arranque lo
-            # adoptaría con su modelo dentro.
-            _rematar_el_puerto(modelo.url)
-    _olvidar_pid()
-    _proc, _proc_modelo = None, ""
+    if _proc is not None:
+        vivo = _proc.poll() is None
+        if vivo:
+            print(f"[llm] parando «{_proc_modelo}»: {motivo}", flush=True)
+            _matar(_proc)
+        _olvidar_pid()
+    else:
+        vivo = _vive(_tomado)
+        if vivo:
+            print(f"[llm] parando el servidor que encontramos puesto en "
+                  f"{modelo.url if modelo else '?'}: {motivo}", flush=True)
+            _matar_pgid(_tomado)
+    if vivo and modelo and not _esperar_puerto_libre(modelo.url):
+        # Sigue sirviendo después de matarlo: o se reparentó y el grupo que
+        # matamos no era el suyo, o alguien levantó otro en el mismo puerto.
+        # Dejarlo vivo sería peor que matarlo, porque el próximo arranque lo
+        # tomaría por el modelo activo con su memoria dentro.
+        _rematar_el_puerto(modelo.url)
+    _proc, _proc_modelo, _tomado, _tomado_gb = None, "", None, 0.0
 
 
 # ---------- API para el worker ----------
@@ -341,6 +365,53 @@ def _hacer_sitio(modelo: ModeloLLM) -> None:
     )
 
 
+def _tomar_el_mando(modelo: ModeloLLM) -> None:
+    """Se hace cargo de un llama-server que ya estaba escuchando en su url.
+
+    Asume el lock tomado. Antes esto era «se adopta y no se toca», y ahí había
+    un agujero de 18 GiB: Loomcast usaba para sus etapas de texto un servidor
+    que no había arrancado, pero `liberar()` solo miraba `_proc`, así que no lo
+    paraba nunca. El 2026-10-23, generando la voz de un episodio con un 27B de
+    16,7 GiB puesto a mano en el 9876, el kernel fue sacando ese modelo a
+    trocitos para hacerle sitio al TTS: 18,4 GiB de swapouts en cinco minutos y
+    4 min 39 s para narrar 77 s de audio.
+
+    Un modelo con `comando` es de Loomcast aunque lo encontrara puesto, así que
+    se para antes de la voz igual que el que lanzamos nosotros. Uno sin
+    `comando` es externo y no llega aquí: ese no se toca.
+
+    Lo que responde en el puerto puede no ser el modelo que marca la UI —todos
+    tus scripts comparten el 9876—, así que se anota qué hay y cuánto ocupa: es
+    lo que explica un guion escrito por un modelo que no habías elegido.
+    """
+    global _tomado, _tomado_gb, _proc_modelo
+    if _tomado is not None and _proc_modelo == modelo.id and _vive(_tomado):
+        return  # ya lo tomamos en una etapa anterior
+    hay = llm.que_hay(modelo.url)
+    quien = f"«{hay[0]}», {hay[1]:.1f} GiB" if hay else "no dice cuál es"
+    pids = _pids_en_puerto(modelo.url)
+    if not pids:
+        linea = (
+            f"En {modelo.url} ya había un servidor ({quien}) y no se encuentra "
+            "su proceso: no se podrá parar, así que su memoria seguirá dentro "
+            "cuando cargue el TTS"
+        )
+    else:
+        try:
+            _tomado = os.getpgid(pids[0])
+        except ProcessLookupError:
+            return
+        _tomado_gb, _proc_modelo = (hay[1] if hay else 0.0), modelo.id
+        linea = (
+            f"En {modelo.url} ya había un servidor ({quien}) que no arrancó "
+            f"Loomcast: es el puerto de «{modelo.nombre}», así que se gestiona "
+            "como el nuestro — se usa en las etapas de texto y se para antes "
+            "de la voz"
+        )
+    print(f"[llm] {linea}", flush=True)
+    apuntes.anotar(linea)
+
+
 def asegurar() -> ModeloLLM:
     """Deja al modelo activo listo para responder. Devuelve cuál es."""
     global _proc, _proc_modelo, _ultimo_uso
@@ -356,7 +427,8 @@ def asegurar() -> ModeloLLM:
                 return modelo  # ya cargado
             _detener(f"cambio a «{modelo.nombre}»")
         if llm.ping(modelo.url):
-            return modelo  # ya había uno escuchando; se adopta y no se toca
+            _tomar_el_mando(modelo)  # ya había uno escuchando: nos hacemos cargo
+            return modelo
         _hacer_sitio(modelo)
         _proc = _lanzar(modelo)
         _proc_modelo = modelo.id
@@ -415,12 +487,29 @@ def liberar(motivo: str) -> None:
     el kernel haya reclamado el modelo es mandarlo al swap.
     """
     with _lock:
+        if _proc is None and _tomado is None:
+            # Puede haber un servidor puesto que esta ejecución no ha usado
+            # todavía, y entonces no hay nada apuntado que parar: arrancas
+            # Loomcast, abres un proyecto que ya tiene guion y pides la voz
+            # directamente, sin que ninguna etapa de texto haya pasado por
+            # `asegurar()`. Sus GiB estorban igual, así que el puerto se mira
+            # también aquí. Se pregunta al cliente y no a la BD porque esto
+            # corre antes de cada etapa que no es de texto.
+            puesto = llm.activo()
+            if puesto.gestionado and llm.ping(puesto.url):
+                _tomar_el_mando(puesto)
         modelo = por_id(_proc_modelo)
-        habia = _proc is not None and _proc.poll() is None
+        habia = (_proc is not None and _proc.poll() is None) or (
+            _tomado is not None and _vive(_tomado)
+        )
+        # Los GiB que esperar son los del servidor que se para: los suyos
+        # medidos si los contó (`llm.que_hay`), y si no los que declare su
+        # modelo en config.toml.
+        ocupaba = _tomado_gb or (modelo.memoria_gb if modelo else 0.0)
         antes = memoria.disponible_gb() if habia else None
         _detener(motivo)
-        if habia and modelo:
-            _esperar_devolucion(modelo.memoria_gb, antes)
+        if habia and ocupaba:
+            _esperar_devolucion(ocupaba, antes)
 
 
 @contextlib.contextmanager
@@ -453,7 +542,10 @@ def estado() -> dict:
             "estado": "activo" if llm.ping(modelo.url) else "caido",
         }
     proc = _proc
-    cargado = proc is not None and proc.poll() is None and _proc_modelo == modelo.id
+    vivo = (proc is not None and proc.poll() is None) or (
+        _tomado is not None and _vive(_tomado)
+    )
+    cargado = vivo and _proc_modelo == modelo.id
     return {
         "id": modelo.id,
         "nombre": modelo.nombre,
@@ -482,4 +574,12 @@ def arrancar() -> None:
 
 
 def apagar() -> None:
+    """Al cerrar Loomcast se para solo lo que arrancó Loomcast.
+
+    Lo que encontró puesto y usó (ver `_tomar_el_mando`) se para antes de una
+    etapa de voz, porque ahí su memoria es el problema. Al salir no: ahí no
+    estorba y era tuyo antes de que abriéramos.
+    """
+    if _proc is None:
+        return
     liberar("se apaga Loomcast")

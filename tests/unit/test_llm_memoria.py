@@ -203,3 +203,146 @@ class _ProcVivo:
 
     def poll(self):
         return None
+
+
+# --- hacerse cargo del llama-server que ya estaba puesto --------------------
+# El agujero del 2026-10-23: `asegurar()` usaba para las etapas de texto un
+# servidor que no había arrancado («se adopta y no se toca»), pero `liberar()`
+# solo miraba `_proc`, así que no lo paraba nunca. Con un 27B de 16,7 GiB a mano
+# en el 9876, generar la voz de un episodio se fue 18,4 GiB al swap: el kernel
+# sacó ese modelo a trocitos para hacerle sitio al TTS, y narrar 77 s de audio
+# costó 4 min 39 s.
+
+@pytest.fixture
+def puesto(monkeypatch):
+    """Ya hay un llama-server escuchando que no arrancó Loomcast."""
+    monkeypatch.setattr(llm_runtime.llm, "ping", lambda url=None: True)
+    monkeypatch.setattr(
+        llm_runtime.llm, "que_hay", lambda url=None: ("Qwen3.6-27B", 16.7)
+    )
+    monkeypatch.setattr(llm_runtime, "_pids_en_puerto", lambda url: [4242])
+    monkeypatch.setattr(llm_runtime.os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(llm_runtime, "_vive", lambda pgid: True)
+
+
+@pytest.fixture
+def activo(monkeypatch, modelo):
+    monkeypatch.setattr(llm_runtime, "activo", lambda: modelo)
+    monkeypatch.setattr(
+        llm_runtime, "_lanzar", lambda m: pytest.fail("no tocaba lanzar nada")
+    )
+    return modelo
+
+
+def test_asegurar_se_hace_cargo_del_que_ya_estaba(puesto, activo):
+    llm_runtime.asegurar()
+    assert llm_runtime._tomado == 4242
+    assert llm_runtime._proc_modelo == activo.id
+
+
+def test_lo_que_encontro_puesto_se_para_antes_de_la_voz(monkeypatch, puesto, activo):
+    """El arreglo: antes de esto `liberar()` no lo tocaba y sus GiB seguían
+    dentro mientras el TTS cargaba encima."""
+    muertos, esperas = [], []
+    monkeypatch.setattr(llm_runtime, "_matar_pgid", muertos.append)
+    monkeypatch.setattr(llm_runtime, "_esperar_puerto_libre", lambda url: True)
+    monkeypatch.setattr(llm_runtime.memoria, "disponible_gb", lambda: 9.0)
+    monkeypatch.setattr(
+        llm_runtime, "_esperar_devolucion", lambda gb, antes: esperas.append((gb, antes))
+    )
+
+    llm_runtime.asegurar()
+    llm_runtime.liberar("empieza generar_voz")
+
+    assert muertos == [4242]
+    # Y se espera a *sus* GiB, los que dijo tener dentro, no los que declare
+    # config.toml de otro modelo: comparten puerto, pueden no ser el mismo.
+    assert esperas == [(16.7, 9.0)]
+    assert llm_runtime._tomado is None
+
+
+def test_se_anota_que_hay_en_el_puerto_aunque_no_sea_el_elegido(puesto, activo):
+    """Todos tus scripts comparten el 9876, así que lo que responde ahí puede
+    no ser el modelo que marca la UI. Es lo que explica un guion escrito por un
+    modelo que no habías elegido, y por eso va al historial del job."""
+    llm_runtime.asegurar()
+    anotado = apuntes.recoger()[0]
+    assert "Qwen3.6-27B" in anotado and "16.7 GiB" in anotado
+
+
+def test_solo_se_toma_el_mando_una_vez(puesto, activo):
+    for _ in range(3):
+        llm_runtime.asegurar()
+    assert len(apuntes.recoger()) == 1
+
+
+def test_si_no_se_encuentra_su_proceso_se_avisa_de_que_no_se_podra_parar(
+    monkeypatch, puesto, activo
+):
+    """Sin pid no hay nada que matar, y callarlo es dejar al usuario buscando
+    por qué el TTS se va al swap."""
+    monkeypatch.setattr(llm_runtime, "_pids_en_puerto", lambda url: [])
+    llm_runtime.asegurar()
+    assert llm_runtime._tomado is None
+    assert "no se podrá parar" in apuntes.recoger()[0]
+
+
+def test_un_modelo_externo_no_se_toca(monkeypatch, modelo, puesto):
+    """Sin `comando` en config.toml el servidor es tuyo: ni se arranca ni se
+    para. Es el único caso en que la memoria de otro sigue dentro, y ahí lo
+    correcto es no tocarla."""
+    import dataclasses
+
+    externo = dataclasses.replace(modelo, comando=None)
+    monkeypatch.setattr(llm_runtime, "activo", lambda: externo)
+    monkeypatch.setattr(
+        llm_runtime, "_lanzar", lambda m: pytest.fail("no tocaba lanzar nada")
+    )
+    llm_runtime.asegurar()
+    assert llm_runtime._tomado is None and apuntes.recoger() == []
+
+
+def test_al_apagar_no_se_para_lo_que_no_arrancamos(monkeypatch, puesto, activo):
+    """Antes de la voz sí, porque ahí su memoria es el problema; al salir no,
+    porque era tuyo antes de que abriéramos."""
+    monkeypatch.setattr(
+        llm_runtime, "_matar_pgid", lambda pgid: pytest.fail("era tuyo")
+    )
+    llm_runtime.asegurar()
+    llm_runtime.apagar()
+    assert llm_runtime._tomado == 4242
+
+
+def test_se_para_lo_puesto_aunque_ninguna_etapa_de_texto_lo_haya_usado(
+    monkeypatch, puesto, modelo
+):
+    """El caso de verdad: arrancas Loomcast, abres un proyecto que ya tiene
+    guion y pides la voz. Ninguna etapa de texto pasó por `asegurar()`, así que
+    no hay nada apuntado que parar — y los 16,7 GiB del puerto estorban igual.
+    """
+    muertos, esperas = [], []
+    monkeypatch.setattr(llm_runtime.llm, "activo", lambda: modelo)
+    monkeypatch.setattr(llm_runtime, "_matar_pgid", muertos.append)
+    monkeypatch.setattr(llm_runtime, "_esperar_puerto_libre", lambda url: True)
+    monkeypatch.setattr(llm_runtime.memoria, "disponible_gb", lambda: 9.0)
+    monkeypatch.setattr(
+        llm_runtime, "_esperar_devolucion", lambda gb, antes: esperas.append(gb)
+    )
+
+    llm_runtime.liberar("empieza generar_voz")
+
+    assert muertos == [4242] and esperas == [16.7]
+
+
+def test_un_externo_puesto_no_se_para_antes_de_la_voz(monkeypatch, puesto, modelo):
+    """Sin `comando` es tuyo: su memoria se queda dentro y es lo correcto."""
+    import dataclasses
+
+    monkeypatch.setattr(
+        llm_runtime.llm, "activo", lambda: dataclasses.replace(modelo, comando=None)
+    )
+    monkeypatch.setattr(
+        llm_runtime, "_matar_pgid", lambda pgid: pytest.fail("era tuyo")
+    )
+    llm_runtime.liberar("empieza generar_voz")
+    assert llm_runtime._tomado is None

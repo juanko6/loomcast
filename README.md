@@ -924,8 +924,9 @@ levántalo tú.
 
 - **Selector en la cabecera**: elige cuál de tus modelos se usa. Se guarda en la BD y el relevo (parar uno, arrancar otro) ocurre solo. Con un único modelo declarado el desplegable no aparece.
 - **Semáforo LLM**: verde = cargado; **ámbar = descargado a propósito**, se carga solo en la siguiente etapa de texto; rojo = declarado como externo y no responde.
-- **Modelo sin `comando`**: externo. Lo levantas tú y Loomcast no lo toca, como siempre. Lo mismo si pones `autostart = false`.
-- Si encuentra un llama-server ya escuchando en la url del modelo, lo **adopta** en vez de arrancar otro, y no lo para al terminar: puede ser tuyo.
+- **Modelo sin `comando`**: externo. Lo levantas tú y Loomcast no lo toca, como siempre: ni lo arranca ni lo para. Lo mismo si pones `autostart = false`.
+- **Loomcast solo usa lo que puede parar.** Si encuentra un llama-server ya escuchando en la url de un modelo con `comando`, no arranca otro: **se hace cargo de ese** y lo para antes de la voz igual que si lo hubiera lanzado él. Al salir, en cambio, solo para lo que arrancó: eso era tuyo antes de que abriéramos.
+- El historial del job dice **qué responde en el puerto y cuánto ocupa**, que puede no ser el modelo que marca el selector: tus scripts comparten el 9876, y ahí está la explicación de un guion escrito por un modelo que no habías elegido.
 - Si Loomcast muere de golpe (SIGKILL, cuelgue), al volver a arrancar **recupera la RAM** del llama-server que dejó huérfano (`logs/llm.pid`).
 - `inactividad_s` descarga el modelo tras un rato sin usarse, aunque no haya llegado ninguna etapa de GPU.
 - `max_tokens` ([llm] o por modelo) tiene que dar para la etapa más larga, que es el guion. Si se queda corto, la respuesta llega cortada a media frase y Loomcast lo dice tal cual, con el valor que había y por dónde se quedó.
@@ -939,6 +940,40 @@ memoria de verdad** (el POST vuelve en 1 ms sin haber soltado nada; ver
 "`POST /free` sí suelta con `--gpu-only`…"), repite la petición si no baja y,
 si aun así no llega, el job sale como error contando la medición en vez de
 arrancar el modelo.
+
+Lo mismo, con dos diferencias, antes de una etapa que carga su modelo **dentro
+del backend** (Qwen3-TTS, whisper): los GiB son `[cola].memoria_modelo_gb` y la
+etapa corre igual si no llegan, porque son 4 y caben casi siempre — lo que hace
+falta ahí es no cargarlos encima de algo que está a punto de irse al swap, y que
+el historial lo diga si pasa. Antes no había ninguna puerta en ese lado: la voz
+cargaba el TTS sobre lo que hubiera dentro.
+
+### Los topes del asignador de MPS (lo que mandaba la voz al swap)
+
+`[voz].mps_tope` y `mps_tope_bajo` son fracciones de la memoria que Metal
+recomienda (`torch.mps.recommended_max_memory()`, 37,4 GiB en un M3 Max de 48).
+Al cruzar el alto, el asignador de PyTorch suelta lo que tenía cacheado hasta
+bajar del bajo.
+
+No es un ajuste fino. El asignador de MPS cachea los bloques que libera, y en
+una generación autorregresiva cada paso pide una forma un poco distinta de la
+del anterior: no puede reutilizar nada y le pide a Metal un bloque nuevo cada
+vez, mil veces seguidas. Medido narrando el guion de un episodio en un proceso
+a solas, sin LLM ni ComfyUI dentro:
+
+| | texto | audio | pico MPS | swapouts | tiempo |
+|---|---|---|---|---|---|
+| sin topes | 200 palabras | 93,4 s | **53,1 GiB** | +76,2 GiB | 212 s |
+| con topes | 200 palabras | 88,8 s | **15,6 GiB** | +0,0 GiB | 95 s |
+| con topes | 400 palabras | 185,3 s | **16,3 GiB** | +0,3 GiB | 204 s |
+
+El pico no era el modelo (1,7B en fp16 son 4,7 GiB cargado) ni crecía con la
+longitud del guion: crecía con el número de pasos. Con los topes puestos queda
+plano en ~16 GiB por largo que sea el texto, no hay swap y tarda la mitad.
+
+Se exportan desde `backend/config.py` con `setdefault`, porque torch los lee al
+inicializar el asignador y en todo el backend `import torch` va dentro de las
+funciones. Si los exportas tú, manda lo tuyo.
 
 El antes/después queda en el log del job, o sea en el historial de la UI:
 

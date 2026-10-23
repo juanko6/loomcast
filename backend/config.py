@@ -1,4 +1,5 @@
 """Carga de config.toml (raíz del proyecto)."""
+import os
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -81,6 +82,13 @@ COMFY_ESPERA_LIBERACION_S: float = _cfg["comfy"].get("espera_liberacion_s", 20)
 _cola = _cfg.get("cola", {})
 COLA_INTENTOS: int = _cola.get("intentos", 3)
 COLA_ESPERA_S: float = _cola.get("espera_s", 20)
+# GiB libres que la cola espera a ver antes de dejar que una etapa cargue un
+# modelo DENTRO del backend (Qwen3-TTS, whisper). No reserva nada: pide el
+# `/free` a ComfyUI y espera a medir la bajada, porque el `/free` que lanzó la
+# etapa anterior al acabar es a ciegas (vuelve en 1 ms con los pesos dentro).
+# 8 sobra para el TTS en fp16 (3,4 GiB de pesos y un pico medido de 4,2) y no
+# llega a bloquear nunca; es el aviso de que la memoria la tiene otra cosa.
+COLA_MEMORIA_MODELO_GB: float = float(_cola.get("memoria_modelo_gb", 8))
 
 # Autopiloto: qué paradas de revisión respeta por defecto (ver [autopiloto] en
 # config.toml). Las tres de siempre, porque es lo que ya hace el flujo a mano.
@@ -88,6 +96,41 @@ _autopiloto = _cfg.get("autopiloto", {})
 AUTOPILOTO_PARADAS: tuple[str, ...] = tuple(
     _autopiloto.get("paradas", ["idea", "guion", "escenas"])
 )
+
+# --- memoria de PyTorch en MPS ----------------------------------------------
+# Lo que de verdad mandaba la voz al swap. El asignador de MPS **cachea** los
+# bloques que libera, y en una generación autorregresiva cada paso pide una
+# forma un poco distinta de la del paso anterior: no puede reutilizar nada de lo
+# cacheado y le pide a Metal un bloque nuevo cada vez, mil veces seguidas.
+#
+# Medido en este M3 Max (48 GiB; `recommended_max_memory` = 37,4), narrando el
+# guion de un episodio en un proceso a solas, sin LLM ni ComfyUI dentro:
+#
+#            texto    audio     pico MPS     swapouts   tiempo
+#   sin tope  200 pal  93,4 s    53,1 GiB    +76,2 GiB    212 s
+#   con tope  200 pal  88,8 s    15,6 GiB     +0,0 GiB     95 s
+#   con tope  400 pal 185,3 s    16,3 GiB     +0,3 GiB    204 s
+#
+# O sea: el pico no era el modelo (1,7B en fp16: 4,7 GiB cargado) ni crecía con
+# la longitud del guion — crecía con el número de pasos porque nadie soltaba lo
+# cacheado. Con los topes puestos el pico queda plano en ~16 GiB por largo que
+# sea el texto, no hay swap y tarda la mitad.
+#
+# Son fracciones de `recommended_max_memory`: al cruzar el alto, el asignador
+# suelta lo cacheado hasta bajar del bajo, en vez de crecer sin freno. 0,55 son
+# 20,6 GiB aquí, con holgura de sobra sobre los 16 que de verdad pide (y si se
+# cruzara, torch lanza "MPS backend out of memory", que es un error honesto y no
+# media hora de swap).
+#
+# Van al **entorno** y no a una llamada porque torch los lee al inicializar el
+# asignador, antes de que ninguna etapa pueda tocarlos; esto corre antes porque
+# en todo el backend `import torch` está dentro de las funciones, nunca arriba.
+# Con `setdefault`, si los exportas tú manda lo tuyo.
+_voz = _cfg.get("voz", {})
+VOZ_MPS_TOPE: float = float(_voz.get("mps_tope", 0.55))
+VOZ_MPS_TOPE_BAJO: float = float(_voz.get("mps_tope_bajo", 0.40))
+os.environ.setdefault("PYTORCH_MPS_HIGH_WATERMARK_RATIO", str(VOZ_MPS_TOPE))
+os.environ.setdefault("PYTORCH_MPS_LOW_WATERMARK_RATIO", str(VOZ_MPS_TOPE_BAJO))
 
 _stt = _cfg.get("stt", {})
 STT_MODELO: str = _stt.get("modelo", "turbo")
