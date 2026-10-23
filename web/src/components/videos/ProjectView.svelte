@@ -121,6 +121,7 @@
         onborrarvoz={acciones.borrarVoz}
         onvozpersonaje={acciones.vozPersonaje}
         oncrearvozpersonaje={acciones.crearVozPersonaje}
+        ongenerarcasting={acciones.generarCasting}
       />
     {:else if activo === "metadatos"}
       <StepMetadatos {p} {busy} ongenerar={acciones.generarMetadatos} />

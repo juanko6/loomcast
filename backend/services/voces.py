@@ -120,22 +120,32 @@ def crear(nombre: str, instruct: str) -> dict:
     return {"voz_id": voz_id, "slug": slug, "job_id": job_id}
 
 
-def crear_para_personaje(nombre: str, instruct: str) -> dict:
-    """Como `crear`, pero buscando slug libre en vez de rechazar el repetido.
+def registrar_para_personaje(nombre: str, instruct: str) -> dict:
+    """Da de alta en el banco la voz de un personaje, **sin encolar nada**.
 
-    Esto sale de un botón ("crear su voz desde la ficha"), no de un alta a mano,
+    Busca slug libre en vez de rechazar el repetido: esto no es un alta a mano,
     y dos vídeos pueden tener cada uno su Ana. Fallar con "ya existe una voz con
     nombre similar" obligaría a bautizarla justo cuando el nombre da igual: lo
     que la identifica es el personaje al que está pegada.
+
+    Separado de `crear_para_personaje` porque la etapa de voz sintetiza ella
+    misma el clip de los personajes a los que les escribe la voz: ya tiene el
+    VoiceDesign cargado para eso, y pasar por la cola sería volver a cargarlo
+    una vez por personaje.
     """
     nombre = nombre.strip() or "personaje"
     with get_session() as s:
         slug = _slug_libre(s, _slugify(nombre))
         voz = voces_repo.crear(s, slug, nombre, instruct.strip())
         s.commit()
-        voz_id = voz.id
-    job_id = queue.encolar("crear_voz", voz_id)
-    return {"voz_id": voz_id, "slug": slug, "job_id": job_id}
+        return {"voz_id": voz.id, "slug": slug}
+
+
+def crear_para_personaje(nombre: str, instruct: str) -> dict:
+    """La registra y encola su síntesis: es el botón "crear su voz desde la
+    ficha", el que se pulsa para rehacer una voz que no convenció."""
+    creada = registrar_para_personaje(nombre, instruct)
+    return {**creada, "job_id": queue.encolar("crear_voz", creada["voz_id"])}
 
 
 def crear_clon(nombre: str, filename: str, data: bytes, descripcion: str = "",

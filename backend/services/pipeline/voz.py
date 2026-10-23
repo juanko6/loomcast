@@ -44,6 +44,7 @@ from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
 from ...repositories import voces as voces_repo
 from .. import progreso
+from . import crear_voz
 
 # Silencio entre tramos: el aire que deja una persona al pasar de narrar a que
 # hable otro. Sin él los dos tramos se pegan y suena a corte de edición.
@@ -71,6 +72,115 @@ def _voces_del_reparto(s, proyecto_id: int) -> dict[str, tuple[str, str]]:
             continue
         out[x.clave] = (v.slug, v.ref_text)
     return out
+
+
+def _olvidar(proyecto_id: int, sueltas: list[tuple[str, int]]) -> None:
+    """Borra del banco las voces que se quedaron a medias y desasigna al dueño.
+
+    Una voz a medio escribir (falló, o se paró la etapa) no puede quedarse
+    pegada al personaje: `_voces_del_reparto` la descartaría por no estar lista
+    —así que sus líneas las diría el narrador igual— pero el hueco ya no
+    estaría vacío y la siguiente pasada no volvería a intentarlo. Mejor dejarlo
+    como estaba y que la próxima vez se le escriba de nuevo.
+    """
+    if not sueltas:
+        return
+    with get_session() as s:
+        porclave = {x.clave: x for x in personajes_repo.por_proyecto(s, proyecto_id)}
+        for clave, voz_id in sueltas:
+            personaje = porclave.get(clave)
+            if personaje is not None:
+                personaje.voz = ""
+            fila = voces_repo.obtener(s, voz_id)
+            if fila is not None:
+                voces_repo.borrar(s, fila)
+        s.commit()
+
+
+def _escribir_voces_que_faltan(
+    proyecto_id: int, claves: set[str], voces_reparto: dict[str, tuple[str, str]]
+) -> tuple[dict[str, tuple[str, str]], list[str]]:
+    """Le escribe su voz a cada personaje que habla y todavía no tiene ninguna.
+
+    Es lo que hace que un guion de líneas se oiga a varias voces sin tener que
+    pulsar nada. La voz sale de la **ficha** del personaje, que es de donde sale
+    también su retrato: dice la edad aparente, el género y el aire, que es lo
+    que decide el timbre. Nace en el banco como cualquier otra —se escucha, se
+    reutiliza y se borra desde el mismo sitio— y queda asignada, así que
+    regenerar la narración no vuelve a escribirla.
+
+    Quien no tenga ficha, o ya tenga voz aunque esté a medias, se queda como
+    está: sus líneas las dirá el narrador, que es peor que su voz pero mucho
+    mejor que un hueco.
+
+    El VoiceDesign se carga **una vez para todas**: lo caro es cargarlo, no
+    sintetizar ocho segundos, y en esta máquina no caben dos.
+
+    Devuelve las recién escritas ({CLAVE: (slug, ref_text)}) y lo que haya que
+    contar en el log.
+    """
+    # El import va aquí dentro: `services/voces` encola jobs, o sea importa la
+    # cola, que es quien importa esta etapa. A nivel de módulo el ciclo sería
+    # real.
+    from .. import voces as voces_service
+
+    pendientes: list[tuple[str, int, str]] = []
+    with get_session() as s:
+        for x in personajes_repo.por_proyecto(s, proyecto_id):
+            if x.clave not in claves or x.clave in voces_reparto:
+                continue
+            if x.voz:
+                # Tiene voz y no está entre las utilizables: o se está
+                # generando todavía —cosa de otro job, y se respeta— o falló.
+                # Una que falló no suena y además tapa el hueco, así que se
+                # borra y se le escribe otra.
+                fila = voces_repo.por_slug(s, x.voz)
+                if fila is not None and fila.estado != "error":
+                    continue
+                if fila is not None:
+                    voces_repo.borrar(s, fila)
+                x.voz = ""
+            if not (x.ficha or "").strip():
+                continue
+            nombre = (x.nombre or x.clave).strip()
+            creada = voces_service.registrar_para_personaje(
+                nombre,
+                voces_service.instruct_desde_ficha(
+                    nombre, x.ficha, x.tipo or "persona"
+                ),
+            )
+            x.voz = creada["slug"]
+            pendientes.append((x.clave, creada["voz_id"], creada["slug"]))
+        s.commit()
+    if not pendientes:
+        return {}, []
+
+    nuevas: dict[str, tuple[str, str]] = {}
+    avisos: list[str] = []
+    progreso.lote(0, len(pendientes), "voz del reparto")
+    # La carga va dentro del try: si es ella la que falla, las filas recién
+    # creadas también hay que recogerlas.
+    modelo = None
+    try:
+        modelo = tts.cargar_modelo(tts.MODELO_DESIGN)
+        for clave, voz_id, slug in pendientes:
+            parada.comprobar(f"antes de escribirle la voz a {clave}")
+            try:
+                crear_voz.sintetizar_ref(modelo, voz_id)
+            except parada.Parado:
+                raise
+            except Exception as e:
+                avisos.append(f"{clave}: {e}")
+                continue
+            with get_session() as s:
+                nuevas[clave] = (slug, voces_repo.obtener(s, voz_id).ref_text)
+            progreso.lote(len(nuevas) + len(avisos), len(pendientes), "voz del reparto")
+    finally:
+        # `modelo = None` antes de liberar, como en el bucle de abajo.
+        modelo = None
+        tts.liberar()
+        _olvidar(proyecto_id, [(c, i) for c, i, _ in pendientes if c not in nuevas])
+    return nuevas, avisos
 
 
 def _etiqueta(claves: list[str]) -> str:
@@ -156,6 +266,16 @@ def generar_voz(proyecto_id: int, modo: str = "clon", instruct: str | None = Non
     crudos = guiones_repo.tramos(g)
     if not crudos:
         raise ValueError("El guion no tiene nada que narrar")
+
+    # Quien habla y todavía no tiene voz la recibe ahora, escrita desde su
+    # ficha. Es lo que convierte un guion de líneas en varias voces sin tener
+    # que pulsar nada; antes de esto el episodio entero salía con la del
+    # narrador, porque nadie le había elegido voz a nadie.
+    nuevas, avisos_voces = _escribir_voces_que_faltan(
+        proyecto_id, {clave for clave, _ in crudos if clave}, voces_reparto
+    )
+    voces_reparto = {**voces_reparto, **nuevas}
+
     pl = plantillas_repo.cargar(plantilla)
     ritmo, language = pl["ritmo"], pl["voz"]["language"]
 
@@ -283,6 +403,11 @@ def generar_voz(proyecto_id: int, modo: str = "clon", instruct: str | None = Non
         log += f", {len(pistas)} de {len(tramos)} tramos"
         if propias:
             log += f"; con voz propia: {', '.join(propias)}"
+    if nuevas:
+        log += f"\nVoz escrita desde su ficha para: {', '.join(sorted(nuevas))}"
+    if avisos_voces:
+        log += ("\n\nPersonajes a los que no se les pudo escribir la voz "
+                "(los narra la voz del proyecto):\n" + "\n".join(avisos_voces))
     if fallos:
         log += "\n\nTramos que fallaron y no están en el audio:\n" + "\n".join(fallos)
     return log

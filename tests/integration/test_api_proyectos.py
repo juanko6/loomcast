@@ -101,6 +101,19 @@ def test_editar_guion_conserva_el_voz_instruct_previo(client, session, proy):
     assert json.loads(guiones_repo.ultimo(session, proy.id).contenido)["voz_instruct"] == "heredada"
 
 
+def test_el_detalle_devuelve_la_linea_sin_el_nombre_delante(client, session, proy):
+    """El guion se guardó con el nombre dentro del texto ("ANA ¿y si…"), que es
+    lo que el LLM escribe de vez en cuando y lo que se oía en el audio. La
+    etapa de voz ya no lo narra, así que el editor tampoco puede enseñarlo."""
+    guiones_repo.crear(session, proy.id, {
+        "gancho": "G",
+        "lineas": [{"personaje": "ANA", "texto": "ANA ¿y si soy yo?"}],
+    })
+    session.commit()
+    d = client.get(f"/api/proyectos/{proy.id}").json()
+    assert d["guion"]["lineas"] == [{"personaje": "ANA", "texto": "¿y si soy yo?"}]
+
+
 def test_editar_guion_de_proyecto_inexistente_404(client):
     assert client.put("/api/proyectos/99/guion", json={}).status_code == 404
 

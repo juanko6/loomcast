@@ -15,7 +15,17 @@ MAX_REF_S = 15
 REF_SR = 24000
 
 
-def crear_voz(voz_id: int) -> str:
+def sintetizar_ref(design, voz_id: int) -> str:
+    """Escribe el clip de referencia de una voz con un VoiceDesign ya cargado.
+
+    Está separado de `crear_voz` porque lo caro aquí es cargar el modelo, no
+    sintetizar ocho segundos, y hay dos sitios que lo necesitan: este job y la
+    etapa de voz, que de una sola carga le escribe la suya a cada personaje que
+    habla en el guion y todavía no tiene ninguna.
+
+    Deja la voz en "lista" o en "error", que es lo que mira todo el que después
+    va a usarla.
+    """
     import soundfile as sf
 
     with get_session() as s:
@@ -24,22 +34,10 @@ def crear_voz(voz_id: int) -> str:
             raise ValueError(f"Voz {voz_id} no existe")
         slug, instruct, ref_text = voz.slug, voz.instruct, voz.ref_text
 
-    # La síntesis del clip de referencia tampoco se puede partir; esto es lo
-    # último que se puede cortar.
-    parada.comprobar("antes de sintetizar la voz de referencia")
-
     try:
-        design = tts.cargar_modelo(tts.MODELO_DESIGN)
-        try:
-            wavs, sr = design.generate_voice_design(
-                text=ref_text, language="Spanish", instruct=instruct
-            )
-        finally:
-            # En `finally` y soltando la referencia de aquí: si la síntesis
-            # falla, el modelo se quedaba dentro hasta que el job terminara de
-            # morirse (ver `tts.liberar`).
-            design = None
-            tts.liberar()
+        wavs, sr = design.generate_voice_design(
+            text=ref_text, language="Spanish", instruct=instruct
+        )
         ref = voces_repo.ruta_ref(slug)
         ref.parent.mkdir(parents=True, exist_ok=True)
         sf.write(ref, np.asarray(wavs[0], dtype=np.float32), sr)
@@ -52,6 +50,29 @@ def crear_voz(voz_id: int) -> str:
     with get_session() as s:
         voces_repo.obtener(s, voz_id).estado = "lista"
         s.commit()
+    return slug
+
+
+def crear_voz(voz_id: int) -> str:
+    # La síntesis del clip de referencia tampoco se puede partir; esto es lo
+    # último que se puede cortar.
+    parada.comprobar("antes de sintetizar la voz de referencia")
+
+    try:
+        design = tts.cargar_modelo(tts.MODELO_DESIGN)
+    except Exception:
+        with get_session() as s:
+            voces_repo.obtener(s, voz_id).estado = "error"
+            s.commit()
+        raise
+    try:
+        slug = sintetizar_ref(design, voz_id)
+    finally:
+        # En `finally` y soltando la referencia de aquí: si la síntesis falla,
+        # el modelo se quedaba dentro hasta que el job terminara de morirse
+        # (ver `tts.liberar`).
+        design = None
+        tts.liberar()
     return f"Voz '{slug}' generada"
 
 

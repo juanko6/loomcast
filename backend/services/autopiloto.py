@@ -162,6 +162,13 @@ def _que_falta(s, p, modo_video: str) -> str | None:
     if not (base / "palabras.json").exists():
         if guiones_repo.ultimo(s, p.id) is None:
             return "generar_guion"
+        # El reparto va **antes** de la voz, no después. Con el formato de
+        # líneas el guion ya dice quién habla, y cada uno dice las suyas con su
+        # propia voz, que se escribe desde su ficha: fijarlo después dejaba el
+        # episodio entero narrado por una sola voz, la del narrador, porque al
+        # narrar todavía no había nadie en el reparto.
+        if not jobs_repo.termino_ok(s, p.id, "generar_casting"):
+            return "generar_casting"
         if metadatos_repo.ultimo(s, p.id) is None:
             return "generar_metadatos"
         if not (base / "voz.mp3").exists():
@@ -170,7 +177,9 @@ def _que_falta(s, p, modo_video: str) -> str | None:
 
     # Un reparto vacío es la respuesta normal en *curiosidades*, así que no hay
     # nada en disco que distinga "no se ha hecho el casting" de "se hizo y no
-    # sale nadie": lo distingue su job terminado.
+    # sale nadie": lo distingue su job terminado. Lo normal es que ya esté
+    # hecho de antes de narrar; esto recoge los proyectos que pasaron por la
+    # voz cuando el casting todavía iba detrás.
     if not jobs_repo.termino_ok(s, p.id, "generar_casting"):
         return "generar_casting"
     if retratos.pendientes(s, p.id):
@@ -288,7 +297,9 @@ def arrancar(pid: int, modo_video: str = "kenburns", motor: str = "",
         falta = _que_falta(s, p, modo_video)
         # La narración se clona de una voz del banco, así que sin voz elegida la
         # etapa fallaría dos minutos más tarde. Vale más decirlo al lanzar.
-        if falta in ("generar_guion", "generar_metadatos", "generar_voz") and not p.voz:
+        antes_de_narrar = ("generar_guion", "generar_casting",
+                           "generar_metadatos", "generar_voz")
+        if falta in antes_de_narrar and not p.voz:
             raise SinVoz(pid)
         auto = autopilotos_repo.crear(
             s, pid, modo_video, motor, paradas, lote_id,
