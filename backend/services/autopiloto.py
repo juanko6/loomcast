@@ -34,14 +34,19 @@ Cómo funciona, y por qué así:
     puede tirar los otros nueve, así que el autopiloto que falla se cierra con
     el motivo escrito y la línea sigue.
 
-Lo que el autopiloto **no** hace: música (es opcional y se entra a mano), ni
-rehacer una imagen o un clip que no convenza, ni elegir la voz (se elige al
-lanzar, como el modo de vídeo). Y las etapas que encola pasan por la cola de
-siempre, o sea por la descarga del LLM antes de cualquier etapa de GPU y por la
-espera real de memoria de `llm_runtime`: no hay atajo, y es el mismo camino que
-recorre un clic.
+La música entra en la escalera como una etapa más (`[autopiloto] musica` en
+config.toml la quita): la banda sonora se escribe desde esta historia, así que
+en automático no hay a quién preguntarle si la quiere, y una pista que no suena
+en su vídeo sería media etapa — por eso, cuando la hace el autopiloto, además
+enciende la mezcla.
+
+Lo que el autopiloto **no** hace: rehacer una imagen o un clip que no convenza,
+ni elegir la voz (se elige al lanzar, como el modo de vídeo). Y las etapas que
+encola pasan por la cola de siempre, o sea por la descarga del LLM antes de
+cualquier etapa de GPU y por la espera real de memoria de `llm_runtime`: no hay
+atajo, y es el mismo camino que recorre un clic.
 """
-from ..config import AUTOPILOTO_PARADAS, PROYECTOS_DIR
+from ..config import AUTOPILOTO_MUSICA, AUTOPILOTO_PARADAS, PROYECTOS_DIR
 from ..db import get_session
 from ..models import PARADA_TRAS, PARADAS
 from ..repositories import autopilotos as autopilotos_repo
@@ -50,9 +55,11 @@ from ..repositories import guiones as guiones_repo
 from ..repositories import ideas as ideas_repo
 from ..repositories import jobs as jobs_repo
 from ..repositories import metadatos as metadatos_repo
+from ..repositories import musica as musica_repo
 from ..repositories import proyectos as proyectos_repo
 from ..repositories import temas as temas_repo
 from ..workers import queue
+from .pipeline import musica as musica_pipeline
 from .pipeline import retratos
 from .pipeline.imagenes import ruta_imagen
 
@@ -68,6 +75,8 @@ ETAPAS = {
     "generar_retratos",
     "generar_escenas",
     "generar_imagenes",
+    "generar_musica_proyecto",
+    "sintetizar_musica_proyecto",
     "generar_resumen_episodio",
     *queue.MODOS_VIDEO.values(),
     # Los eslabones intermedios de las cadenas de montaje: el autopiloto encola
@@ -87,8 +96,8 @@ MOTIVO_PARADA = {
 MOTIVO_HECHO = "El vídeo está montado"
 
 # Cuántas etapas puede encolar una tirada antes de que se dé por perdida. La
-# escalera completa son unas diez; el margen deja sitio a las que se repiten por
-# una regeneración pedida a mano y aun así corta un bucle en seguida.
+# escalera completa son una docena; el margen deja sitio a las que se repiten
+# por una regeneración pedida a mano y aun así corta un bucle en seguida.
 TOPE_ETAPAS = 40
 
 
@@ -145,7 +154,7 @@ def _que_falta(s, p, modo_video: str) -> str | None:
     escenas = escenas_repo.por_proyecto(s, p.id)
     if escenas:
         if all(ruta_imagen(p.slug, e.orden).exists() for e in escenas):
-            return queue.MODOS_VIDEO[modo_video]
+            return _falta_musica(s, p) or queue.MODOS_VIDEO[modo_video]
         return "generar_imagenes"
 
     # Sin escenas todavía. Las escenas se segmentan sobre `palabras.json`, que
@@ -167,6 +176,43 @@ def _que_falta(s, p, modo_video: str) -> str | None:
     if retratos.pendientes(s, p.id):
         return "generar_retratos"
     return "generar_escenas"
+
+
+def _falta_musica(s, p) -> str | None:
+    """Qué le falta a la banda sonora de este proyecto, si es que le falta algo.
+
+    Son dos etapas porque son dos modelos que no caben juntos: el brief lo
+    escribe el LLM y la pista la sintetiza ComfyUI. Lo que las distingue es lo
+    que dejaron: la fila de `musicas` que apunta el proyecto, y su audio.
+
+    Va justo antes del montaje y no antes: la pista se escribe desde el guion y
+    los planos, y dura lo que dura la narración, así que todo eso ya está. Y si
+    alguien eligió a mano una pista de la biblioteca, esto no toca nada: ya hay
+    música.
+    """
+    if not AUTOPILOTO_MUSICA:
+        return None
+    if p.musica_id is None or musica_repo.obtener(s, p.musica_id) is None:
+        return "generar_musica_proyecto"
+    if musica_pipeline.ruta_audio(p.musica_id) is None:
+        return "sintetizar_musica_proyecto"
+    return None
+
+
+def _mezclar_su_musica(s, p) -> None:
+    """Enciende la mezcla de la pista que el autopiloto acaba de hacer.
+
+    A mano la mezcla es un interruptor aparte a propósito: la pista también
+    vale suelta, sin voz, para redes. En automático no hay nadie que lo pulse,
+    y una banda sonora escrita para esta historia que no suena en su vídeo sería
+    media etapa.
+
+    Se enciende aquí, con el audio ya en disco, y no al encolar la música:
+    `armar_video` falla a propósito si la mezcla está puesta y la pista no
+    existe, y una tirada parada a mitad dejaría el proyecto en esa trampa.
+    """
+    if p.musica_id is not None and musica_pipeline.ruta_audio(p.musica_id):
+        p.musica_mezclar = True
 
 
 def _params(etapa: str, auto) -> dict:
@@ -319,6 +365,9 @@ def tras_etapa(pid: int, tipo: str) -> None:
             autopilotos_repo.marcar(s, auto, "esperando", MOTIVO_PARADA[parada])
         s.commit()
         p = proyectos_repo.obtener(s, pid)
+        if p is not None and tipo == "sintetizar_musica_proyecto":
+            _mezclar_su_musica(s, p)
+            s.commit()
         falta = None if p is None else _que_falta(s, p, auto.modo_video)
 
     if toca_revisar:

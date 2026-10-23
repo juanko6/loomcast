@@ -374,14 +374,22 @@ un proyecto a medias arranca donde esté y no rehace lo que ya hay, y por eso
 retomarla tras un fallo es volver a lanzarla. El orden que sale es el de siempre:
 
 ```
-guion → metadatos → voz → subtítulos → reparto → retratos → escenas → imágenes → [montaje]
+guion → metadatos → voz → subtítulos → reparto → retratos → escenas → imágenes
+      → música (brief → pista) → [montaje]
 ```
 
-La voz encadena los subtítulos y el montaje encadena lo suyo (upscale → clips →
-armado, o i2v → armado) por la cadena de la cola de siempre, no por una vía
-aparte. La música no entra: es opcional y se escribe desde la historia, así que
-se entra a ella a mano. Los **retratos** sí, con una etapa nueva
-(`generar_retratos`) que retrata de una tirada a todo el reparto que no tenga
+La voz encadena los subtítulos, la música encadena su pista y el montaje encadena
+lo suyo (upscale → clips → armado, o i2v → armado) por la cadena de la cola de
+siempre, no por una vía aparte. La **música** son dos jobs y no uno porque son
+dos modelos que no caben juntos: el brief lo escribe el LLM desde esta historia
+y la pista la sintetiza ComfyUI, y entre job y job la cola descarga el
+llama-server. Va justo antes del montaje, cuando ya están el guion, los planos y
+la duración de la narración, de los que sale. Como a mano no hay quien pulse el
+interruptor de la mezcla, el autopiloto lo enciende él: una banda sonora escrita
+para esta historia que no suena en su vídeo sería media etapa. Una pista elegida
+a mano de la biblioteca no se toca, y `[autopiloto].musica = false` en
+`config.toml` deja el vídeo solo con narración. Los **retratos** también entran,
+con una etapa propia (`generar_retratos`) que retrata de una tirada a todo el reparto que no tenga
 cara: a mano se piden uno a uno porque uno mira la cara que salió y decide si la
 rehace, y en automático eso serían N clics. Suelta la memoria una vez al final y
 no tras cada personaje, que sería descargar y recargar ~19 GB por cara.

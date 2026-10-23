@@ -26,6 +26,7 @@ export const NOMBRE_JOB: Record<string, string> = {
   mejorar_prompt_musica: "Idea musical",
   generar_musica: "Pista de música",
   generar_musica_proyecto: "Música de la historia",
+  sintetizar_musica_proyecto: "Pista del vídeo",
   generar_portada_musica: "Portada de la pista",
   regenerar_clip: "Clip de una escena",
   generar_clips_mixto: "Clips (modo por escena)",

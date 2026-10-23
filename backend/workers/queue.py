@@ -70,6 +70,7 @@ HANDLERS = {
     "mejorar_prompt_musica": musica.mejorar_prompt,
     "generar_musica": musica.generar,
     "generar_musica_proyecto": musica_proyecto.generar_musica_proyecto,
+    "sintetizar_musica_proyecto": musica_proyecto.sintetizar_musica_proyecto,
     "generar_portada_musica": musica.generar_portada,
     "regenerar_clip": escena_individual.regenerar_clip,
     "generar_clips_mixto": escena_individual.generar_clips_mixto,
@@ -112,13 +113,17 @@ JOBS_MODELO_PROPIO = {
 #  - voz → subtítulos (sin revisión intermedia)
 #  - Ken Burns: upscale → clips → armado
 #  - i2v: i2v → armado
-#  - música: pista generada → portada
-#    (la música del proyecto no está aquí: su job encola `generar_musica` él
-#     mismo, porque la cadena conserva el ref_id y ahí cambia de proyecto a
-#     pista)
+#  - música del proyecto: brief → síntesis (los dos llevan el id del proyecto,
+#    así que la cadena vale; son dos jobs y no uno porque el brief habla con el
+#    LLM y la síntesis con ComfyUI, y entre job y job la cola descarga el
+#    llama-server — los dos modelos no caben juntos)
+#  - música de la biblioteca: pista generada → portada
+#    (la portada de la música del proyecto no está aquí: la encola su síntesis,
+#     porque ahí el ref_id cambia de proyecto a pista)
 # Las escenas NO encadenan a imágenes: los prompts se revisan/editan primero.
 CADENA = {
     "generar_voz": "generar_subtitulos",
+    "generar_musica_proyecto": "sintetizar_musica_proyecto",
     "generar_upscale": "generar_clips",
     "generar_clips": "armar_video",
     "generar_i2v": "armar_video",
