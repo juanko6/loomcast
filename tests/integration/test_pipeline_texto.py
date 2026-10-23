@@ -18,6 +18,7 @@ from backend.schemas import (
     TituloLLM,
 )
 from backend.services.pipeline import texto
+from tests import factories as f
 
 pytestmark = pytest.mark.integration
 
@@ -45,6 +46,42 @@ def test_generar_ideas_guarda_lo_que_devuelve_el_llm(session, fake_llm):
     assert "el espacio" in fake_llm.llamadas[0]["user"]
     session.expire_all()
     assert [i.titulo for i in ideas_repo.por_tema(session, tema_id)][-2:] == ["A", "B"]
+
+
+def test_las_ideas_de_una_serie_con_hilo_son_maneras_del_episodio_que_toca(
+    session, fake_llm
+):
+    """Las ocho ideas a ciegas eran la deriva: ocho capítulos escritos de una vez
+    sin saber qué había pasado en ninguno. Con hilo se pide uno, el que toca."""
+    serie = f.serie(session, premisa="Una casa habitada.")
+    f.hilo(session, serie, tramos=3)
+    f.episodio(session, serie, numero=1, resumen="Alicia encontró la llave.")
+    fake_llm.responder(IdeasLLM, [
+        {"titulo": "Por el portal", "gancho": "g1", "resumen": "r1"},
+        {"titulo": "Por teléfono", "gancho": "g2", "resumen": "r2"},
+    ])
+
+    log = texto.generar_ideas(serie.tema_id)
+
+    assert log == "2 maneras de rodar el episodio 2"
+    user = fake_llm.llamadas[-1]["user"]
+    assert "el episodio 2" in user
+    assert "Alicia encontró la llave." in user
+    assert "pasa la cosa 2" in user
+    assert "{n_ideas}" not in fake_llm.llamadas[-1]["system"]
+    # Y en la lista se ven como lo que son: tres versiones del mismo capítulo.
+    session.expire_all()
+    assert [i.titulo for i in ideas_repo.por_tema(session, serie.tema_id)][-2:] == [
+        "Episodio 2: Por el portal", "Episodio 2: Por teléfono",
+    ]
+
+
+def test_las_ideas_de_una_serie_sin_hilo_son_las_de_siempre(session, fake_llm):
+    serie = f.serie(session)
+    fake_llm.responder(IdeasLLM, [{"titulo": "A", "gancho": "g", "resumen": "r"}])
+
+    assert texto.generar_ideas(serie.tema_id) == "1 ideas generadas"
+    assert fake_llm.llamadas[-1]["user"] == "Tema: La casa de Alicia"
 
 
 def test_generar_ideas_tema_inexistente(engine, fake_llm):

@@ -108,7 +108,14 @@
 
   <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
     {#if activo === "guion"}
-      <StepGuion {p} {busy} onsave={(g: Guion) => acciones.guardarGuion(g)} onregen={acciones.regenerarGuion} />
+      <StepGuion
+        {p}
+        {busy}
+        onsave={(g: Guion) => acciones.guardarGuion(g)}
+        onregen={acciones.regenerarGuion}
+        onguardarresumen={acciones.guardarResumen}
+        ongenerarresumen={acciones.generarResumen}
+      />
     {:else if activo === "voz"}
       <StepVoz
         {p}
@@ -165,8 +172,6 @@
         onborrarvideo={acciones.borrarVideo}
         onborrarversion={acciones.borrarVersion}
         onborrarproyecto={acciones.borrarProyecto}
-        onguardarresumen={acciones.guardarResumen}
-        ongenerarresumen={acciones.generarResumen}
         {onver}
       />
     {/if}

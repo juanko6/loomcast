@@ -14,7 +14,7 @@
   import * as Auto from "@/lib/autopiloto";
   import * as SeriesAPI from "@/lib/series";
   import type { Idea, MiembroReparto, ProyectoDetalle, Voz } from "@/lib/proyectos";
-  import type { SerieDetalle, SerieResumen } from "@/lib/series";
+  import type { Hilo, SerieDetalle, SerieResumen } from "@/lib/series";
   import type { OpcionesAutopiloto } from "@/lib/autopiloto";
   import type { ProyectoResumen, TemaResumen } from "@/lib/types";
 
@@ -43,6 +43,11 @@
   // es la que activa el guion con líneas de personaje.
   let serieNombre = $state("");
   let seriePlantilla = $state("serie");
+  // De qué va la serie y cuántos capítulos se quieren. La premisa es opcional,
+  // pero con ella la serie nace ya con su hilo encolado: es la diferencia entre
+  // una serie y una carpeta de capítulos.
+  let seriePremisa = $state("");
+  let serieEpisodios = $state(0);
 
   // Visor a pantalla completa
   let visorHtml = $state<string | null>(null);
@@ -111,10 +116,19 @@
     ev.preventDefault();
     if (!serieNombre.trim()) return;
     try {
-      const s = await SeriesAPI.crearSerie(serieNombre.trim(), seriePlantilla);
+      const s = await SeriesAPI.crearSerie(
+        serieNombre.trim(),
+        seriePlantilla,
+        seriePremisa.trim(),
+        serieEpisodios,
+      );
       serieNombre = "";
+      seriePremisa = "";
+      serieEpisodios = 0;
       await refrescarListas();
       irA("serie", s.id);
+      // Con premisa, crear la serie encola su hilo: que se vea en la cola.
+      if (s.job_id) refrescarJobs();
     } catch (e) {
       fallo(e);
     }
@@ -172,6 +186,38 @@
         await API.masIdeas(temaId);
         refrescarJobs();
         irA("tema", temaId);
+      } catch (e) {
+        fallo(e);
+      }
+    },
+    // Guardar la premisa y rehacer el hilo son dos acciones a propósito:
+    // replanificar borra los tramos por los que la serie todavía no ha pasado,
+    // y eso no puede salir de teclear en un campo.
+    guardarPremisa: async (premisa: string, episodios: number) => {
+      if (!serie) return;
+      try {
+        await SeriesAPI.ajustarSerie(serie.id, premisa, episodios);
+        await cargarVista();
+        refrescarListas();
+      } catch (e) {
+        fallo(e);
+      }
+    },
+    escribirHilo: async () => {
+      if (!serie) return;
+      try {
+        await SeriesAPI.escribirHilo(serie.id);
+        refrescarJobs();
+      } catch (e) {
+        fallo(e);
+      }
+    },
+    editarHilo: async (hilo: Hilo) => {
+      if (!serie) return;
+      try {
+        await SeriesAPI.editarHilo(serie.id, hilo);
+        await cargarVista();
+        refrescarListas();
       } catch (e) {
         fallo(e);
       }
@@ -562,6 +608,28 @@
             {/each}
           </select>
         </Field>
+        <Field
+          label="Premisa (opcional)"
+          hint="De qué va, en una o dos frases. De aquí sale el hilo: cómo acaba la serie y qué le toca a cada capítulo."
+        >
+          <textarea
+            class="control"
+            rows="3"
+            bind:value={seriePremisa}
+            placeholder="Alicia hereda la casa de su tía y descubre que alguien ya vive en ella."
+            aria-label="Premisa de la serie"
+          ></textarea>
+        </Field>
+        <Field label="Episodios (opcional)" hint="En 0 lo decide el LLM, y dice por qué ese número.">
+          <input
+            class="control"
+            type="number"
+            min="0"
+            max="24"
+            bind:value={serieEpisodios}
+            aria-label="Episodios de la serie"
+          />
+        </Field>
         <p class="text-xs text-muted">
           La plantilla manda en todos los episodios: «serie» es la que escribe el guion con líneas
           de personaje, para que cada uno hable con su voz.
@@ -700,6 +768,9 @@
           onanadirmiembro={accSerie.anadirMiembro}
           onquitarmiembro={accSerie.quitarMiembro}
           onideas={accSerie.ideas}
+          onguardarpremisa={accSerie.guardarPremisa}
+          onescribirhilo={accSerie.escribirHilo}
+          oneditarhilo={accSerie.editarHilo}
           onborrarserie={accSerie.borrar}
         />
       {:else}

@@ -1,6 +1,12 @@
 from fastapi import APIRouter, HTTPException
 
-from ..schemas import EpisodioNuevoIn, SerieIn, SerieMiembroIn
+from ..schemas import (
+    EpisodioNuevoIn,
+    HiloIn,
+    SerieAjusteIn,
+    SerieIn,
+    SerieMiembroIn,
+)
 from ..services import series as series_service
 
 router = APIRouter(prefix="/api/series", tags=["series"])
@@ -17,12 +23,52 @@ def listar():
 
 @router.post("")
 def crear(body: SerieIn):
+    """Crea la serie y, si trae premisa, encola el hilo con el que se guiará."""
     try:
-        return series_service.crear(body.nombre, body.plantilla)
+        return series_service.crear(
+            body.nombre, body.plantilla, body.premisa, body.episodios
+        )
     except series_service.PlantillaInvalida as e:
         raise HTTPException(400, f"Plantilla desconocida: {e}")
     except series_service.SlugOcupado as e:
         raise HTTPException(409, f"Ya hay una serie con ese nombre: {e}")
+
+
+@router.put("/{serie_id}")
+def ajustar(serie_id: int, body: SerieAjusteIn):
+    """Cambia de qué va la serie y cuántos episodios se quieren.
+
+    No reescribe el hilo: eso es `POST /{serie_id}/hilo`, porque en una serie a
+    medias replanifica los capítulos que todavía no se han escrito.
+    """
+    try:
+        return series_service.ajustar(serie_id, body.premisa, body.episodios)
+    except series_service.SerieNoExiste:
+        raise HTTPException(404, "Serie no existe")
+
+
+@router.post("/{serie_id}/hilo")
+def escribir_hilo(serie_id: int):
+    """Escribe el hilo, o replanifica los tramos que quedan por rodar."""
+    try:
+        return series_service.escribir_hilo(serie_id)
+    except series_service.SerieNoExiste:
+        raise HTTPException(404, "Serie no existe")
+    except series_service.SinPremisa:
+        raise HTTPException(
+            400,
+            "La serie no dice de qué va: escribe su premisa y el hilo sale de "
+            "ahí. Desde el nombre a secas no hay historia que planificar.",
+        )
+
+
+@router.put("/{serie_id}/hilo")
+def editar_hilo(serie_id: int, body: HiloIn):
+    """Guarda el hilo corregido a mano como una versión más."""
+    try:
+        return series_service.editar_hilo(serie_id, body.model_dump())
+    except series_service.SerieNoExiste:
+        raise HTTPException(404, "Serie no existe")
 
 
 @router.get("/{serie_id}")

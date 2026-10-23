@@ -61,6 +61,7 @@ from ..repositories import temas as temas_repo
 from ..workers import queue
 from .pipeline import musica as musica_pipeline
 from .pipeline import retratos
+from .pipeline import series as series_pipeline
 from .pipeline.imagenes import ruta_imagen
 
 # Etapas que el autopiloto conduce. Lo que no esté aquí le es ajeno y no lo
@@ -162,6 +163,14 @@ def _que_falta(s, p, modo_video: str) -> str | None:
     if not (base / "palabras.json").exists():
         if guiones_repo.ultimo(s, p.id) is None:
             return "generar_guion"
+        # El canon del episodio va **aquí**, pegado al guion, y no al final del
+        # montaje: la historia queda cerrada cuando está escrita, y el episodio
+        # siguiente lo necesita para poder escribirse ya. Con la parada de
+        # revisión del guion puesta, esto es lo primero que se hace al aprobarlo
+        # —que es justo lo que significa "canon": lo que el usuario dio por
+        # bueno—. Un vídeo suelto nunca entra aquí.
+        if series_pipeline.falta_resumen(s, p):
+            return "generar_resumen_episodio"
         # El reparto va **antes** de la voz, no después. Con el formato de
         # líneas el guion ya dice quién habla, y cada uno dice las suyas con su
         # propia voz, que se escribe desde su ficha: fijarlo después dejaba el

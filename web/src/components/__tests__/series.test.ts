@@ -24,7 +24,7 @@ vi.mock("@/lib/api", async (o) => ({
 import * as API from "@/lib/proyectos";
 import type { MiembroReparto, ProyectoDetalle } from "@/lib/proyectos";
 import * as SeriesAPI from "@/lib/series";
-import type { EpisodioResumen, SerieDetalle } from "@/lib/series";
+import type { EpisodioResumen, Hilo, SerieDetalle, Tramo } from "@/lib/series";
 import { currentTrack } from "@/lib/player";
 import { jobs, jobsDrenados, seleccionPendiente } from "@/lib/stores";
 import ResumenEpisodio from "../videos/ResumenEpisodio.svelte";
@@ -42,19 +42,48 @@ const miembro = (extra: Partial<MiembroReparto> = {}): MiembroReparto => ({
 
 const episodio = (n: number, extra: Partial<EpisodioResumen> = {}): EpisodioResumen => ({
   proyecto_id: 100 + n, episodio: n, titulo: `Episodio ${n}`, slug: `ep-${n}`,
-  estado: "FINAL", resumen: "Alicia encontró la llave.", ocupado: false, ...extra,
+  estado: "FINAL", resumen: "Alicia encontró la llave.", tramo: null, desvio: "",
+  continuidad_rota: false, ocupado: false, ...extra,
 });
 
+const tramo = (n: number): Tramo => ({
+  numero: n, titulo: `Tramo ${n}`, pasa: `pasa la cosa ${n}`,
+  cambia: `cambia la cosa ${n}`,
+});
+
+const hilo = (tramos = 3, extra: Partial<Hilo> = {}): Hilo => ({
+  premisa: "Alicia hereda una casa habitada.",
+  pregunta: "¿Quién entraba en la casa?",
+  destino: "Era su hermano y le deja quedarse.",
+  fuera: ["no aparece la policía"],
+  episodios_recomendados: tramos,
+  por_que: "aguanta tres giros",
+  tramos: Array.from({ length: tramos }, (_, i) => tramo(i + 1)),
+  ...extra,
+});
+
+// Por defecto, una serie sin hilo: así es como siguen funcionando las de antes,
+// y los tests del reparto fijo y de los episodios no tienen que saber del hilo.
 const serie = (extra: Partial<SerieDetalle> = {}): SerieDetalle => ({
   id: 7, slug: "la-casa-de-alicia", nombre: "La casa de Alicia", plantilla: "serie",
-  tema_id: 3, n_episodios: 1, n_miembros: 1,
+  tema_id: 3, premisa: "", episodios_objetivo: 0, n_tramos: 0, tiene_hilo: false,
+  n_episodios: 1, n_miembros: 1, hilo: null, hilo_version: 0,
   miembros: [miembro()], episodios: [episodio(1)], ...extra,
 });
+
+// Y una con el hilo escrito, que es lo que ata cada capítulo a su sitio.
+const serieConHilo = (extra: Partial<SerieDetalle> = {}): SerieDetalle =>
+  serie({
+    premisa: "Alicia hereda una casa habitada.", episodios_objetivo: 0,
+    n_tramos: 3, tiene_hilo: true, hilo: hilo(), hilo_version: 1, ...extra,
+  });
 
 const proyecto = (extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle => ({
   id: 101, slug: "ep-1", estado: "FINAL", plantilla: "serie", voz: null, voz_instruct: "",
   serie: { id: 7, nombre: "La casa de Alicia", slug: "la-casa-de-alicia", episodio: 2,
-           anterior: { episodio: 1, resumen: "Alicia encontró la llave." } },
+           anterior: { episodio: 1, resumen: "Alicia encontró la llave." },
+           tramos: 0, tramo: null, es_final: false, desvio: "",
+           resumen_version: 0, continuidad_rota: false },
   resumen_episodio: "",
   idea: { titulo: "Episodio 2", gancho: "g", resumen: "r" },
   guion: { gancho: "Hola", frases: ["Uno"], cta: "Fin" }, guion_version: 1, metadatos: null,
@@ -68,7 +97,88 @@ const proyecto = (extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle => ({
 describe("SerieView", () => {
   const props = () => ({
     onnuevoepisodio: vi.fn(), onabrirepisodio: vi.fn(), onanadirmiembro: vi.fn(),
-    onquitarmiembro: vi.fn(), onideas: vi.fn(), onborrarserie: vi.fn(),
+    onquitarmiembro: vi.fn(), onideas: vi.fn(), onguardarpremisa: vi.fn(),
+    onescribirhilo: vi.fn(), oneditarhilo: vi.fn(), onborrarserie: vi.fn(),
+  });
+
+  it("sin hilo dice que la serie funciona como antes y ofrece escribirlo", () => {
+    render(SerieView, { s: serie(), ...props() });
+    expect(screen.getByText(/Sin hilo la serie funciona como antes/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Escribir el hilo" })).toBeDisabled();
+  });
+
+  it("con el hilo escrito enseña el destino y el mapa de tramos", () => {
+    const s = serieConHilo();
+    render(SerieView, { s, ...props() });
+
+    expect(screen.getByText("Era su hermano y le deja quedarse.")).toBeInTheDocument();
+    expect(screen.getByText("¿Quién entraba en la casa?")).toBeInTheDocument();
+    // El mapa: el 1 ya está rodado, el 2 es el siguiente y el 3 cierra.
+    expect(screen.getByText("Tramo 1")).toBeInTheDocument();
+    expect(screen.getByText("rodado")).toBeInTheDocument();
+    expect(screen.getByText("el siguiente")).toBeInTheDocument();
+    expect(screen.getByText("cierra")).toBeInTheDocument();
+    // Y el episodio que toca ya sabe lo que tiene que pasar en él.
+    expect(screen.getByText(/Su tramo: pasa la cosa 2/)).toBeInTheDocument();
+    expect(screen.getByText("1 de 3 episodios")).toBeInTheDocument();
+  });
+
+  it("guardar la premisa y replanificar son dos botones distintos", async () => {
+    const p = props();
+    render(SerieView, { s: serieConHilo(), ...p });
+
+    const caja = screen.getByLabelText("Premisa de la serie");
+    await userEvent.clear(caja);
+    await userEvent.type(caja, "Otra premisa.");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(p.onguardarpremisa).toHaveBeenCalledWith("Otra premisa.", 0);
+
+    // Con hilo, el otro botón replanifica en vez de escribirlo de cero.
+    await userEvent.click(screen.getByRole("button", { name: "Replanificar lo que queda" }));
+    expect(p.onescribirhilo).toHaveBeenCalled();
+  });
+
+  it("corregir el hilo a mano manda los vetos como lista y sin tramos vacíos", async () => {
+    const p = props();
+    render(SerieView, { s: serieConHilo({ hilo: hilo(2) }), ...p });
+
+    await userEvent.click(screen.getByRole("button", { name: "Corregir a mano" }));
+    const titulo = screen.getByLabelText("Título del tramo 2");
+    await userEvent.clear(titulo);
+    await userEvent.type(titulo, "El ruido");
+    const vetos = screen.getByLabelText("Lo que esta serie nunca hace");
+    await userEvent.clear(vetos);
+    await userEvent.type(vetos, "no aparece la policía\nnada sobrenatural");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar el hilo" }));
+
+    const enviado = p.oneditarhilo.mock.calls[0][0];
+    expect(enviado.fuera).toEqual(["no aparece la policía", "nada sobrenatural"]);
+    expect(enviado.tramos.map((t: Tramo) => t.titulo)).toEqual(["Tramo 1", "El ruido"]);
+  });
+
+  it("avisa de los episodios que se salieron de su tramo", () => {
+    render(SerieView, {
+      s: serieConHilo({
+        episodios: [episodio(1, { desvio: "se lo calla en vez de contarlo" })],
+      }),
+      ...props(),
+    });
+
+    expect(screen.getByText("fuera de tramo")).toBeInTheDocument();
+    expect(screen.getByText(/Se desvió: se lo calla/)).toBeInTheDocument();
+  });
+
+  it("si la serie pasa del último tramo lo dice en vez de callarse", () => {
+    render(SerieView, {
+      s: serieConHilo({
+        hilo: hilo(1), n_tramos: 1,
+        episodios: [episodio(1), episodio(2)], n_episodios: 2,
+      }),
+      ...props(),
+    });
+
+    expect(screen.getByText(/el hilo llega al 1/)).toBeInTheDocument();
+    expect(screen.getByText(/El hilo no llega hasta aquí/)).toBeInTheDocument();
   });
 
   it("muestra el reparto fijo con su clave y su voz", () => {
@@ -166,7 +276,7 @@ describe("ResumenEpisodio", () => {
 
   it("un episodio sin cerrar lo dice y ofrece escribirlo con el LLM", () => {
     render(ResumenEpisodio, { p: proyecto(), ...props() });
-    expect(screen.getByRole("heading", { name: "Cierre del episodio 2" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Canon del episodio 2" })).toBeInTheDocument();
     expect(screen.getByText("sin cerrar")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Escribir con el LLM" })).toBeInTheDocument();
   });
@@ -268,9 +378,26 @@ describe("series en el estudio de vídeos", () => {
     await userEvent.click(screen.getByRole("button", { name: "Crear serie" }));
 
     await waitFor(() =>
-      expect(ms.crearSerie).toHaveBeenCalledWith("La casa de Alicia", "serie"));
+      expect(ms.crearSerie).toHaveBeenCalledWith("La casa de Alicia", "serie", "", 0));
     await waitFor(() => expect(ms.detalleSerie).toHaveBeenCalledWith(7));
     expect((nombre as HTMLInputElement).value).toBe("");
+  });
+
+  it("la premisa y los episodios viajan al crear la serie", async () => {
+    await montar();
+    await userEvent.type(screen.getByLabelText("Nombre de la serie"), "La casa de Alicia");
+    await userEvent.type(
+      screen.getByLabelText("Premisa de la serie"), "Hereda una casa habitada.",
+    );
+    const episodios = screen.getByLabelText("Episodios de la serie");
+    await userEvent.clear(episodios);
+    await userEvent.type(episodios, "6");
+    await userEvent.click(screen.getByRole("button", { name: "Crear serie" }));
+
+    await waitFor(() =>
+      expect(ms.crearSerie).toHaveBeenCalledWith(
+        "La casa de Alicia", "serie", "Hereda una casa habitada.", 6,
+      ));
   });
 
   it("'Crear serie' está bloqueado sin nombre", async () => {
@@ -337,18 +464,16 @@ describe("series en el estudio de vídeos", () => {
     expect(m.detalleProyecto).not.toHaveBeenCalled();
   });
 
-  it("guardar y reescribir el resumen del episodio abierto", async () => {
-    // El paso del vídeo final solo se abre con las imágenes hechas.
-    m.detalleProyecto.mockResolvedValue(proyecto({
-      resumen_episodio: "Pasó esto.", imagenes_completas: true, video_disponible: false,
-    }));
+  it("guardar y reescribir el canon del episodio abierto", async () => {
+    m.detalleProyecto.mockResolvedValue(proyecto({ resumen_episodio: "Pasó esto." }));
     m.editarResumen.mockResolvedValue({ resumen: "Otra cosa." });
     m.generarResumen.mockResolvedValue({ job_id: 2 });
     await abrirSerie();
     await userEvent.click(screen.getByLabelText(/Abrir episodio 1/));
     await screen.findByRole("heading", { name: "Episodio 2" });
-    // El paso del vídeo final es el que cierra el episodio.
-    await userEvent.click(screen.getByRole("button", { name: /Vídeo final/ }));
+    // El canon vive en el paso del guion: es ahí donde la historia queda
+    // cerrada, y no al final del montaje.
+    await userEvent.click(screen.getByRole("button", { name: /Guion/ }));
 
     const caja = await screen.findByLabelText("Resumen del episodio");
     await userEvent.type(caja, " Y luego aquello.");

@@ -37,13 +37,55 @@ class GuionIn(BaseModel):
 
 
 class SerieIn(BaseModel):
-    """Una serie nueva: su nombre y la plantilla con la que se cuenta.
+    """Una serie nueva: nombre, plantilla, premisa y cuántos episodios.
 
     La plantilla no se pide por episodio a propósito (ver models/serie.py): es
     la que decide el nicho, el formato de guion y los ocho prompts de todos.
+
+    La premisa es opcional pero es de donde sale el hilo, o sea el sitio que
+    ocupa cada capítulo. Sin ella la serie nace solo con continuidad hacia
+    atrás, y el hilo se puede pedir después.
     """
     nombre: str = Field(min_length=1, max_length=120)
     plantilla: str = "serie"
+    premisa: str = Field(default="", max_length=2000)
+    # Cuántos episodios quiere el usuario. 0 = que lo decida el LLM, que además
+    # dirá por qué ese número: es la respuesta normal.
+    episodios: int = Field(default=0, ge=0, le=24)
+
+
+class SerieAjusteIn(BaseModel):
+    """La premisa y el número de episodios de una serie que ya existe.
+
+    Guardarlos no reescribe el hilo: rehacerlo es otro botón, porque en una
+    serie a medias eso replanifica los capítulos que no se han escrito.
+    """
+    premisa: str = Field(default="", max_length=2000)
+    episodios: int = Field(default=0, ge=0, le=24)
+
+
+class TramoIn(BaseModel):
+    # Un tramo corregido a mano. Vaciarlo es como se borra (lo tira
+    # `repositories/hilos.normalizar`, que además renumera).
+    titulo: str = ""
+    pasa: str = ""
+    cambia: str = ""
+
+
+class HiloIn(BaseModel):
+    """El hilo corregido a mano. Todo opcional, como en la edición del guion.
+
+    El `numero` de cada tramo no se acepta a propósito: es su posición en la
+    lista, y dejar que lo mande el editor es dejar que un episodio se quede sin
+    tramo o con el de otro.
+    """
+    premisa: str = ""
+    pregunta: str = ""
+    destino: str = ""
+    fuera: list[str] = []
+    episodios_recomendados: int = 0
+    por_que: str = ""
+    tramos: list[TramoIn] = []
 
 
 class SerieMiembroIn(BaseModel):

@@ -10,6 +10,7 @@ from .base import Base
 from .escena import Escena
 from .galeria import ImagenLibre
 from .guion import Guion
+from .hilo import Hilo
 from .idea import Idea
 from .job import Job
 from .metadatos import Metadatos
@@ -22,8 +23,8 @@ from .tema import Tema
 from .voz import REF_TEXT, Voz
 
 __all__ = [
-    "Ajuste", "Autopiloto", "Base", "Escena", "Guion", "Idea", "ImagenLibre",
-    "Job", "Lote", "Metadatos", "MiembroReparto", "Musica", "ORDEN_ESTADOS",
-    "PARADA_TRAS", "PARADAS", "Personaje", "Proyecto", "REF_TEXT", "Serie",
-    "SerieMiembro", "Tema", "Voz", "avanzar_estado",
+    "Ajuste", "Autopiloto", "Base", "Escena", "Guion", "Hilo", "Idea",
+    "ImagenLibre", "Job", "Lote", "Metadatos", "MiembroReparto", "Musica",
+    "ORDEN_ESTADOS", "PARADA_TRAS", "PARADAS", "Personaje", "Proyecto",
+    "REF_TEXT", "Serie", "SerieMiembro", "Tema", "Voz", "avanzar_estado",
 ]

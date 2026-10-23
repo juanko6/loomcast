@@ -1,6 +1,8 @@
 from sqlalchemy import text
 
 from backend import db as db_mod
+from backend.repositories import guiones as guiones_repo
+from tests import factories as f
 
 
 def test_migrar_anade_columnas_a_una_bd_antigua(engine):
@@ -25,6 +27,50 @@ def test_migrar_anade_columnas_a_una_bd_antigua(engine):
             "SELECT slug, serie_id, episodio, resumen_episodio FROM proyectos"
         )).one()
         assert fila == ("viejo", None, 0, "")
+
+
+def test_migrar_apunta_de_que_guion_salio_el_resumen_de_cada_episodio(session):
+    """Los episodios de antes del hilo escribían su resumen al armar el vídeo,
+    sin versión que comparar. Sin rellenarla saldrían todos como "el canon es
+    de otra versión" y el autopiloto los reescribiría encima."""
+    serie = f.serie(session)
+    ep1 = f.episodio(session, serie, numero=1, resumen="Pasó esto.")
+    f.episodio(session, serie, numero=2, slug="ep-2")
+    guiones_repo.crear(session, ep1.id, {"gancho": "g"})
+    guiones_repo.crear(session, ep1.id, {"gancho": "otro"})
+    session.commit()
+
+    db_mod._migrar()
+
+    session.expire_all()
+    filas = dict(
+        session.execute(text("SELECT slug, resumen_version FROM proyectos")).all()
+    )
+    assert filas == {"ep-1": 2, "ep-2": 0}
+
+
+def test_migrar_anade_las_columnas_del_hilo_a_una_serie_antigua(engine):
+    with engine.begin() as c:
+        c.execute(text("DROP TABLE series"))
+        c.execute(text(
+            "CREATE TABLE series (id INTEGER PRIMARY KEY, slug VARCHAR, "
+            "nombre VARCHAR, plantilla VARCHAR, tema_id INTEGER)"
+        ))
+        c.execute(text(
+            "INSERT INTO series (slug, nombre, plantilla, tema_id) "
+            "VALUES ('vieja', 'Vieja', 'serie', 1)"
+        ))
+
+    db_mod._migrar()
+
+    with engine.connect() as c:
+        cols = [r[1] for r in c.execute(text("PRAGMA table_info(series)"))]
+        assert {"premisa", "episodios_objetivo"} <= set(cols)
+        # Una serie de antes del hilo sigue funcionando: solo continuidad hacia
+        # atrás, y el hilo se le escribe cuando se le ponga una premisa.
+        assert c.execute(text(
+            "SELECT premisa, episodios_objetivo FROM series"
+        )).one() == ("", 0)
 
 
 def test_migrar_anade_los_intentos_a_los_jobs_viejos(engine):

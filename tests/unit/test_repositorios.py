@@ -5,6 +5,7 @@ import pytest
 from backend.models import Voz
 from backend.repositories import ajustes as ajustes_repo
 from backend.repositories import guiones as guiones_repo
+from backend.repositories import hilos as hilos_repo
 from backend.repositories import jobs as jobs_repo
 from backend.repositories import personajes as personajes_repo
 from backend.repositories import plantillas as plantillas_repo
@@ -351,3 +352,84 @@ def test_reparto_ruta_retrato_y_desvinculado(session, dirs_tmp):
     session.commit()
     session.expire_all()
     assert personajes_repo.por_proyecto(session, p.id)[0].reparto_slug == ""
+
+
+# --- hilos ------------------------------------------------------------------
+
+def test_los_tramos_se_numeran_por_su_posicion(session):
+    """El número de un tramo es el episodio al que le toca, no un dato que el
+    LLM o el editor puedan equivocar: descolocado, un episodio se queda sin
+    tramo o con el de otro."""
+    serie = f.serie(session)
+
+    hilos_repo.crear(session, serie.id, {"tramos": [
+        {"numero": 7, "titulo": "A", "pasa": "pasa A", "cambia": "cambia A"},
+        {"numero": 7, "titulo": "B", "pasa": "pasa B", "cambia": "cambia B"},
+    ]})
+    session.commit()
+
+    tramos = hilos_repo.tramos(hilos_repo.contenido(session, serie.id))
+    assert [(t["numero"], t["titulo"]) for t in tramos] == [(1, "A"), (2, "B")]
+
+
+def test_un_tramo_vacio_se_cae(session):
+    """Vaciarlo en el editor es como se borra, igual que una línea del guion."""
+    serie = f.serie(session)
+
+    hilos_repo.crear(session, serie.id, {"tramos": [
+        {"titulo": "A", "pasa": "pasa A", "cambia": ""},
+        {"titulo": "", "pasa": "", "cambia": ""},
+    ]})
+    session.commit()
+
+    assert len(hilos_repo.tramos(hilos_repo.contenido(session, serie.id))) == 1
+
+
+def test_el_hilo_se_versiona_y_gana_el_ultimo(session):
+    serie = f.serie(session)
+    f.hilo(session, serie, tramos=2)
+
+    h = hilos_repo.crear(session, serie.id, {"destino": "otro final", "tramos": [
+        {"titulo": "A", "pasa": "pasa A", "cambia": "cambia A"},
+    ]})
+    session.commit()
+
+    assert h.version == 2
+    assert hilos_repo.contenido(session, serie.id)["destino"] == "otro final"
+
+
+def test_una_serie_sin_hilo_no_tiene_tramos(session):
+    """Y es un caso normal, no un error: las series de antes del hilo y las que
+    se crean sin premisa siguen con la continuidad hacia atrás de siempre."""
+    serie = f.serie(session)
+    assert hilos_repo.contenido(session, serie.id) is None
+    assert hilos_repo.tramos(None) == []
+    assert hilos_repo.tramo(None, 1) is None
+    assert hilos_repo.es_final(None, 1) is False
+
+
+def test_el_tramo_del_episodio_y_cual_es_el_final(session):
+    serie = f.serie(session)
+    f.hilo(session, serie, tramos=3)
+    contenido = hilos_repo.contenido(session, serie.id)
+
+    assert hilos_repo.tramo(contenido, 2)["titulo"] == "Tramo 2"
+    # Más allá del último no hay tramo: la serie llegó a su destino, y eso se
+    # le dice al LLM tal cual en vez de inventarle un tramo que nadie escribió.
+    assert hilos_repo.tramo(contenido, 4) is None
+    assert hilos_repo.es_final(contenido, 3) is True
+    assert hilos_repo.es_final(contenido, 2) is False
+
+
+def test_borrar_la_serie_se_lleva_su_hilo(session):
+    """El hilo es el plan de *esta* historia: sin ella no es nada reutilizable,
+    al contrario que un episodio, que sigue siendo un vídeo con su guion."""
+    from backend.repositories import series as series_repo
+
+    serie = f.serie(session)
+    f.hilo(session, serie)
+
+    series_repo.borrar(session, serie.id)
+    session.commit()
+
+    assert hilos_repo.ultimo(session, serie.id) is None

@@ -9,6 +9,7 @@ from ..db import get_session
 from ..models import avanzar_estado
 from ..repositories import escenas as escenas_repo
 from ..repositories import guiones as guiones_repo
+from ..repositories import hilos as hilos_repo
 from ..repositories import ideas as ideas_repo
 from ..repositories import jobs as jobs_repo
 from ..repositories import metadatos as metadatos_repo
@@ -134,6 +135,7 @@ def _serie_dict(s, p) -> dict | None:
     if serie is None:
         return None
     previo = series_repo.anterior(s, p.serie_id, p.episodio)
+    hilo = hilos_repo.contenido(s, p.serie_id)
     return {
         "id": serie.id,
         "nombre": serie.nombre,
@@ -144,6 +146,18 @@ def _serie_dict(s, p) -> dict | None:
              "resumen": (previo.resumen_episodio or "").strip()}
             if previo else None
         ),
+        # El sitio que ocupa este capítulo en el hilo, y qué hizo con él. Es lo
+        # que el LLM tiene delante al escribir el guion, así que es lo que el
+        # usuario necesita ver para juzgar si el guion está bien: sin el tramo,
+        # "se fue del tema" no es una frase que se pueda comprobar.
+        "tramos": len(hilos_repo.tramos(hilo)),
+        "tramo": hilos_repo.tramo(hilo, p.episodio),
+        "es_final": hilos_repo.es_final(hilo, p.episodio),
+        "desvio": (p.tramo_desvio or "").strip(),
+        # De qué versión del guion salió el resumen: comparada con
+        # `guion_version` dice si el canon está al día (ver models/proyecto).
+        "resumen_version": p.resumen_version or 0,
+        "continuidad_rota": bool(p.continuidad_rota),
     }
 
 
@@ -287,6 +301,14 @@ def editar_guion(pid: int, contenido: dict) -> int:
                 contenido = {**contenido, "voz_instruct": heredado}
         g = guiones_repo.crear(s, pid, contenido)
         avanzar_estado(p, "GUION")
+        if p.serie_id is not None:
+            # El canon de este episodio sale de su guion, así que al cambiar el
+            # guion el resumen que haya pasa a contar una versión que ya no
+            # existe (`falta_resumen` lo detecta por la versión) y los
+            # episodios de detrás se escribieron dando por cierto eso. Se
+            # marcan; no se regeneran, que tirar guiones ya aprobados es peor.
+            p.continuidad_rota = False
+            series_repo.marcar_continuidad_rota(s, p.serie_id, p.episodio)
         s.commit()
         return g.version
 
@@ -309,6 +331,12 @@ def editar_resumen_episodio(pid: int, texto: str) -> str:
         if p.serie_id is None:
             raise NoEsEpisodio(pid)
         p.resumen_episodio = texto.strip()
+        # Corregido a mano sobre el guion que hay ahora: este es el canon bueno
+        # de esta versión, y no hay que volver a pedírselo al LLM.
+        g = guiones_repo.ultimo(s, pid)
+        p.resumen_version = g.version if g else 0
+        # Pero lo que viene detrás se escribió con el canon de antes.
+        series_repo.marcar_continuidad_rota(s, p.serie_id, p.episodio)
         s.commit()
         return p.resumen_episodio
 

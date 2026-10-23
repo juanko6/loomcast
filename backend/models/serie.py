@@ -1,25 +1,30 @@
 from datetime import datetime
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, now_utc
 
 
 class Serie(Base):
-    """Un hilo de episodios: lo que mejor funciona en Shorts.
+    """Una historia por episodios: lo que mejor funciona en Shorts.
 
     Un proyecto suelto cuenta algo y se acaba. Una serie cuenta lo mismo que
     cuentan diez proyectos seguidos, pero con lo que hace que el espectador
-    vuelva: la misma gente y una historia que avanza. La continuidad sale de dos
-    sitios, y los dos estaban ya construidos:
+    vuelva: la misma gente y una historia que avanza. La continuidad sale de tres
+    sitios, y dos de ellos estaban ya construidos:
 
     - **El reparto fijo** (`SerieMiembro` → reparto propio): cada episodio nuevo
       se trae a los mismos personajes con su ficha, su cara y su voz ya
       fijadas, sin volver a describirlos. Para esto se hizo el reparto
       persistente.
     - **El resumen del episodio anterior** (`Proyecto.resumen_episodio`), que
-      entra como contexto al escribir el guion del siguiente.
+      entra como contexto al escribir el guion del siguiente. Es el canon: los
+      hechos concretos que el guion inventó y que ya no se pueden desmentir.
+    - **El hilo** (`models/hilo.py`), que es el que mira hacia delante: la
+      premisa, el destino y un tramo por episodio. Los dos primeros impiden
+      *contradecir* lo que pasó; solo el hilo impide *irse del tema*, que no es
+      lo mismo y era lo que faltaba.
 
     La serie **no tiene estado de producción**: el ciclo
     `IDEA → … → FINAL` es de cada episodio y se queda ahí. Mezclar el progreso
@@ -44,6 +49,18 @@ class Serie(Base):
     # piensa en episodios y no en vídeos sueltos. Aprobar una de esas ideas crea
     # el episodio siguiente.
     tema_id: Mapped[int] = mapped_column(ForeignKey("temas.id"))
+    # De qué va la serie, en una o dos frases del usuario. Es de donde el LLM
+    # escribe el hilo (`models/hilo.py`), y por eso se pide al crearla: una
+    # serie que nace de un nombre a secas no tiene de dónde sacar una historia,
+    # y el prompt de ideas acababa inventando ocho capítulos sueltos sobre un
+    # título. Vacío = las series de antes del hilo, que siguen funcionando con
+    # la continuidad hacia atrás de siempre.
+    premisa: Mapped[str] = mapped_column(Text, default="")
+    # Cuántos episodios se le pidieron. 0 = "decide tú", y entonces manda la
+    # recomendación que el LLM escribe en el hilo. Esto es la *petición*; los
+    # que la serie tiene de verdad son los tramos del hilo (ver allí por qué el
+    # número no se guarda dos veces).
+    episodios_objetivo: Mapped[int] = mapped_column(default=0)
     created_at: Mapped[datetime] = mapped_column(default=now_utc)
 
 

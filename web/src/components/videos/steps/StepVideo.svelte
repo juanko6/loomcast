@@ -1,7 +1,6 @@
 <script lang="ts">
   import Button from "../../primitives/Button.svelte";
   import Icon from "../../primitives/Icon.svelte";
-  import ResumenEpisodio from "../ResumenEpisodio.svelte";
   import { media } from "@/lib/api";
   import { onMount } from "svelte";
   import {
@@ -20,8 +19,6 @@
     onborrarvideo,
     onborrarversion,
     onborrarproyecto,
-    onguardarresumen,
-    ongenerarresumen,
     onver,
   }: {
     p: ProyectoDetalle;
@@ -31,8 +28,6 @@
     onborrarvideo: () => void;
     onborrarversion: (nombre: string) => void;
     onborrarproyecto: () => void;
-    onguardarresumen: (resumen: string) => void;
-    ongenerarresumen: () => void;
     onver: (html: string, pie: string) => void;
   } = $props();
 
@@ -175,12 +170,6 @@
         {/each}
       </div>
     </details>
-  {/if}
-
-  <!-- Solo en un episodio: cerrarlo es lo que da continuidad al siguiente. Un
-       vídeo suelto no tiene nada que cerrar. -->
-  {#if p.serie}
-    <ResumenEpisodio {p} {busy} onguardar={onguardarresumen} ongenerar={ongenerarresumen} />
   {/if}
 
   <div class="flex items-center gap-3 border-t border-line pt-4">

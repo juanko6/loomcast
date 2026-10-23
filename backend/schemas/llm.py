@@ -68,16 +68,61 @@ class GuionLineasLLM(BaseModel):
     voz_instruct: str = Field(min_length=1)
 
 
+class TramoLLM(BaseModel):
+    """El sitio que ocupa un episodio en el hilo de la serie."""
+
+    # Se renumera por posición al guardar (repositories/hilos.normalizar): el
+    # número de un tramo es el episodio al que le toca, no un dato que el LLM
+    # pueda equivocar. Va en el esquema para que el modelo piense en orden.
+    numero: int = 0
+    titulo: str = Field(min_length=1, max_length=120)
+    # Qué pasa en ese episodio.
+    pasa: str = Field(min_length=1)
+    # Qué ha cambiado al terminarlo, y que ya no se puede deshacer. Un tramo sin
+    # esto es relleno, y el prompt lo pide así por eso.
+    cambia: str = Field(min_length=1)
+
+
+class HiloLLM(BaseModel):
+    """Hacia dónde va la serie: lo que el LLM escribe desde la premisa.
+
+    `episodios_recomendados` es una recomendación de verdad: el número lo decide
+    el usuario y solo manda esta cuando no lo ha decidido. Cuántos episodios
+    tiene la serie se lee de `len(tramos)`, que es el mapa que se va a usar.
+    """
+
+    premisa: str = Field(min_length=1)
+    pregunta: str = Field(min_length=1)
+    destino: str = Field(min_length=1)
+    # Lo que esta serie NO es. Lista a propósito: son vetos que se leen de un
+    # vistazo y se tachan de uno en uno al editar el hilo.
+    fuera: list[str] = Field(min_length=1, max_length=10)
+    episodios_recomendados: int = Field(ge=2, le=24)
+    por_que: str = Field(min_length=1)
+    # Uno por episodio. El mínimo es 1 y no 2 porque al replanificar una serie
+    # a medias esto es solo la cola que falta, y puede quedar un capítulo.
+    tramos: list[TramoLLM] = Field(min_length=1, max_length=24)
+
+
 class ResumenEpisodioLLM(BaseModel):
     """En qué quedó un episodio, para que el siguiente lo sepa.
 
-    Un solo campo a propósito: es un texto que el usuario va a leer y corregir
-    antes de que entre en el guion del capítulo que viene, y partirlo en "qué
-    pasó" y "qué queda abierto" obligaría a editar dos cajas para arreglar una
-    misma frase. Lo que tiene que llevar lo dicta el prompt.
+    El resumen es un solo campo a propósito: es un texto que el usuario va a
+    leer y corregir antes de que entre en el guion del capítulo que viene, y
+    partirlo en "qué pasó" y "qué queda abierto" obligaría a editar dos cajas
+    para arreglar una misma frase. Lo que tiene que llevar lo dicta el prompt.
+
+    `tramo_desvio` no es un trozo del resumen, es otra cosa: el resumen cuenta
+    los hechos, y el desvío es un juicio sobre el plan. Se piden juntos porque
+    este es el único momento en el que el LLM tiene delante el guion y el tramo
+    del hilo a la vez.
     """
 
     resumen: str = Field(min_length=40, max_length=1200)
+    # Qué hizo este episodio que no era lo que su tramo decía, en una frase.
+    # Cadena vacía = cumplió (o la serie no tiene hilo y no había nada que
+    # cumplir): el prompt pide explícitamente no inventarse un desvío.
+    tramo_desvio: str = ""
 
 
 class TituloLLM(BaseModel):

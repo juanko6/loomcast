@@ -4,10 +4,16 @@ import json
 import pytest
 
 from backend.repositories import guiones as guiones_repo
+from backend.repositories import hilos as hilos_repo
 from backend.repositories import metadatos as metadatos_repo
 from backend.repositories import proyectos as proyectos_repo
 from backend.repositories import series as series_repo
-from backend.schemas import GuionLineasLLM, GuionLLM, ResumenEpisodioLLM
+from backend.schemas import (
+    GuionLineasLLM,
+    GuionLLM,
+    HiloLLM,
+    ResumenEpisodioLLM,
+)
 from backend.services.pipeline import series, texto
 from tests import factories as f
 
@@ -192,18 +198,57 @@ def test_resumen_pendiente_solo_para_episodios_sin_cerrar(session, dirs_tmp):
     assert series.resumen_pendiente(999) is False
 
 
+def test_un_canon_de_otra_version_del_guion_esta_pendiente(session, dirs_tmp):
+    """Si el guion se edita, el resumen cuenta una versión que ya no existe, y
+    lo que miente aquí es canon en el capítulo siguiente."""
+    ep = f.episodio(session, f.serie(session), numero=1, resumen="Pasó esto.")
+    guiones_repo.crear(session, ep.id, GUION)
+    ep.resumen_version = 1
+    session.commit()
+    assert series.resumen_pendiente(ep.id) is False
+
+    guiones_repo.crear(session, ep.id, GUION)  # v2: lo editaron
+    session.commit()
+    assert series.resumen_pendiente(ep.id) is True
+
+
 # --- encadenado de la cola --------------------------------------------------
 
 @pytest.mark.parametrize("armado", ["armar_video", "armar_estatico"])
-def test_al_armar_el_video_de_un_episodio_se_encola_su_resumen(
+def test_el_armado_de_un_episodio_ya_no_encadena_su_resumen(
     session, dirs_tmp, armado
 ):
-    """Es cuando el episodio está de verdad cerrado, así que el siguiente nace
-    con continuidad sin que nadie se acuerde de pedirla."""
+    """El resumen estuvo encadenado aquí y se fue de aquí: solo depende del
+    guion, así que esperar al vídeo metía el render en el camino de la historia.
+    Ahora lo pide el autopiloto en cuanto el guion está aprobado."""
     from backend.workers import queue
 
     ep = f.episodio(session, f.serie(session), numero=1)
-    assert queue._encadenado(armado, ep.id) == "generar_resumen_episodio"
+    assert queue._encadenado(armado, ep.id) is None
+
+
+def test_el_canon_se_pide_justo_despues_del_guion(session, dirs_tmp):
+    """Lo que antes pasaba al final del montaje: el episodio siguiente ya puede
+    escribirse sin esperar un solo segundo de GPU."""
+    from backend.services import autopiloto
+
+    ep = f.episodio(session, f.serie(session), numero=1)
+    guiones_repo.crear(session, ep.id, GUION)
+    session.commit()
+
+    assert autopiloto._que_falta(session, ep, "estatico") == (
+        "generar_resumen_episodio"
+    )
+
+
+def test_un_video_suelto_no_pide_canon_nunca(session, dirs_tmp):
+    from backend.services import autopiloto
+
+    p = f.proyecto(session)
+    guiones_repo.crear(session, p.id, GUION)
+    session.commit()
+
+    assert autopiloto._que_falta(session, p, "estatico") == "generar_casting"
 
 
 @pytest.mark.parametrize("armado", ["armar_video", "armar_estatico"])
@@ -283,3 +328,187 @@ def test_la_serie_no_tiene_estado_de_produccion(session, dirs_tmp):
     assert estados == ["FINAL", "IDEA"]
     assert not hasattr(series_repo.obtener(session, serie.id), "estado")
     assert proyectos_repo.obtener(session, ep2.id).estado == "IDEA"
+
+
+# --- el hilo ----------------------------------------------------------------
+
+HILO = {
+    "premisa": "Alicia hereda una casa en la que ya vive alguien.",
+    "pregunta": "¿Quién entraba en la casa por la noche?",
+    "destino": "Era su hermano y le deja quedarse.",
+    "fuera": ["no aparece la policia"],
+    "episodios_recomendados": 4,
+    "por_que": "aguanta cuatro giros",
+    "tramos": [
+        {"titulo": "La llave", "pasa": "encuentra una llave",
+         "cambia": "sabe que no está sola"},
+        {"titulo": "El ruido", "pasa": "oye pasos", "cambia": "deja de dormir"},
+    ],
+}
+
+
+def _hilo_llm(fake_llm, **cambios):
+    fake_llm.responder(HiloLLM, HiloLLM(**{**HILO, **cambios}))
+
+
+def test_el_hilo_sale_de_la_premisa_y_dice_cuantos_episodios(
+    session, dirs_tmp, fake_llm
+):
+    serie = f.serie(session, premisa="Alicia hereda una casa habitada.")
+    _hilo_llm(fake_llm)
+
+    assert "Hilo v1" in series.generar_hilo(serie.id)
+
+    guardado = hilos_repo.contenido(session, serie.id)
+    assert guardado["destino"] == "Era su hermano y le deja quedarse."
+    # Los tramos se numeran por su posición, que es el episodio al que le tocan.
+    assert [t["numero"] for t in guardado["tramos"]] == [1, 2]
+    # Y la premisa del usuario llega al LLM, que es de donde sale todo.
+    assert "Alicia hereda una casa habitada." in fake_llm.llamadas[-1]["user"]
+
+
+def test_sin_premisa_no_hay_hilo_que_escribir(session, dirs_tmp, fake_llm):
+    serie = f.serie(session)
+    with pytest.raises(ValueError, match="premisa"):
+        series.generar_hilo(serie.id)
+    assert fake_llm.llamadas == []
+
+
+def test_los_episodios_pedidos_mandan_sobre_la_recomendacion(
+    session, dirs_tmp, fake_llm
+):
+    serie = f.serie(session, premisa="Una casa habitada.", episodios=6)
+    _hilo_llm(fake_llm)
+
+    series.generar_hilo(serie.id)
+
+    assert "6 episodios" in fake_llm.llamadas[-1]["system"]
+
+
+def test_replanificar_no_toca_los_tramos_ya_rodados(session, dirs_tmp, fake_llm):
+    """Lo hecho no se toca, igual que con el reparto fijo: un capítulo escrito
+    no cambia de sitio en el mapa porque el mapa se redibuje."""
+    serie = f.serie(session, premisa="Una casa habitada.")
+    f.hilo(session, serie, tramos=3)
+    f.episodio(session, serie, numero=1, resumen="Alicia encontró la llave.")
+    _hilo_llm(fake_llm, tramos=[
+        {"titulo": "Nuevo rumbo", "pasa": "pasa otra cosa",
+         "cambia": "cambia otra cosa"},
+    ])
+
+    assert "replanificado" in series.generar_hilo(serie.id)
+
+    tramos = hilos_repo.tramos(hilos_repo.contenido(session, serie.id))
+    assert [t["titulo"] for t in tramos] == ["Tramo 1", "Nuevo rumbo"]
+    # Y el LLM recibe lo que de verdad pasó en el rodado, no solo lo planeado.
+    user = fake_llm.llamadas[-1]["user"]
+    assert "Alicia encontró la llave." in user
+    assert "Su tramo decía: pasa la cosa 1" in user
+
+
+# --- el hilo dentro del guion y del canon -----------------------------------
+
+def test_el_guion_del_episodio_sabe_que_sitio_ocupa(session, dirs_tmp):
+    serie = f.serie(session)
+    f.hilo(session, serie, tramos=3)
+    ep = f.episodio(session, serie, numero=2)
+
+    ctx = series.contexto_continuidad(ep.id)
+
+    assert "TU SITIO EN EL MAPA: episodio 2 de 3" in ctx
+    assert "pasa la cosa 2" in ctx
+    # Lo que viene detrás se le da para que NO pase hoy.
+    assert "todavía NO puede pasar" in ctx
+    assert "pasa la cosa 3" in ctx
+    assert "nada sobrenatural" in ctx
+
+
+def test_el_ultimo_episodio_es_el_unico_que_cierra(session, dirs_tmp):
+    """El prompt del guion prohíbe resolver la serie, y sin hilo no había manera
+    de pedir el capítulo final."""
+    serie = f.serie(session)
+    f.hilo(session, serie, tramos=2)
+
+    ctx = series.contexto_continuidad(f.episodio(session, serie, numero=2).id)
+
+    assert "ÚLTIMO EPISODIO" in ctx
+
+
+def test_un_episodio_que_se_sale_del_mapa_lo_dice(session, dirs_tmp):
+    serie = f.serie(session)
+    f.hilo(session, serie, tramos=2)
+
+    ctx = series.contexto_continuidad(f.episodio(session, serie, numero=3).id)
+
+    assert "se sale del mapa" in ctx
+    assert "TU SITIO EN EL MAPA: episodio" not in ctx
+
+
+def test_una_serie_sin_hilo_pide_el_guion_como_siempre(session, dirs_tmp):
+    ctx = series.contexto_continuidad(
+        f.episodio(session, f.serie(session), numero=1).id
+    )
+    assert "HACIA DÓNDE VA" not in ctx
+
+
+def test_el_canon_guarda_su_version_y_el_desvio(session, dirs_tmp, fake_llm):
+    serie = f.serie(session)
+    f.hilo(session, serie, tramos=3)
+    ep = f.episodio(session, serie, numero=1)
+    guiones_repo.crear(session, ep.id, GUION)
+    session.commit()
+    fake_llm.responder(ResumenEpisodioLLM, ResumenEpisodioLLM(
+        resumen="Alicia encuentra la llave y decide no decir nada a nadie.",
+        tramo_desvio="el tramo pedía que se lo contara y en el guion se lo calla",
+    ))
+
+    salida = series.generar_resumen_episodio(ep.id)
+
+    session.refresh(ep)
+    assert ep.resumen_version == 1
+    assert "se lo calla" in ep.tramo_desvio
+    assert "se salió de su tramo" in salida
+    # El tramo entra en la petición: es contra lo que se compara.
+    assert "Lo que tenía que pasar: pasa la cosa 1" in fake_llm.llamadas[-1]["user"]
+
+
+def test_sin_tramo_no_hay_desvio_que_anotar(session, dirs_tmp, fake_llm):
+    """Aunque el LLM se empeñe: no se le dio ningún plan contra el que comparar."""
+    ep = f.episodio(session, f.serie(session), numero=1)
+    guiones_repo.crear(session, ep.id, GUION)
+    session.commit()
+    fake_llm.responder(ResumenEpisodioLLM, ResumenEpisodioLLM(
+        resumen="Alicia encuentra la llave y decide no decir nada a nadie.",
+        tramo_desvio="me lo invento",
+    ))
+
+    series.generar_resumen_episodio(ep.id)
+
+    session.refresh(ep)
+    assert ep.tramo_desvio == ""
+
+
+def test_lo_que_viene_detras_entra_en_corto(session, dirs_tmp, fake_llm):
+    """Vetar un capítulo futuro no es contarlo: en el prompt del episodio 1 de
+    seis caben cinco tramos, y escritos largos metían cinco capítulos enteros
+    en el guion de uno (y cuanto más detalle, más tienta adelantarlo)."""
+    serie = f.serie(session)
+    parrafo = ("Marta deja el móvil grabando. " * 12).strip()
+    sin_punto = "Marta " + "deja el móvil grabando y se va a la calle " * 8
+    hilos_repo.crear(session, serie.id, {"tramos": [
+        {"titulo": "El paquete", "pasa": "recibe el paquete", "cambia": "ya no está segura"},
+        {"titulo": "La trampa", "pasa": parrafo, "cambia": "él ha entrado"},
+        {"titulo": "El bloqueo", "pasa": sin_punto, "cambia": "la ley no llega"},
+    ]})
+    session.commit()
+
+    ctx = series.contexto_continuidad(f.episodio(session, serie, numero=1).id)
+
+    vetos = [x for x in ctx.splitlines() if x.startswith("- EP ")]
+    # De un párrafo basta su primera frase.
+    assert vetos[0] == "- EP 2 · La trampa: Marta deja el móvil grabando"
+    # Y una frase sola que no acaba nunca se corta por una palabra entera.
+    assert vetos[1].startswith("- EP 3 · El bloqueo: Marta deja el móvil")
+    assert len(vetos[1]) < 220 and vetos[1].endswith("…")
+    # El tramo propio sí va entero: es lo que tiene que hacer hoy.
+    assert "Lo que pasa en este episodio: recibe el paquete" in ctx

@@ -126,6 +126,21 @@ export interface SerieDelProyecto {
   // El episodio anterior y en qué quedó: es el contexto que el LLM ya está
   // usando para escribir este guion, así que es donde se corrige si está mal.
   anterior: { episodio: number; resumen: string } | null;
+  // Cuántos tramos tiene el hilo de la serie (0 = serie sin hilo).
+  tramos: number;
+  // El sitio que ocupa este capítulo en la historia. Es lo otro que el LLM
+  // tiene delante al escribir el guion, así que es lo que hace falta para
+  // juzgarlo: sin el tramo, "se fue del tema" no se puede comprobar.
+  tramo: { numero: number; titulo: string; pasa: string; cambia: string } | null;
+  // Si es el último del hilo: el único episodio que cierra la serie.
+  es_final: boolean;
+  // Qué hizo en vez de lo que su tramo pedía. Vacío = lo cumplió.
+  desvio: string;
+  // De qué versión del guion salió el resumen. Distinta de `guion_version` =
+  // el canon cuenta una versión que ya no existe.
+  resumen_version: number;
+  // Se escribió sobre un canon que después cambió.
+  continuidad_rota: boolean;
 }
 
 export interface ProyectoDetalle {

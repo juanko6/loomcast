@@ -1,5 +1,6 @@
 <script lang="ts">
   import Field from "../../primitives/Field.svelte";
+  import ResumenEpisodio from "../ResumenEpisodio.svelte";
   import Button from "../../primitives/Button.svelte";
   import type { ProyectoDetalle, Guion, LineaGuion } from "@/lib/proyectos";
 
@@ -8,11 +9,17 @@
     busy = false,
     onsave,
     onregen,
+    onguardarresumen,
+    ongenerarresumen,
   }: {
     p: ProyectoDetalle;
     busy?: boolean;
     onsave: (g: Guion) => void;
     onregen: () => void;
+    // El canon del episodio. Se pasan siempre aunque el proyecto no sea un
+    // episodio: el panel solo se dibuja cuando lo es.
+    onguardarresumen: (resumen: string) => void;
+    ongenerarresumen: () => void;
   } = $props();
 
   // Borrador local del guion, re-sincronizado cuando cambia el proyecto o el
@@ -162,5 +169,13 @@
       </Button>
       <span class="self-center text-xs text-muted">Versión {p.guion_version}</span>
     </div>
+
+    <!-- Solo en un episodio, y aquí y no en el vídeo final: la historia queda
+         cerrada cuando está escrita, y el episodio siguiente ya puede salir de
+         este canon sin esperar un segundo de GPU. Un vídeo suelto no tiene nada
+         que cerrar. -->
+    {#if p.serie}
+      <ResumenEpisodio {p} {busy} onguardar={onguardarresumen} ongenerar={ongenerarresumen} />
+    {/if}
   </div>
 {/if}

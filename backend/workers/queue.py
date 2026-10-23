@@ -23,7 +23,7 @@ from .. import parada, procesos
 from ..clients import comfy, llm, rife
 from ..config import COLA_ESPERA_S, COLA_INTENTOS, COLA_MEMORIA_MODELO_GB
 from ..db import get_session
-from ..models import ImagenLibre, Musica, Proyecto, Tema, Voz
+from ..models import ImagenLibre, Musica, Proyecto, Serie, Tema, Voz
 from ..repositories import jobs as jobs_repo
 from ..services import apuntes, llm_runtime, progreso
 from ..services.pipeline import (
@@ -57,6 +57,7 @@ HANDLERS = {
     "generar_voz": voz.generar_voz,
     "generar_subtitulos": subtitulos.generar_subtitulos,
     "generar_casting": casting.generar_casting,
+    "generar_hilo": series.generar_hilo,
     "generar_resumen_episodio": series.generar_resumen_episodio,
     "generar_retrato": retratos.generar_retrato,
     "generar_retratos": retratos.generar_retratos,
@@ -93,6 +94,7 @@ JOBS_LLM = {
     "mejorar_prompt_imagen",
     "mejorar_prompt_musica",
     "generar_musica_proyecto",
+    "generar_hilo",
     "generar_resumen_episodio",
 }
 
@@ -134,10 +136,6 @@ CADENA = {
     "generar_clips_mixto": "armar_video",
 }
 
-# Los dos armados. Al terminar cualquiera de ellos, un episodio de serie que
-# todavía no tenga resumen se cierra solo (ver `_encadenado`).
-ARMADOS = ("armar_video", "armar_estatico")
-
 # Modo de video → job con el que arranca. El estático es un solo job; el de
 # movimiento (Ken Burns) es una cadena upscale → clips → armado, y los demás los
 # resuelve `CADENA` igual. Vive aquí, al lado de la cadena, porque es lo mismo
@@ -152,19 +150,19 @@ MODOS_VIDEO = {
 
 
 def _encadenado(tipo: str, ref_id: int) -> str | None:
-    """Qué job sale solo tras este, si sale alguno.
+    """Qué job sale solo tras este, si sale alguno. Todo está en `CADENA`.
 
-    Casi todo está en `CADENA`, que es fijo por tipo. El resumen del episodio no
-    puede estarlo: depende de si ese proyecto es un episodio y de si ya lo tiene
-    escrito. Se encadena al armado porque es cuando el episodio está de verdad
-    cerrado, y así el siguiente nace con continuidad sin que nadie se acuerde de
-    pedirla. Un proyecto suelto nunca entra aquí.
+    El resumen del episodio **estuvo aquí**, encadenado al armado, y de ahí se
+    fue: el resumen solo depende del guion, así que esperar al vídeo metía el
+    render en el camino de la historia. Peor, lo hacía mal — un lote con la
+    parada de revisión del guion puesta libera la línea y mete el episodio
+    siguiente, que escribía su guion sin el resumen del anterior porque el
+    anterior ni se había armado—. Ahora lo pide el autopiloto en cuanto el guion
+    está aprobado (`autopiloto._que_falta`), que es cuando la historia está de
+    verdad cerrada. Encadenarlo aquí no valdría: la cadena se come el
+    `tras_etapa` del guion, o sea la propia parada de revisión.
     """
-    if tipo in CADENA:
-        return CADENA[tipo]
-    if tipo in ARMADOS and series.resumen_pendiente(ref_id):
-        return "generar_resumen_episodio"
-    return None
+    return CADENA.get(tipo)
 
 
 # Intentos y espera de los reintentos ([cola] de config.toml). Se copian a
@@ -216,6 +214,7 @@ NO_TRANSITORIOS = (FileNotFoundError, PermissionError)
 # proyecto.
 _REF_POR_MODELO = {
     Tema: ["generar_ideas"],
+    Serie: ["generar_hilo"],
     Voz: ["crear_voz", "clonar_voz"],
     Musica: ["mejorar_prompt_musica", "generar_musica", "generar_portada_musica"],
     ImagenLibre: ["mejorar_prompt_imagen", "generar_previews_imagen",

@@ -120,7 +120,16 @@ describe("series", () => {
     ["listarSeries", () => series.listarSeries(), "/series", undefined],
     ["detalleSerie", () => series.detalleSerie(7), "/series/7", undefined],
     ["crearSerie", () => series.crearSerie("La casa", "serie"), "/series",
-      { method: "POST", body: { nombre: "La casa", plantilla: "serie" } }],
+      { method: "POST",
+        body: { nombre: "La casa", plantilla: "serie", premisa: "", episodios: 0 } }],
+    // Con premisa, crear la serie encola su hilo; en 0 episodios lo decide el
+    // LLM.
+    ["crearSerie con premisa", () => series.crearSerie("La casa", "serie", "Hereda una casa.", 6),
+      "/series", { method: "POST", body: {
+        nombre: "La casa", plantilla: "serie", premisa: "Hereda una casa.", episodios: 6 } }],
+    ["ajustarSerie", () => series.ajustarSerie(7, "Hereda una casa.", 4), "/series/7",
+      { method: "PUT", body: { premisa: "Hereda una casa.", episodios: 4 } }],
+    ["escribirHilo", () => series.escribirHilo(7), "/series/7/hilo", { method: "POST" }],
     ["borrarSerie", () => series.borrarSerie(7), "/series/7", { method: "DELETE" }],
     ["anadirMiembroSerie", () => series.anadirMiembroSerie(7, "ana"), "/series/7/miembros",
       { method: "POST", body: { reparto_slug: "ana" } }],

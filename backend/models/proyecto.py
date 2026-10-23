@@ -48,6 +48,26 @@ class Proyecto(Base):
     # continuidad de una serie no puede depender de un resumen que nadie puede
     # corregir. Vacío = sin cerrar todavía (o proyecto suelto).
     resumen_episodio: Mapped[str] = mapped_column(Text, default="")
+    # De qué versión del guion salió ese resumen. El resumen se escribe al
+    # aprobar el guion y no al armar el vídeo, porque la historia queda cerrada
+    # cuando está escrita: ni la voz ni las imágenes ni el i2v añaden un hecho.
+    # Eso permite escribir la temporada entera antes de producir nada, y obliga
+    # a llevar la cuenta: si el guion se edita y pasa a la v2, el resumen de la
+    # v1 miente, y lo que miente aquí se vuelve canon en el capítulo siguiente.
+    # 0 = sin resumen todavía (o proyecto suelto).
+    resumen_version: Mapped[int] = mapped_column(default=0)
+    # Qué se salió del tramo que el hilo le había asignado, si se salió. Lo
+    # escribe el LLM junto con el resumen, que es cuando tiene delante el guion
+    # y el plan a la vez. Vacío con resumen escrito = cumplió su tramo (o la
+    # serie no tiene hilo); es el detector de deriva, y no una cuarta columna
+    # con un "sí/no" que habría que mantener de acuerdo con esta.
+    tramo_desvio: Mapped[str] = mapped_column(Text, default="")
+    # Un episodio anterior se reescribió DESPUÉS de que este se escribiera, así
+    # que este salió de un canon que ya no es el que hay. No se regenera solo a
+    # propósito: regenerar en cascada tiraría guiones ya aprobados, y lo hecho
+    # no se toca (el mismo criterio que el reparto fijo y el hilo). Se marca, y
+    # decide el usuario.
+    continuidad_rota: Mapped[bool] = mapped_column(default=False)
     estado: Mapped[str] = mapped_column(default="IDEA")
     created_at: Mapped[datetime] = mapped_column(default=now_utc)
 

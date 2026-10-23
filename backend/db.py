@@ -37,10 +37,46 @@ def _migrar() -> None:
             "serie_id": "INTEGER",
             "episodio": "INTEGER DEFAULT 0",
             "resumen_episodio": "TEXT DEFAULT ''",
+            # De qué versión del guion salió el resumen, qué se salió del tramo
+            # del hilo y si un episodio anterior se reescribió por detrás. Los
+            # episodios de antes del hilo quedan en 0 / "" / 0, que es la
+            # verdad: su resumen se escribió al armar el vídeo, cuando no había
+            # ni tramos que cumplir ni versiones que comparar.
+            "resumen_version": "INTEGER DEFAULT 0",
+            "tramo_desvio": "TEXT DEFAULT ''",
+            "continuidad_rota": "BOOLEAN DEFAULT 0",
         }
         for col, tipo in nuevas.items():
             if col not in cols:
                 c.execute(text(f"ALTER TABLE proyectos ADD COLUMN {col} {tipo}"))
+        c.commit()
+
+        # Los episodios que ya tenían resumen lo escribieron al armar el vídeo,
+        # cuando no había versiones que comparar. Se les apunta la versión del
+        # guion que tenían entonces (la última), que es lo más cerca de la
+        # verdad a la que se puede llegar ahora. Sin esto saldrían todos como
+        # "el canon es de otra versión" y el autopiloto los reescribiría encima,
+        # incluidos los que se corrigieron a mano.
+        c.execute(text(
+            "UPDATE proyectos SET resumen_version = COALESCE((SELECT MAX(version) "
+            "FROM guiones WHERE guiones.proyecto_id = proyectos.id), 0) "
+            "WHERE resumen_version = 0 "
+            "AND TRIM(COALESCE(resumen_episodio, '')) != ''"
+        ))
+        c.commit()
+
+        # La premisa de la que sale el hilo y cuántos episodios se pidieron.
+        # Las series de antes del hilo se quedan con "" y 0: siguen produciendo
+        # episodios con la continuidad hacia atrás de siempre, y escribirles un
+        # hilo es pedirlo desde su pantalla.
+        cols = [r[1] for r in c.execute(text("PRAGMA table_info(series)"))]
+        nuevas = {
+            "premisa": "TEXT DEFAULT ''",
+            "episodios_objetivo": "INTEGER DEFAULT 0",
+        }
+        for col, tipo in nuevas.items():
+            if col not in cols:
+                c.execute(text(f"ALTER TABLE series ADD COLUMN {col} {tipo}"))
         c.commit()
 
         cols = [r[1] for r in c.execute(text("PRAGMA table_info(escenas)"))]

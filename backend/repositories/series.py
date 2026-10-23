@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 
 from ..models import Proyecto, Serie, SerieMiembro
+from . import hilos
 
 
 def crear(s: Session, slug: str, nombre: str, plantilla: str,
@@ -114,6 +115,22 @@ def anterior(s: Session, serie_id: int, episodio: int) -> Proyecto | None:
     )
 
 
+def marcar_continuidad_rota(s: Session, serie_id: int, desde: int) -> int:
+    """Marca los episodios posteriores a `desde` como escritos sobre otro canon.
+
+    Se llama cuando el canon de un episodio cambia: se reescribió su guion o se
+    corrigió su resumen a mano. Los que vienen detrás se escribieron dando por
+    cierto lo que decía antes, así que a partir de ahora lo que cuentan puede no
+    casar. No se regeneran: regenerar en cascada tiraría guiones ya aprobados, y
+    aquí lo hecho no se toca. Se marca y decide el usuario.
+    """
+    return (
+        s.query(Proyecto)
+        .filter(Proyecto.serie_id == serie_id, Proyecto.episodio > desde)
+        .update({Proyecto.continuidad_rota: True}, synchronize_session=False)
+    )
+
+
 def borrar(s: Session, serie_id: int) -> int:
     """Borra la serie y su reparto fijo, y suelta sus episodios.
 
@@ -127,6 +144,7 @@ def borrar(s: Session, serie_id: int) -> int:
     a mano o quedarían filas huérfanas. Devuelve cuántos episodios se soltaron.
     """
     s.query(SerieMiembro).filter(SerieMiembro.serie_id == serie_id).delete()
+    hilos.borrar_de_serie(s, serie_id)
     sueltos = (
         s.query(Proyecto)
         .filter(Proyecto.serie_id == serie_id)
