@@ -355,8 +355,7 @@
     <div class="mt-3 space-y-2 rounded-lg border border-line bg-surface p-3">
       <div class="flex flex-wrap gap-2">
         <input
-          class="control"
-          style="width: 10rem"
+          class="control w-40 shrink-0"
           bind:value={nuevaClave}
           placeholder="ESCRITOR"
         />

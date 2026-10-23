@@ -139,32 +139,38 @@ body {
 /* ---------------------------------------------------------------------------
    Controles de formulario — estilo compartido de inputs/textarea/select para
    que todos los modos hereden el mismo aspecto sin repetir clases.
+
+   Va en @layer components a propósito: suelto, el width:100% ganaría a las
+   utilidades de Tailwind (que viven en una capa posterior) y un `control w-32`
+   saldría a ancho completo.
    ------------------------------------------------------------------------- */
-.control {
-  width: 100%;
-  border: 1px solid var(--color-line);
-  background: var(--color-surface-2);
-  border-radius: var(--radius-md);
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  line-height: 1.45;
-  color: var(--color-text);
-  font-family: inherit;
-  transition: border-color 0.12s ease;
-}
-.control::placeholder {
-  color: var(--color-muted);
-}
-.control:hover {
-  border-color: var(--color-surface-3);
-}
-.control:focus {
-  border-color: var(--color-accent);
-  outline: none;
-}
-textarea.control {
-  resize: vertical;
-  min-height: 2.5rem;
+@layer components {
+  .control {
+    width: 100%;
+    border: 1px solid var(--color-line);
+    background: var(--color-surface-2);
+    border-radius: var(--radius-md);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.45;
+    color: var(--color-text);
+    font-family: inherit;
+    transition: border-color 0.12s ease;
+  }
+  .control::placeholder {
+    color: var(--color-muted);
+  }
+  .control:hover {
+    border-color: var(--color-surface-3);
+  }
+  .control:focus {
+    border-color: var(--color-accent);
+    outline: none;
+  }
+  textarea.control {
+    resize: vertical;
+    min-height: 2.5rem;
+  }
 }
 
 /* Player de audio nativo con paleta acorde (Chromium/WebKit) */
