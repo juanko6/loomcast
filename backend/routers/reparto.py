@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from ..schemas import RepartoDesdeProyectoIn, RepartoTraerIn
+from ..schemas import RepartoDesdeProyectoIn, RepartoTraerIn, VozSeleccionIn
 from ..services import reparto as reparto_service
 
 router = APIRouter(prefix="/api/reparto", tags=["reparto"])
@@ -66,6 +66,46 @@ def borrar(slug: str):
         return reparto_service.borrar(slug)
     except reparto_service.MiembroNoExiste:
         raise HTTPException(404, "Ese miembro no está en el reparto")
+
+
+@router.post("/{slug}/retrato")
+def generar_retrato(slug: str, nuevo_seed: bool = False):
+    """Le hace la cara aquí mismo, sin pasar por ningún proyecto.
+
+    Es lo que una serie necesita: el hilo dice quiénes son antes del primer
+    capítulo, y la cara hay que fijarla **antes** para que todos los episodios
+    se traigan la misma. `nuevo_seed` da otra persona distinta, que es lo normal
+    cuando la que salió no convence.
+    """
+    try:
+        return reparto_service.encolar_retrato(slug, nuevo_seed)
+    except reparto_service.MiembroNoExiste:
+        raise HTTPException(404, "Ese miembro no está en el reparto")
+    except reparto_service.SinFicha:
+        raise HTTPException(400, "No tiene ficha: sin descripción física no hay "
+                                 "nada que retratar.")
+
+
+@router.post("/{slug}/voz")
+def crear_su_voz(slug: str):
+    """Le escribe una voz desde su ficha y la encola en el banco."""
+    try:
+        return reparto_service.crear_su_voz(slug)
+    except reparto_service.MiembroNoExiste:
+        raise HTTPException(404, "Ese miembro no está en el reparto")
+    except reparto_service.SinFicha:
+        raise HTTPException(400, "No tiene ficha: la voz se escribe desde ella.")
+
+
+@router.put("/{slug}/voz")
+def asignar_voz(slug: str, body: VozSeleccionIn):
+    """Le pone una voz que ya está en el banco (cadena vacía se la quita)."""
+    try:
+        return reparto_service.asignar_voz(slug, body.voz)
+    except reparto_service.MiembroNoExiste:
+        raise HTTPException(404, "Ese miembro no está en el reparto")
+    except reparto_service.VozNoExiste:
+        raise HTTPException(404, "Esa voz no está en el banco")
 
 
 @router.get("/{slug}/retrato")

@@ -99,6 +99,7 @@ describe("SerieView", () => {
     onnuevoepisodio: vi.fn(), onabrirepisodio: vi.fn(), onanadirmiembro: vi.fn(),
     onquitarmiembro: vi.fn(), onideas: vi.fn(), onguardarpremisa: vi.fn(),
     onescribirhilo: vi.fn(), oneditarhilo: vi.fn(), onborrarserie: vi.fn(),
+    oncara: vi.fn(), onvoz: vi.fn(), onasignarvoz: vi.fn(),
   });
 
   it("sin hilo dice que la serie funciona como antes y ofrece escribirlo", () => {
@@ -190,7 +191,40 @@ describe("SerieView", () => {
 
   it("sin reparto fijo explica de dónde sale", () => {
     render(SerieView, { s: serie({ miembros: [], n_miembros: 0 }), ...props() });
-    expect(screen.getByText(/Promueve a un personaje al reparto propio/)).toBeInTheDocument();
+    expect(screen.getByText(/Escribe el hilo y sus protagonistas se fichan solos/))
+      .toBeInTheDocument();
+  });
+
+  it("la cara y la voz del reparto fijo se hacen desde la serie", async () => {
+    const p = props();
+    render(SerieView, {
+      s: serie(),
+      voces: [{ slug: "narrador", nombre: "Narrador", instruct: "", estado: "lista",
+                disponible: true }],
+      ...p,
+    });
+
+    // Ya tiene cara (el miembro de prueba trae retrato), así que lo que se pide
+    // es otra distinta.
+    await userEvent.click(screen.getByRole("button", { name: "Otra cara" }));
+    expect(p.oncara).toHaveBeenCalledWith("ana-narradora", true);
+
+    await userEvent.selectOptions(screen.getByLabelText("Voz de Ana narradora"), "narrador");
+    expect(p.onasignarvoz).toHaveBeenCalledWith("ana-narradora", "narrador");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Otra voz desde su ficha" }),
+    );
+    expect(p.onvoz).toHaveBeenCalledWith("ana-narradora");
+  });
+
+  it("a quien no tiene cara se le ofrece generarla", () => {
+    render(SerieView, {
+      s: serie({ miembros: [miembro({ retrato: false, voz: "" })] }),
+      ...props(),
+    });
+    expect(screen.getByRole("button", { name: "Generar la cara" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Escribir su voz" })).toBeInTheDocument();
   });
 
   it("el siguiente episodio es el último más uno y dice a quién continúa", () => {
@@ -358,6 +392,26 @@ describe("series en el estudio de vídeos", () => {
     await userEvent.click(screen.getByText("La casa de Alicia"));
     await screen.findByRole("heading", { name: "La casa de Alicia" });
   };
+
+  it("la cara y la voz del reparto fijo se piden desde la serie", async () => {
+    m.generarCaraDelReparto.mockResolvedValue({ slug: "ana-narradora", job_id: 9 });
+    m.escribirVozDelReparto.mockResolvedValue({
+      slug: "ana-narradora", voz: "ana-narradora-2", job_id: 10,
+    });
+    await abrirSerie();
+
+    await userEvent.click(screen.getByRole("button", { name: "Otra cara" }));
+    await waitFor(() =>
+      expect(m.generarCaraDelReparto).toHaveBeenCalledWith("ana-narradora", true));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Otra voz desde su ficha" }),
+    );
+    await waitFor(() =>
+      expect(m.escribirVozDelReparto).toHaveBeenCalledWith("ana-narradora"));
+    // La serie se recarga: el miembro ya tiene voz apuntada.
+    await waitFor(() => expect(ms.detalleSerie).toHaveBeenCalledTimes(2));
+  });
 
   it("lista las series con sus episodios y sus fijos", async () => {
     await montar();

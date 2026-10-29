@@ -266,6 +266,21 @@ describe("proyectos", () => {
     expect(ultima()).toEqual(["/reparto/ana-narradora", { method: "DELETE" }]);
   });
 
+  it("la cara y la voz del reparto se piden sin ningún proyecto delante", async () => {
+    await p.generarCaraDelReparto("ana-narradora");
+    expect(ultima()).toEqual([
+      "/reparto/ana-narradora/retrato?nuevo_seed=false", { method: "POST" }]);
+    // Con cara ya hecha, lo que se pide es otra persona distinta.
+    await p.generarCaraDelReparto("ana-narradora", true);
+    expect(ultima()).toEqual([
+      "/reparto/ana-narradora/retrato?nuevo_seed=true", { method: "POST" }]);
+    await p.escribirVozDelReparto("ana-narradora");
+    expect(ultima()).toEqual(["/reparto/ana-narradora/voz", { method: "POST" }]);
+    await p.asignarVozDelReparto("ana-narradora", "narrador");
+    expect(ultima()).toEqual([
+      "/reparto/ana-narradora/voz", { method: "PUT", body: { voz: "narrador" } }]);
+  });
+
   it("cada modo de vídeo tiene nombre legible y etapa", () => {
     const ids = p.MODOS_VIDEO.map((m) => m.id);
     expect(ids).toEqual(["estatico", "kenburns", "i2v", "mixto"]);

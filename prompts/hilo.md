@@ -11,6 +11,21 @@ LO QUE TIENES QUE DECIDIR
 
 **El destino.** Cómo acaba, en una o dos frases, y de verdad: quién lo sabe, qué pierde quien pierde, cómo se responde la pregunta. Escríbelo aunque falten diez capítulos. Esto es lo que mantiene la serie en su sitio, y una serie cuyo final es "se descubre todo" no tiene final.
 
+**El reparto: quién sale en todos los capítulos.** De uno a cuatro, y son los que lleva la serie. Aquí no describes lo que hacen, describes **cómo son**, porque con esta ficha se les hace una cara y una voz antes de escribir el primer episodio y las mismas vuelven en todos los demás. Un protagonista que cambia de cara entre capítulos mata la serie.
+
+De cada uno:
+- `clave`: un token corto en MAYÚSCULAS y sin espacios, que es como se le nombra en los prompts (ANA, VECINO, HERMANA). Solo letras, dígitos y guion bajo. Su nombre de pila o su papel, en español.
+- `nombre`: cómo lo llamas tú en los tramos, en español (Marta, el vecino del tercero).
+- `tipo`: `"persona"` para un ser vivo con cara, `"objeto"` para cualquier otra cosa: un coche, un móvil, una llave, un edificio. Decide cómo se encuadra su imagen de referencia, y pedirle cara, cabeza y piel a un móvil le pinta una cara encima. En la duda, `"persona"`.
+- `ficha`: de 25 a 45 palabras **en inglés**, solo físico y visual. Es el texto que se pega literal dentro de cada prompt donde salga, así que **no es una frase**: es un sintagma que empieza por "a" o "an", sin puntos, sin pronombres y sin verbos conjugados, con comas y una cláusula final "wearing …".
+  - De una persona: edad aparente, complexión, tono de piel, color y largo y peinado del pelo, color de ojos, un rasgo que venga de su vida (uñas mordidas, un diente mellado, ojeras permanentes) y la ropa de diario que lleva, con su material y su desgaste.
+  - De un objeto o un animal: qué es, forma, tamaño respecto a una persona, color, materiales, desgaste y un detalle que lo haga reconocible desde cualquier lado.
+  - Fuera: emociones, acciones, cámara, luz, escenario y estilo. Eso es de la escena, no del personaje, y repetirlo congelaría todos los planos en la misma foto.
+  - BIEN: `a tired woman in her late thirties with a wiry build, olive skin, dark brown hair scraped into a loose bun, grey-green eyes and permanent shadows under them, wearing a faded navy hoodie over supermarket work trousers`
+  - MAL: `a woman in her late thirties. She has dark hair and wears a hoodie.`
+- Dos personajes no pueden compartir pelo, franja de edad y ropa, o el generador los fundirá en la misma persona.
+- Gente anónima y de hoy: nada de personas reales ni parecidos reconocibles, ni marcas, ni logos, ni texto legible en nada.
+
 **Lo que está fuera.** De tres a seis cosas que esta serie **no** es, y en concreto: no aparece la policía, nadie se muda de ciudad, no hay nada sobrenatural, el dinero no se resuelve con una herencia. La deriva casi nunca es un error de tono: es un capítulo que se va a otro género. Escribe los géneros vecinos a los que esta historia se iría si nadie la frena.
 
 **Los tramos: uno por episodio, en orden.** Cada tramo dice qué pasa en ese capítulo y qué ha cambiado al terminarlo, **en una o dos frases cada cosa**. No escribas el capítulo: un tramo es el sitio que ocupa, y quien lo escriba necesita margen para decidir cómo se cuenta. Un tramo de un párrafo no deja nada que decidir y encima se cuela entero en el prompt de los otros capítulos.
@@ -19,7 +34,7 @@ LO QUE TIENES QUE DECIDIR
 - El último **sí cierra**: responde la pregunta y llega al destino. Es el único que cierra, y tiene que cerrar.
 
 SI LA SERIE YA TIENE CAPÍTULOS RODADOS
-Entonces te doy un bloque de **LO QUE YA ESTÁ RODADO**: los tramos que ya pasaron y lo que de verdad acabó pasando en ellos, que no siempre es lo que el tramo decía. Esos no se tocan y no los repitas en tu respuesta: escribe solo los tramos que vienen después. Y no cambies el destino porque un capítulo se desviara; cámbialo solo si lo rodado lo ha vuelto imposible, y entonces busca el final más cercano al que había.
+Entonces te doy un bloque de **LO QUE YA ESTÁ RODADO**: los tramos que ya pasaron y lo que de verdad acabó pasando en ellos, que no siempre es lo que el tramo decía. Esos no se tocan y no los repitas en tu respuesta: escribe solo los tramos que vienen después. Te doy también el **reparto fijo** de la serie: esos son sus personajes y no se tocan. Devuélvelos tal cual en `reparto`, con su misma clave y su misma ficha, y escribe los tramos con ellos; no metas protagonistas nuevos a mitad de una serie. Y no cambies el destino porque un capítulo se desviara; cámbialo solo si lo rodado lo ha vuelto imposible, y entonces busca el final más cercano al que había.
 
 CUÁNTOS EPISODIOS
 {episodios}
@@ -39,6 +54,9 @@ Responde SOLO con JSON válido, sin texto adicional, con esta forma:
   "premisa": "de qué va la serie, en dos o tres frases, desarrollando la del usuario",
   "pregunta": "la pregunta de la serie, concreta y con respuesta",
   "destino": "cómo acaba, en una o dos frases",
+  "reparto": [
+    {"clave": "MARTA", "nombre": "Marta", "tipo": "persona", "ficha": "a ... (25-45 palabras, en inglés, solo físico, sin puntos)"}
+  ],
   "fuera": ["lo que esta serie no es", "otra cosa que no es"],
   "episodios_recomendados": 6,
   "por_que": "en una frase, por qué ese número",

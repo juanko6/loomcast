@@ -23,7 +23,15 @@ from .. import parada, procesos
 from ..clients import comfy, llm, rife
 from ..config import COLA_ESPERA_S, COLA_INTENTOS, COLA_MEMORIA_MODELO_GB
 from ..db import get_session
-from ..models import ImagenLibre, Musica, Proyecto, Serie, Tema, Voz
+from ..models import (
+    ImagenLibre,
+    MiembroReparto,
+    Musica,
+    Proyecto,
+    Serie,
+    Tema,
+    Voz,
+)
 from ..repositories import jobs as jobs_repo
 from ..services import apuntes, llm_runtime, progreso
 from ..services.pipeline import (
@@ -61,6 +69,7 @@ HANDLERS = {
     "generar_resumen_episodio": series.generar_resumen_episodio,
     "generar_retrato": retratos.generar_retrato,
     "generar_retratos": retratos.generar_retratos,
+    "generar_retrato_reparto": retratos.generar_retrato_reparto,
     "generar_escenas": escenas.generar_escenas,
     "generar_imagenes": imagenes.generar_imagenes,
     "regenerar_imagen": imagenes.regenerar_imagen,
@@ -215,6 +224,7 @@ NO_TRANSITORIOS = (FileNotFoundError, PermissionError)
 _REF_POR_MODELO = {
     Tema: ["generar_ideas"],
     Serie: ["generar_hilo"],
+    MiembroReparto: ["generar_retrato_reparto"],
     Voz: ["crear_voz", "clonar_voz"],
     Musica: ["mejorar_prompt_musica", "generar_musica", "generar_portada_musica"],
     ImagenLibre: ["mejorar_prompt_imagen", "generar_previews_imagen",

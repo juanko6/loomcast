@@ -12,6 +12,12 @@ def crear(s: Session, slug: str, nombre: str, clave: str, ficha: str,
     return m
 
 
+def obtener(s: Session, miembro_id: int) -> MiembroReparto | None:
+    """Por id, que es lo que lleva un job en su `ref_id` (el retrato del
+    reparto se encola como cualquier otra etapa)."""
+    return s.get(MiembroReparto, miembro_id)
+
+
 def por_slug(s: Session, slug: str) -> MiembroReparto | None:
     return s.query(MiembroReparto).filter(MiembroReparto.slug == slug).first()
 

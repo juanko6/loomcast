@@ -68,6 +68,22 @@ class GuionLineasLLM(BaseModel):
     voz_instruct: str = Field(min_length=1)
 
 
+class PersonajeLLM(BaseModel):
+    # Token con el que las escenas lo referencian: {ANA}. Se normaliza a
+    # mayúsculas al guardarlo, así que aquí basta con exigir que venga algo.
+    clave: str = Field(min_length=1, max_length=24)
+    nombre: str = Field(min_length=1, max_length=60)
+    # "persona" o "objeto". El reparto admite las dos cosas a propósito (un
+    # barco o un mapa que vuelve en varias escenas también tiene que no mutar),
+    # pero su retrato de referencia se encuadra distinto: pedirle cara, pelo y
+    # piel a un mapa le pinta una cara encima. Por defecto persona, que es el
+    # caso común; el valor se normaliza en casting.py.
+    tipo: str = "persona"
+    # Descripción física en inglés, concreta y visual. Es lo que se sustituye
+    # palabra por palabra en cada prompt donde salga el personaje.
+    ficha: str = Field(min_length=20)
+
+
 class TramoLLM(BaseModel):
     """El sitio que ocupa un episodio en el hilo de la serie."""
 
@@ -94,6 +110,13 @@ class HiloLLM(BaseModel):
     premisa: str = Field(min_length=1)
     pregunta: str = Field(min_length=1)
     destino: str = Field(min_length=1)
+    # Los protagonistas, con la misma forma que los del casting de un episodio
+    # (`PersonajeLLM`): es el mismo trabajo hecho antes, y la ficha acaba en los
+    # mismos sitios. Salen del hilo porque en una serie el reparto no es de un
+    # capítulo: se ficha una vez, se le hace cara y voz, y vuelve en todos.
+    # No se guarda en el hilo (ver `pipeline/series.generar_hilo`): se convierte
+    # en reparto fijo de la serie, que es donde vive el reparto de verdad.
+    reparto: list[PersonajeLLM] = Field(min_length=1, max_length=5)
     # Lo que esta serie NO es. Lista a propósito: son vetos que se leen de un
     # vistazo y se tachan de uno en uno al editar el hilo.
     fuera: list[str] = Field(min_length=1, max_length=10)
@@ -138,22 +161,6 @@ class DescripcionLLM(BaseModel):
 class EtiquetasLLM(BaseModel):
     etiquetas: list[str] = Field(min_length=5, max_length=15)
     tiktok: str = Field(min_length=1, max_length=250)
-
-
-class PersonajeLLM(BaseModel):
-    # Token con el que las escenas lo referencian: {ANA}. Se normaliza a
-    # mayúsculas al guardarlo, así que aquí basta con exigir que venga algo.
-    clave: str = Field(min_length=1, max_length=24)
-    nombre: str = Field(min_length=1, max_length=60)
-    # "persona" o "objeto". El reparto admite las dos cosas a propósito (un
-    # barco o un mapa que vuelve en varias escenas también tiene que no mutar),
-    # pero su retrato de referencia se encuadra distinto: pedirle cara, pelo y
-    # piel a un mapa le pinta una cara encima. Por defecto persona, que es el
-    # caso común; el valor se normaliza en casting.py.
-    tipo: str = "persona"
-    # Descripción física en inglés, concreta y visual. Es lo que se sustituye
-    # palabra por palabra en cada prompt donde salga el personaje.
-    ficha: str = Field(min_length=20)
 
 
 class CastingLLM(BaseModel):

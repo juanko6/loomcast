@@ -23,6 +23,7 @@ from ...config import (
 from ...db import get_session
 from ...repositories import personajes as personajes_repo
 from ...repositories import proyectos as proyectos_repo
+from ...repositories import reparto as reparto_repo
 from .. import progreso
 
 # Encuadre del retrato. Deliberadamente neutro y bien iluminado: esto no es una
@@ -153,21 +154,69 @@ def _preparar(proyecto_id: int, clave: str,
         ficha, seed, slug = personaje.ficha, personaje.seed, p.slug
         tipo = personaje.tipo or "persona"
 
+    return _prompt(ficha, tipo), seed, slug, tipo
+
+
+def _prompt(ficha: str, tipo: str) -> str:
+    """La ficha más el encuadre que le toca a su tipo."""
     encuadre = ENCUADRE_OBJETO if tipo == "objeto" else ENCUADRE_PERSONA
-    return f"{ficha}, {encuadre}", seed, slug, tipo
+    return f"{ficha}, {encuadre}"
+
+
+def _imagen(prompt: str, seed: int, destino) -> None:
+    """La llamada a ComfyUI, con los ajustes de [personajes] de config.toml.
+
+    Lo único que cambia entre el retrato de un personaje de proyecto y el de un
+    miembro del reparto propio es dónde se escribe el PNG: el encuadre, el
+    motor y el tamaño son los mismos, y deben serlo, porque las dos imágenes
+    hacen el mismo trabajo (ser la referencia visual de esa persona).
+    """
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    comfy.generar_imagen(
+        prompt, seed, destino,
+        PERSONAJE_WIDTH, PERSONAJE_HEIGHT, PERSONAJE_MOTOR,
+    )
 
 
 def _pintar(clave: str, prompt: str, seed: int, slug: str, tipo: str) -> str:
     """Una cara. Sin soltar la memoria: lo hace quien llama, porque el lote la
     suelta una sola vez al final y no tras cada personaje."""
-    carpeta(slug).mkdir(parents=True, exist_ok=True)
-    comfy.generar_imagen(
-        prompt,
-        seed,
-        ruta_retrato(slug, clave),
-        PERSONAJE_WIDTH,
-        PERSONAJE_HEIGHT,
-        PERSONAJE_MOTOR,
-    )
+    _imagen(prompt, seed, ruta_retrato(slug, clave))
     como = " como objeto" if tipo == "objeto" else ""
     return f"Retrato de {clave} generado{como} (seed {seed})"
+
+
+def generar_retrato_reparto(miembro_id: int, nuevo_seed: bool = False) -> str:
+    """La cara de alguien del reparto propio, sin pasar por ningún proyecto.
+
+    Hasta las series, la cara del reparto siempre venía copiada del proyecto
+    donde se promovió a esa persona, y eso bastaba: la descubrías escribiendo un
+    vídeo. Una serie empieza al revés —el hilo dice quiénes son antes del primer
+    capítulo— y entonces hace falta poder retratarlos ahí mismo, para que el
+    episodio 1 ya se traiga la cara buena en vez de inventarse una.
+
+    Es el mismo encuadre y el mismo motor que el retrato de un personaje de
+    proyecto: lo que cambia es dónde se guarda. Y el seed se guarda en el
+    miembro, así que rehacerle la cara en un proyecto "con el mismo seed" sigue
+    dando esta misma persona.
+    """
+    with get_session() as s:
+        m = reparto_repo.obtener(s, miembro_id)
+        if m is None:
+            raise ValueError(f"El miembro {miembro_id} no está en el reparto")
+        if not (m.ficha or "").strip():
+            raise ValueError(
+                f"«{m.nombre}» no tiene ficha; sin descripción física no hay "
+                "nada que retratar."
+            )
+        if nuevo_seed or not m.seed:
+            m.seed = random.randint(0, 2**31 - 1)
+            s.commit()
+        prompt = _prompt(m.ficha, m.tipo or "persona")
+        seed, slug, nombre = m.seed, m.slug, m.nombre
+
+    try:
+        _imagen(prompt, seed, reparto_repo.ruta_retrato(slug))
+    finally:
+        comfy.liberar_memoria()
+    return f"Retrato de «{nombre}» generado para el reparto (seed {seed})"

@@ -397,6 +397,30 @@ export const borrarDelReparto = (slug: string) =>
     method: "DELETE",
   });
 
+// Le hace la cara sin pasar por ningún proyecto. Es lo que una serie necesita:
+// el hilo dice quiénes son antes del primer capítulo, y la cara hay que fijarla
+// antes para que todos los episodios se traigan la misma. `nuevo_seed` da otra
+// persona distinta, para cuando la que salió no convence.
+export const generarCaraDelReparto = (slug: string, nuevo_seed = false) =>
+  api<{ slug: string; job_id: number }>(
+    `/reparto/${slug}/retrato?nuevo_seed=${nuevo_seed}`,
+    { method: "POST" },
+  );
+
+// Le escribe una voz desde su ficha (los cuatro bloques de VoiceDesign) y la
+// encola en el banco, donde queda como cualquier otra: si no convence, se borra.
+export const escribirVozDelReparto = (slug: string) =>
+  api<{ slug: string; voz: string; job_id: number }>(`/reparto/${slug}/voz`, {
+    method: "POST",
+  });
+
+// Le pone una voz que ya está en el banco; "" se la quita.
+export const asignarVozDelReparto = (slug: string, voz: string) =>
+  api<{ slug: string; voz: string }>(`/reparto/${slug}/voz`, {
+    method: "PUT",
+    body: { voz },
+  });
+
 // Modos de generación de vídeo (los describe la UI, los ejecuta el backend).
 export const MODOS_VIDEO = [
   {

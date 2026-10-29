@@ -291,3 +291,46 @@ def test_upscale_sin_escenas(session, dirs_tmp, fake_comfy):
     p = f.proyecto(session)
     with pytest.raises(ValueError, match="no tiene escenas"):
         upscale.generar_upscale(p.id)
+
+
+def test_el_retrato_del_reparto_no_pasa_por_ningun_proyecto(
+    session, dirs_tmp, fake_comfy
+):
+    """Una serie sabe quiénes son antes del primer capítulo, así que la cara se
+    fija ahí: si hubiera que promover desde un proyecto, el episodio 1 se
+    inventaría una y los demás heredarían esa."""
+    from backend.repositories import reparto as reparto_repo
+
+    m = f.miembro_reparto(session, ficha="a tall woman with red hair")
+
+    log = retratos.generar_retrato_reparto(m.id)
+
+    llamada = dict(fake_comfy.llamadas)["generar_imagen"]
+    assert llamada["prompt"] == f"a tall woman with red hair, {retratos.ENCUADRE_PERSONA}"
+    assert llamada["destino"] == reparto_repo.ruta_retrato(m.slug)
+    assert llamada["destino"].exists()
+    session.refresh(m)
+    # El seed se queda en el miembro: rehacerle la cara en un proyecto "con el
+    # mismo seed" sigue dando esta misma persona.
+    assert m.seed and str(m.seed) in log
+    assert fake_comfy.nombres()[-1] == "liberar_memoria"
+
+
+def test_rehacer_la_cara_del_reparto_con_otro_seed_da_otra_persona(
+    session, dirs_tmp, fake_comfy
+):
+    m = f.miembro_reparto(session, ficha="a tall woman with red hair", seed=7)
+
+    retratos.generar_retrato_reparto(m.id, nuevo_seed=True)
+
+    session.refresh(m)
+    assert m.seed != 7
+
+
+def test_sin_ficha_no_hay_nada_que_retratar(session, dirs_tmp, fake_comfy):
+    m = f.miembro_reparto(session, ficha="")
+    with pytest.raises(ValueError, match="ficha"):
+        retratos.generar_retrato_reparto(m.id)
+    with pytest.raises(ValueError, match="reparto"):
+        retratos.generar_retrato_reparto(999)
+    assert fake_comfy.llamadas == []
