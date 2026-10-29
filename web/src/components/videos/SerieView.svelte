@@ -13,18 +13,23 @@
   import IconButton from "../primitives/IconButton.svelte";
   import Thumbnail from "../primitives/Thumbnail.svelte";
   import { media } from "@/lib/api";
-  import type { MiembroReparto } from "@/lib/proyectos";
+  import type { MiembroReparto, Voz } from "@/lib/proyectos";
   import type { Hilo, SerieDetalle, Tramo } from "@/lib/series";
 
   let {
     s,
     reparto = [],
+    voces = [],
     busy = false,
+    bust = 0,
     onnuevoepisodio,
     onabrirepisodio,
     onanadirmiembro,
     onquitarmiembro,
     onideas,
+    oncara,
+    onvoz,
+    onasignarvoz,
     onguardarpremisa,
     onescribirhilo,
     oneditarhilo,
@@ -32,12 +37,23 @@
   }: {
     s: SerieDetalle;
     reparto?: MiembroReparto[];
+    // El banco de voces, para poder ponerle a cada uno una que ya existe.
+    voces?: Voz[];
     busy?: boolean;
+    // Cambia al terminar un retrato: refresca la miniatura, que si no se queda
+    // con la cara vieja en caché.
+    bust?: number;
     onnuevoepisodio: (apunte: string) => void;
     onabrirepisodio: (pid: number) => void;
     onanadirmiembro: (slug: string) => void;
     onquitarmiembro: (slug: string, nombre: string) => void;
     onideas: () => void;
+    // La cara y la voz del reparto fijo: se fijan aquí, antes del primer
+    // episodio, porque en una serie son de la serie y no de un capítulo.
+    // `tenia` dice si ya tenía cara, para pedir otra distinta en vez de repetir.
+    oncara: (slug: string, tenia: boolean) => void;
+    onvoz: (slug: string) => void;
+    onasignarvoz: (slug: string, voz: string) => void;
     // Guardar la premisa no reescribe el hilo: son dos acciones porque rehacer
     // el hilo replanifica los capítulos que no se han escrito.
     onguardarpremisa: (premisa: string, episodios: number) => void;
@@ -353,40 +369,71 @@
         <h3 class="text-sm font-semibold">Reparto fijo</h3>
         <p class="text-xs text-dim">
           Sale en todos los episodios. Cada capítulo nuevo se los trae del reparto propio con su
-          ficha, su cara y su voz ya puestas, así que no hay que volver a describirlos.
+          ficha, su cara y su voz ya puestas, así que no hay que volver a describirlos. Hazles la
+          cara y la voz aquí, antes del primer episodio: así los seis usan la misma.
         </p>
       </div>
 
       {#if s.miembros.length}
         <ul class="space-y-2">
           {#each s.miembros as m (m.slug)}
-            <li class="flex items-center gap-3 rounded-lg bg-surface p-2">
-              <Thumbnail
-                src={m.retrato ? media(`/reparto/${m.slug}/retrato`) : null}
-                alt={`Retrato de ${m.nombre}`}
-                size={40}
-                icon="clapper"
-              />
-              <span class="min-w-0 flex-1">
-                <span class="block truncate text-sm font-medium">{m.nombre}</span>
-                <span class="block truncate text-xs text-muted">
-                  {`{${m.clave}}`}{m.voz ? ` · voz ${m.voz}` : " · sin voz"}
+            <li class="space-y-2 rounded-lg bg-surface p-2">
+              <div class="flex items-center gap-3">
+                <Thumbnail
+                  src={m.retrato ? media(`/reparto/${m.slug}/retrato?v=${bust}`) : null}
+                  alt={`Retrato de ${m.nombre}`}
+                  size={40}
+                  icon="clapper"
+                />
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-sm font-medium">{m.nombre}</span>
+                  <span class="block truncate text-xs text-muted">
+                    {`{${m.clave}}`}{m.voz ? ` · voz ${m.voz}` : " · sin voz"}
+                  </span>
                 </span>
-              </span>
-              <IconButton
-                name="trash"
-                label={`Quitar a ${m.nombre} de la serie`}
-                size={14}
-                onclick={() => onquitarmiembro(m.slug, m.nombre)}
-                class="hover:bg-danger-soft hover:text-danger"
-              />
+                <IconButton
+                  name="trash"
+                  label={`Quitar a ${m.nombre} de la serie`}
+                  size={14}
+                  onclick={() => onquitarmiembro(m.slug, m.nombre)}
+                  class="hover:bg-danger-soft hover:text-danger"
+                />
+              </div>
+
+              <!-- La cara y la voz, aquí y no dentro de un episodio: en una
+                   serie se fijan una vez y vuelven en todos los capítulos. -->
+              <div class="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy}
+                  onclick={() => oncara(m.slug, m.retrato)}
+                >
+                  {m.retrato ? "Otra cara" : "Generar la cara"}
+                </Button>
+                <select
+                  class="control h-8 w-auto py-0 text-xs"
+                  aria-label={`Voz de ${m.nombre}`}
+                  value={m.voz}
+                  onchange={(e) => onasignarvoz(m.slug, e.currentTarget.value)}
+                >
+                  <option value="">— sin voz —</option>
+                  {#each voces as v (v.slug)}
+                    <option value={v.slug}>{v.nombre}</option>
+                  {/each}
+                </select>
+                <Button size="sm" variant="ghost" disabled={busy} onclick={() => onvoz(m.slug)}>
+                  {m.voz ? "Otra voz desde su ficha" : "Escribir su voz"}
+                </Button>
+              </div>
             </li>
           {/each}
         </ul>
       {:else}
         <p class="text-sm text-dim">
-          Todavía no hay nadie fijo. Promueve a un personaje al reparto propio desde el paso de
-          escenas de un vídeo y añádelo aquí: es lo que hace que no cambie de cara entre capítulos.
+          Todavía no hay nadie fijo. Escribe el hilo y sus protagonistas se fichan solos, con su
+          ficha ya puesta; o promueve a alguien al reparto propio desde el paso de escenas de un
+          vídeo y añádelo aquí.
         </p>
       {/if}
 

@@ -3,6 +3,7 @@ import pytest
 
 from backend.repositories import personajes as personajes_repo
 from backend.repositories import reparto as reparto_repo
+from backend.repositories import voces as voces_repo
 from tests import factories as f
 
 pytestmark = pytest.mark.integration
@@ -318,3 +319,56 @@ def test_retrato_del_reparto(client, session, dirs_tmp):
     _retrato_reparto(dirs_tmp, "ana-narradora", contenido=b"png")
     r = client.get("/api/reparto/ana-narradora/retrato")
     assert r.status_code == 200 and r.content == b"png"
+
+
+# --- cara y voz sin pasar por un proyecto -----------------------------------
+
+def test_encolar_la_cara_de_alguien_del_reparto(
+    client, session, dirs_tmp, jobs_encolados
+):
+    """La vía que una serie necesita: el hilo dice quiénes son antes del primer
+    capítulo, y la cara se fija ahí para que todos los episodios usen la misma."""
+    m = f.miembro_reparto(session)
+
+    r = client.post(f"/api/reparto/{m.slug}/retrato?nuevo_seed=true")
+
+    assert r.json()["job_id"]
+    # El `ref_id` es el miembro: es a él a quien se le pinta la cara.
+    assert jobs_encolados == [("generar_retrato_reparto", m.id)]
+    assert jobs_encolados.params == [{"nuevo_seed": True}]
+
+
+def test_la_cara_de_quien_no_tiene_ficha_se_niega(client, session, dirs_tmp):
+    m = f.miembro_reparto(session, slug="sin-ficha", nombre="Sin ficha", ficha="")
+    assert client.post(f"/api/reparto/{m.slug}/retrato").status_code == 400
+    assert client.post("/api/reparto/nadie/retrato").status_code == 404
+
+
+def test_escribirle_la_voz_desde_su_ficha(client, session, dirs_tmp):
+    m = f.miembro_reparto(session)
+
+    r = client.post(f"/api/reparto/{m.slug}/voz").json()
+
+    assert r["job_id"] and r["voz"]
+    session.expire_all()
+    # Queda apuntada en el miembro: viaja con él a cada episodio.
+    assert reparto_repo.por_slug(session, m.slug).voz == r["voz"]
+    # Y la instrucción sale de su ficha, no de una plantilla en blanco.
+    voz = voces_repo.por_slug(session, r["voz"])
+    assert "[PERFIL DE VOZ]" in voz.instruct and "red hair" in voz.instruct
+
+
+def test_asignarle_una_voz_que_ya_esta_en_el_banco(client, session, dirs_tmp):
+    m = f.miembro_reparto(session, voz="")
+    voces_repo.crear(session, "narrador", "Narrador", "[PERFIL DE VOZ] grave")
+    session.commit()
+
+    r = client.put(f"/api/reparto/{m.slug}/voz", json={"voz": "narrador"})
+
+    assert r.json() == {"slug": m.slug, "voz": "narrador"}
+    session.expire_all()
+    assert reparto_repo.por_slug(session, m.slug).voz == "narrador"
+    # Y una que no existe no se le pega.
+    assert client.put(
+        f"/api/reparto/{m.slug}/voz", json={"voz": "fantasma"}
+    ).status_code == 404

@@ -332,10 +332,16 @@ def test_la_serie_no_tiene_estado_de_produccion(session, dirs_tmp):
 
 # --- el hilo ----------------------------------------------------------------
 
+FICHA = ("a tired woman in her late thirties with olive skin, dark hair in a "
+         "loose bun and permanent shadows under her eyes, wearing a faded "
+         "navy hoodie over supermarket work trousers")
+
 HILO = {
     "premisa": "Alicia hereda una casa en la que ya vive alguien.",
     "pregunta": "¿Quién entraba en la casa por la noche?",
     "destino": "Era su hermano y le deja quedarse.",
+    "reparto": [{"clave": "ALICIA", "nombre": "Alicia", "tipo": "persona",
+                 "ficha": FICHA}],
     "fuera": ["no aparece la policia"],
     "episodios_recomendados": 4,
     "por_que": "aguanta cuatro giros",
@@ -512,3 +518,51 @@ def test_lo_que_viene_detras_entra_en_corto(session, dirs_tmp, fake_llm):
     assert len(vetos[1]) < 220 and vetos[1].endswith("…")
     # El tramo propio sí va entero: es lo que tiene que hacer hoy.
     assert "Lo que pasa en este episodio: recibe el paquete" in ctx
+
+
+# --- el reparto que sale del hilo -------------------------------------------
+
+def test_el_hilo_ficha_a_los_protagonistas_en_la_serie(session, dirs_tmp, fake_llm):
+    """El reparto de una serie no es de un capítulo: se ficha una vez, antes del
+    primero, para poder fijarle cara y voz y que vuelvan en todos."""
+    from backend.repositories import reparto as reparto_repo
+
+    serie = f.serie(session, premisa="Alicia hereda una casa habitada.")
+    _hilo_llm(fake_llm)
+
+    log = series.generar_hilo(serie.id)
+
+    assert "1 fichados (ALICIA)" in log
+    session.expire_all()
+    fichados = reparto_repo.listar(session)
+    assert [(m.clave, m.nombre, m.ficha) for m in fichados] == [
+        ("ALICIA", "Alicia", FICHA)
+    ]
+    # Y entra en el reparto fijo, que es lo que lo lleva a cada episodio.
+    assert [m.reparto_slug for m in series_repo.miembros(session, serie.id)] == [
+        "alicia"
+    ]
+    # El hilo no se queda una copia: el reparto vive en el reparto.
+    assert "reparto" not in hilos_repo.contenido(session, serie.id)
+
+
+def test_replanificar_no_vuelve_a_fichar_y_le_da_el_reparto_al_llm(
+    session, dirs_tmp, fake_llm
+):
+    from backend.repositories import reparto as reparto_repo
+
+    serie = f.serie(session, premisa="Alicia hereda una casa habitada.")
+    _hilo_llm(fake_llm)
+    series.generar_hilo(serie.id)
+    session.expire_all()
+
+    series.generar_hilo(serie.id)
+
+    session.expire_all()
+    # Ni un segundo Alicia en el reparto propio ni en la serie.
+    assert len(reparto_repo.listar(session)) == 1
+    assert len(series_repo.miembros(session, serie.id)) == 1
+    # Y el LLM recibe quién es, para escribir los tramos con ella.
+    user = fake_llm.llamadas[-1]["user"]
+    assert "REPARTO FIJO DE LA SERIE" in user
+    assert "{ALICIA} Alicia: a tired woman" in user

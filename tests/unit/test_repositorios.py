@@ -433,3 +433,57 @@ def test_borrar_la_serie_se_lleva_su_hilo(session):
     session.commit()
 
     assert hilos_repo.ultimo(session, serie.id) is None
+
+
+# --- fichar el reparto de una serie -----------------------------------------
+
+def test_fichar_busca_slug_libre_en_vez_de_fallar(session):
+    """Al promover a alguien el slug repetido se rechaza —estás guardando a una
+    persona concreta—, pero dos series pueden tener cada una su Marta y aquí no
+    hay nadie delante para rebautizarla."""
+    from backend.repositories import reparto as reparto_repo
+    from backend.services import reparto as reparto_service
+
+    f.miembro_reparto(session, slug="marta", nombre="Marta")
+    serie = f.serie(session)
+
+    fichados = reparto_service.fichar_para_serie(serie.id, [
+        {"clave": "MARTA", "nombre": "Marta", "tipo": "persona",
+         "ficha": "a tired woman with dark hair wearing a faded hoodie"},
+    ])
+
+    assert [x["slug"] for x in fichados] == ["marta-2"]
+    session.expire_all()
+    assert reparto_repo.por_slug(session, "marta-2").clave == "MARTA"
+
+
+def test_fichar_se_salta_a_quien_llega_sin_ficha(session):
+    """Sin ficha no hay nada que retratar: entra el resto, que es mejor que no
+    entrar nadie."""
+    from backend.services import reparto as reparto_service
+
+    serie = f.serie(session)
+
+    fichados = reparto_service.fichar_para_serie(serie.id, [
+        {"clave": "SIN", "nombre": "Sin ficha", "ficha": "  "},
+        {"clave": "EL VECINO", "nombre": "El vecino",
+         "ficha": "a heavy man in his fifties wearing a stained work jacket"},
+    ])
+
+    assert [x["clave"] for x in fichados] == ["EL_VECINO"]
+
+
+def test_fichar_no_toca_una_serie_que_ya_tiene_reparto(session):
+    from backend.services import reparto as reparto_service
+
+    from backend.repositories import series as series_repo
+
+    serie = f.serie(session)
+    m = f.miembro_reparto(session)
+    series_repo.anadir_miembro(session, serie.id, m.slug)
+    session.commit()
+
+    assert reparto_service.fichar_para_serie(serie.id, [
+        {"clave": "OTRA", "nombre": "Otra",
+         "ficha": "a young woman with short bleached hair wearing a denim jacket"},
+    ]) == []

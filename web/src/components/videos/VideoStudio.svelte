@@ -190,6 +190,38 @@
         fallo(e);
       }
     },
+    // La cara y la voz del reparto fijo. Van aquí, en la serie, porque es
+    // donde se decide una vez para todos los capítulos: hasta las series, la
+    // cara solo se podía fijar dentro de un proyecto y el episodio 1 acababa
+    // decidiendo por los otros cinco.
+    cara: async (slug: string, tenia: boolean) => {
+      try {
+        // Si ya tenía cara, lo que se pide es otra distinta.
+        await API.generarCaraDelReparto(slug, tenia);
+        refrescarJobs();
+      } catch (e) {
+        fallo(e);
+      }
+    },
+    voz: async (slug: string) => {
+      try {
+        await API.escribirVozDelReparto(slug);
+        await cargarVista();
+        refrescarJobs();
+        API.listarVoces().then((v) => (voces = v)).catch(() => {});
+      } catch (e) {
+        fallo(e);
+      }
+    },
+    asignarVoz: async (slug: string, voz: string) => {
+      try {
+        await API.asignarVozDelReparto(slug, voz);
+        await cargarVista();
+        API.listarReparto().then((r) => (reparto = r)).catch(() => {});
+      } catch (e) {
+        fallo(e);
+      }
+    },
     // Guardar la premisa y rehacer el hilo son dos acciones a propósito:
     // replanificar borra los tramos por los que la serie todavía no ha pasado,
     // y eso no puede salir de teclear en un campo.
@@ -762,12 +794,17 @@
         <SerieView
           s={serie}
           {reparto}
+          {voces}
+          {bust}
           busy={hayTrabajo}
           onnuevoepisodio={accSerie.nuevoEpisodio}
           onabrirepisodio={(pid) => irA("proyecto", pid)}
           onanadirmiembro={accSerie.anadirMiembro}
           onquitarmiembro={accSerie.quitarMiembro}
           onideas={accSerie.ideas}
+          oncara={accSerie.cara}
+          onvoz={accSerie.voz}
+          onasignarvoz={accSerie.asignarVoz}
           onguardarpremisa={accSerie.guardarPremisa}
           onescribirhilo={accSerie.escribirHilo}
           oneditarhilo={accSerie.editarHilo}

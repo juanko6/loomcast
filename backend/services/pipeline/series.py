@@ -48,6 +48,7 @@ from ...repositories import metadatos as metadatos_repo
 from ...repositories import personajes as personajes_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
+from ...repositories import reparto as reparto_repo
 from ...repositories import series as series_repo
 from ...schemas import HiloLLM, ResumenEpisodioLLM
 
@@ -389,6 +390,16 @@ def generar_hilo(serie_id: int) -> str:
         nombre, plantilla = serie.nombre, serie.plantilla
         pedidos = serie.episodios_objetivo or 0
         previo = hilos_repo.contenido(s, serie_id)
+        # Quiénes son ya los de la serie. Si hay alguien, el hilo no ficha a
+        # nadie más: se le dan y los escribe en los tramos.
+        fijos = [
+            {"clave": x.clave, "nombre": x.nombre, "ficha": x.ficha}
+            for x in (
+                reparto_repo.por_slug(s, m.reparto_slug)
+                for m in series_repo.miembros(s, serie_id)
+            )
+            if x is not None
+        ]
         rodados = [
             {
                 "episodio": p.episodio,
@@ -402,10 +413,12 @@ def generar_hilo(serie_id: int) -> str:
     # Una serie con episodios pero sin hilo (las de antes, o una a la que se le
     # escribe el hilo a mitad) planifica de cero: no hay mapa que respetar, y
     # sus capítulos entran como contexto igual porque el prompt los recibe.
-    fijos = hilos_repo.tramos(previo)[:len(rodados)] if (rodados and previo) else []
+    tramos_fijos = (
+        hilos_repo.tramos(previo)[:len(rodados)] if (rodados and previo) else []
+    )
 
     sistema = (PROMPTS_DIR / "hilo.md").read_text().replace(
-        "{episodios}", _cuantos_episodios(pedidos, len(fijos), previo)
+        "{episodios}", _cuantos_episodios(pedidos, len(tramos_fijos), previo)
     )
     pl = plantillas_repo.cargar(plantilla)
     user = (
@@ -414,21 +427,45 @@ def generar_hilo(serie_id: int) -> str:
         f"Premisa del usuario:\n{premisa}"
     )
     if fijos:
-        user = f"{user}\n\n{_bloque_rodado(rodados[:len(fijos)], previo)}"
+        user = (
+            f"{user}\n\nREPARTO FIJO DE LA SERIE. Son sus personajes y no se "
+            "tocan: devuélvelos tal cual en `reparto` y escribe los tramos con "
+            "ellos.\n"
+            + "\n".join(
+                f"- {{{x['clave']}}} {x['nombre']}: {x['ficha']}" for x in fijos
+            )
+        )
+    if tramos_fijos:
+        user = f"{user}\n\n{_bloque_rodado(rodados[:len(tramos_fijos)], previo)}"
     h = llm.chat(sistema, user, HiloLLM)
 
     contenido = h.model_dump()
-    contenido["tramos"] = fijos + contenido["tramos"]
+    contenido["tramos"] = tramos_fijos + contenido["tramos"]
+    # El reparto NO se guarda en el hilo: se convierte en el reparto fijo de la
+    # serie, que es donde vive el reparto de verdad (con su cara, su voz y su
+    # viaje a cada episodio). Guardarlo en los dos sitios sería tener dos
+    # versiones del mismo personaje esperando a no coincidir.
+    propuesto = contenido.pop("reparto", [])
     with get_session() as s:
         fila = hilos_repo.crear(s, serie_id, contenido)
         s.commit()
         version, n = fila.version, len(json.loads(fila.contenido)["tramos"])
-    if fijos:
+
+    # Fuera de la transacción: escribe filas del reparto propio y abre su
+    # sesión, igual que `traer_reparto_fijo` al crear un episodio.
+    from ...services import reparto as reparto_service
+
+    fichados = reparto_service.fichar_para_serie(serie_id, propuesto)
+    if tramos_fijos:
         return (
-            f"Hilo v{version} replanificado: {len(fijos)} tramos rodados "
-            f"intactos y {n - len(fijos)} por delante"
+            f"Hilo v{version} replanificado: {len(tramos_fijos)} tramos rodados "
+            f"intactos y {n - len(tramos_fijos)} por delante"
         )
-    return f"Hilo v{version} escrito, {n} episodios"
+    quienes = ", ".join(x["clave"] for x in fichados)
+    return (
+        f"Hilo v{version} escrito, {n} episodios"
+        + (f" y {len(fichados)} fichados ({quienes})" if fichados else "")
+    )
 
 
 def contexto_episodio_siguiente(serie_id: int) -> tuple[int, str] | None:

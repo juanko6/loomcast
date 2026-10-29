@@ -23,6 +23,7 @@ A diferencia del banco de voces, aquí no se encola nada: promover y traer son
 copiar un PNG y escribir una fila, sin GPU ni LLM de por medio, así que van en
 el hilo HTTP y la UI ve el resultado al instante.
 """
+import itertools
 import re
 import shutil
 import unicodedata
@@ -56,10 +57,30 @@ class SinFicha(ValueError):
     pass
 
 
+class VozNoExiste(LookupError):
+    pass
+
+
 def _slugify(texto: str) -> str:
     s = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
     s = re.sub(r"[^a-zA-Z0-9]+", "-", s).strip("-").lower()
     return s[:40] or "miembro"
+
+
+def _slug_libre(s, base: str) -> str:
+    """`base` si nadie la usa, y si no base-2, base-3…
+
+    Al promover a alguien, el slug repetido se rechaza: estás guardando a una
+    persona concreta y dos "Ana" en la lista no se distinguen. Al ficharlos
+    desde el hilo no hay nadie delante para rebautizarlos, y dos series pueden
+    tener cada una su Marta, así que ahí se busca sitio en vez de fallar.
+    """
+    if reparto_repo.por_slug(s, base) is None:
+        return base
+    return next(
+        c for c in (f"{base}-{n}" for n in itertools.count(2))
+        if reparto_repo.por_slug(s, c) is None
+    )
 
 
 def _dict(m) -> dict:
@@ -237,3 +258,115 @@ def ruta_retrato(slug: str):
     if not ruta.exists():
         raise MiembroNoExiste(slug)
     return ruta
+
+
+# --- el reparto que propone el hilo -----------------------------------------
+
+def fichar_para_serie(serie_id: int, personajes: list[dict]) -> list[dict]:
+    """Da de alta a los protagonistas del hilo y los mete en la serie.
+
+    Es la otra manera de entrar al reparto propio, y la que una serie necesita:
+    `promover` da por hecho que ya hay un proyecto con la ficha afinada y una
+    cara que convence, y eso vale cuando descubres a alguien escribiendo un
+    vídeo. En una serie es al revés — sabes quiénes son antes del primer
+    capítulo, y lo que quieres es fijarles la cara y la voz **antes**, para que
+    los seis episodios usen la misma.
+
+    No toca una serie que ya tiene reparto fijo: replanificar el hilo no puede
+    refichar a nadie ni duplicar a la protagonista. Lo hecho no se toca, igual
+    que con los tramos ya rodados.
+
+    No genera ni cara ni voz: eso son GPU y modelo, y van por la cola desde la
+    pantalla de la serie (`generar_retrato_reparto` y `crear_su_voz`).
+    """
+    # El normalizador de claves del casting, que es el que decide cómo se
+    # escribe un marcador: tenerlo distinto aquí sería tener {EL VECINO} en una
+    # mitad de la app y {EL_VECINO} en la otra.
+    from ..services.pipeline.casting import normalizar_tipo
+
+    with get_session() as s:
+        if series_repo.miembros(s, serie_id):
+            return []
+        fichados = []
+        for p in personajes:
+            ficha = " ".join((p.get("ficha") or "").split())
+            nombre = (p.get("nombre") or p.get("clave") or "").strip()
+            if not ficha or not nombre:
+                # Sin ficha no hay nada que retratar y sin nombre no hay nada
+                # que listar: entra el resto, que es mejor que no entrar nadie.
+                continue
+            clave = personajes_repo.normalizar_clave(p.get("clave") or nombre)
+            slug = _slug_libre(s, _slugify(nombre))
+            reparto_repo.crear(
+                s, slug, nombre, clave, ficha,
+                normalizar_tipo(p.get("tipo") or "persona", ficha), 0, "",
+            )
+            series_repo.anadir_miembro(s, serie_id, slug)
+            fichados.append({"slug": slug, "nombre": nombre, "clave": clave})
+        s.commit()
+    return fichados
+
+
+def crear_su_voz(slug: str) -> dict:
+    """Le escribe una voz desde su ficha y la encola en el banco.
+
+    La instrucción sale de la ficha porque es el mismo material del que sale su
+    cara: la edad, el género y el aire que se ven son los que se tienen que oír
+    (`voces.instruct_desde_ficha`, los cuatro bloques de VoiceDesign). Queda en
+    el banco como cualquier otra voz, así que si no convence se borra y se
+    escribe a mano.
+
+    Importado aquí dentro: el banco de voces desvincula las suyas de este
+    reparto al borrarlas, y a nivel de módulo el ciclo sería real.
+    """
+    from ..services import voces as voces_service
+
+    with get_session() as s:
+        m = reparto_repo.por_slug(s, slug)
+        if m is None:
+            raise MiembroNoExiste(slug)
+        if not (m.ficha or "").strip():
+            raise SinFicha(slug)
+        nombre, ficha, tipo = m.nombre, m.ficha, m.tipo or "persona"
+
+    creada = voces_service.crear_para_personaje(
+        nombre, voces_service.instruct_desde_ficha(nombre, ficha, tipo)
+    )
+    with get_session() as s:
+        reparto_repo.por_slug(s, slug).voz = creada["slug"]
+        s.commit()
+    return {"slug": slug, "voz": creada["slug"], "job_id": creada["job_id"]}
+
+
+def asignar_voz(slug: str, voz_slug: str) -> dict:
+    """Le pone una voz que ya está en el banco (o se la quita con "")."""
+    with get_session() as s:
+        m = reparto_repo.por_slug(s, slug)
+        if m is None:
+            raise MiembroNoExiste(slug)
+        if voz_slug and voces_repo.por_slug(s, voz_slug) is None:
+            raise VozNoExiste(voz_slug)
+        m.voz = voz_slug
+        s.commit()
+    return {"slug": slug, "voz": voz_slug}
+
+
+def encolar_retrato(slug: str, nuevo_seed: bool = False) -> dict:
+    """Encola la cara de un miembro del reparto propio.
+
+    Por la cola y no aquí mismo, al contrario que el resto de este módulo:
+    promover y traer son copiar un PNG, pero esto es ComfyUI cargando un modelo
+    de imagen, y la cola es la que se pelea por la memoria con todo lo demás.
+    """
+    from ..workers import queue
+
+    with get_session() as s:
+        m = reparto_repo.por_slug(s, slug)
+        if m is None:
+            raise MiembroNoExiste(slug)
+        if not (m.ficha or "").strip():
+            raise SinFicha(slug)
+        miembro_id = m.id
+    return {"slug": slug,
+            "job_id": queue.encolar("generar_retrato_reparto", miembro_id,
+                                    nuevo_seed=nuevo_seed)}
