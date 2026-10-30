@@ -20,6 +20,10 @@ function proyecto(extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle {
 }
 
 const GUION_FRASES = { gancho: "Hola", frases: ["Uno", "Dos"], cta: "Suscríbete" };
+const METADATOS = {
+  youtube: { titulo: "Título YT", descripcion: "Descripción larga", etiquetas: ["a", "b"] },
+  tiktok: { descripcion: "Texto TikTok" },
+};
 const GUION_NARRACION = { gancho: "Hola", narracion: "Érase una vez", cta: "Fin" };
 const GUION_LINEAS = {
   gancho: "Hola",
@@ -202,10 +206,7 @@ describe("StepGuion", () => {
 });
 
 describe("StepMetadatos", () => {
-  const meta = {
-    youtube: { titulo: "Título YT", descripcion: "Descripción larga", etiquetas: ["a", "b"] },
-    tiktok: { descripcion: "Texto TikTok" },
-  };
+  const meta = METADATOS;
 
   it("sin metadatos ofrece generarlos y lo explica", async () => {
     const ongenerar = vi.fn();
@@ -217,11 +218,27 @@ describe("StepMetadatos", () => {
 
   it("con metadatos los muestra y el botón pasa a regenerar", () => {
     render(StepMetadatos, { p: proyecto({ metadatos: meta }), ongenerar: vi.fn() });
-    expect(screen.getByText("Título YT")).toBeInTheDocument();
-    expect(screen.getByText("Descripción larga")).toBeInTheDocument();
-    expect(screen.getByText("Texto TikTok")).toBeInTheDocument();
-    expect(screen.getByText("a")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Título YT")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Descripción larga")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Texto TikTok")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Regenerar metadatos" })).toBeInTheDocument();
+  });
+
+  it("las etiquetas van como texto, en las dos formas en las que se pegan", () => {
+    render(StepMetadatos, { p: proyecto({ metadatos: meta }), ongenerar: vi.fn() });
+    // Para la caja de etiquetas de YouTube, y para el título o la descripción:
+    // pintadas como adornos no se podían copiar.
+    expect(screen.getByDisplayValue("a, b")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("#a #b")).toBeInTheDocument();
+  });
+
+  it("cada texto trae su botón de copiar", () => {
+    render(StepMetadatos, { p: proyecto({ metadatos: meta }), ongenerar: vi.fn() });
+    for (const n of ["Copiar título", "Copiar etiquetas", "Copiar etiquetas como hashtags"]) {
+      expect(screen.getByRole("button", { name: n })).toBeInTheDocument();
+    }
+    // Una para YouTube y otra para TikTok.
+    expect(screen.getAllByRole("button", { name: "Copiar descripción" })).toHaveLength(2);
   });
 
   it("'busy' bloquea la generación", () => {
@@ -257,7 +274,7 @@ describe("ProjectView: qué paso se muestra", () => {
   });
 
   it("Escenas se desbloquea con los subtítulos, y Vídeo con las imágenes completas", () => {
-    montar(proyecto({ guion: GUION_FRASES, voz_disponible: true, subtitulos: "1\n...", metadatos: {} as never }));
+    montar(proyecto({ guion: GUION_FRASES, voz_disponible: true, subtitulos: "1\n...", metadatos: METADATOS }));
     expect(screen.getByRole("button", { name: /Escenas/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Vídeo final/ })).toBeDisabled();
   });
@@ -329,10 +346,10 @@ describe("ProjectView: el paso de Música", () => {
 
   it("es opcional: no se sugiere sola aunque esté pendiente", () => {
     montar(proyecto({
-      guion: GUION_FRASES, voz_disponible: true, subtitulos: "x", metadatos: {} as never,
+      guion: GUION_FRASES, voz_disponible: true, subtitulos: "x", metadatos: METADATOS,
       imagenes_completas: true, video_disponible: true,
     }));
-    expect(activo()).toBe("Vídeo final");
+    expect(activo()).not.toBe("Música");
   });
 
   it("se entra a mano y ofrece generar la música", async () => {

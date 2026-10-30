@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import Button from "../primitives/Button.svelte";
 import Chip from "../primitives/Chip.svelte";
+import CopyField from "../primitives/CopyField.svelte";
 import Field from "../primitives/Field.svelte";
 import Icon from "../primitives/Icon.svelte";
 import IconButton from "../primitives/IconButton.svelte";
@@ -261,5 +262,56 @@ describe("Viewer", () => {
 
     await userEvent.keyboard("a");
     expect(onclose).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("CopyField", () => {
+  // jsdom no trae portapapeles: se pone uno y se mira qué se le pidió escribir.
+  function conPortapapeles(escribir = vi.fn().mockResolvedValue(undefined)) {
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: escribir },
+      configurable: true,
+    });
+    return escribir;
+  }
+
+  it("muestra el texto en un campo de solo lectura", () => {
+    render(CopyField, { label: "Título", text: "Un título", hint: "9 caracteres" });
+    const campo = screen.getByLabelText("Título") as HTMLTextAreaElement;
+    expect(campo.value).toBe("Un título");
+    expect(campo).toHaveAttribute("readonly");
+    expect(screen.getByText("9 caracteres")).toBeInTheDocument();
+  });
+
+  it("copia el texto y lo dice", async () => {
+    const escribir = conPortapapeles();
+    render(CopyField, { label: "Etiquetas", text: "a, b" });
+    await userEvent.click(screen.getByRole("button", { name: "Copiar etiquetas" }));
+    expect(escribir).toHaveBeenCalledWith("a, b");
+    expect(await screen.findByText("Copiado")).toBeInTheDocument();
+  });
+
+  it("si el portapapeles pide permiso y no lo hay, copia por el camino viejo", async () => {
+    conPortapapeles(vi.fn().mockRejectedValue(new Error("sin permiso")));
+    const viejo = vi.fn().mockReturnValue(true);
+    Object.defineProperty(document, "execCommand", { value: viejo, configurable: true });
+    render(CopyField, { label: "Título", text: "Un título" });
+    await userEvent.click(screen.getByRole("button", { name: "Copiar título" }));
+    expect(viejo).toHaveBeenCalledWith("copy");
+    expect(await screen.findByText("Copiado")).toBeInTheDocument();
+  });
+
+  it("si el portapapeles falla, deja el texto seleccionado para copiarlo a mano", async () => {
+    conPortapapeles(vi.fn().mockRejectedValue(new Error("sin permiso")));
+    Object.defineProperty(document, "execCommand", {
+      value: () => { throw new Error("tampoco"); },
+      configurable: true,
+    });
+    render(CopyField, { label: "Título", text: "Un título" });
+    const campo = screen.getByLabelText("Título") as HTMLTextAreaElement;
+    await userEvent.click(screen.getByRole("button", { name: "Copiar título" }));
+    expect(campo.selectionStart).toBe(0);
+    expect(campo.selectionEnd).toBe("Un título".length);
+    expect(screen.queryByText("Copiado")).toBeNull();
   });
 });
