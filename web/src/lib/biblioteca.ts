@@ -21,6 +21,10 @@ export interface LibItem {
   src: string | null;
   // Modo del estudio al que salta al abrirlo.
   destino: StudioMode;
+  // Fecha en la que se subió, o "" si no se ha subido (o no es un vídeo: solo
+  // los vídeos se publican). La biblioteca es donde se mira lo hecho, así que
+  // es donde más falta hace saber qué está ya arriba.
+  publicado_en: string;
 }
 
 const TIPO_IMAGEN: Record<string, string> = {
@@ -52,6 +56,7 @@ export async function cargarBiblioteca(): Promise<LibItem[]> {
       thumb: media(`/proyectos/${p.id}/imagenes/0`),
       src: p.estado === "FINAL" ? media(`/proyectos/${p.id}/video`) : null,
       destino: "videos",
+      publicado_en: p.publicado_en,
     })),
     ...imagenes.map((g): LibItem => ({
       kind: "imagen",
@@ -65,6 +70,7 @@ export async function cargarBiblioteca(): Promise<LibItem[]> {
           : media(`/galeria/${g.id}/fuente`),
       src: g.estado === "final" ? media(`/galeria/${g.id}/final`) : null,
       destino: "imagenes",
+      publicado_en: "",
     })),
     ...musica.map((m): LibItem => ({
       kind: "musica",
@@ -75,6 +81,7 @@ export async function cargarBiblioteca(): Promise<LibItem[]> {
       thumb: null,
       src: m.estado === "generada" ? media(`/musica/${m.id}/audio`) : null,
       destino: "musica",
+      publicado_en: "",
     })),
   ];
 

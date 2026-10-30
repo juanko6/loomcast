@@ -91,7 +91,13 @@
     <p class="line-clamp-2 text-sm font-medium break-words">{item.titulo}</p>
     <div class="mt-auto flex flex-wrap items-center gap-1.5">
       {#if item.subtipo}<Chip tone="accent">{item.subtipo}</Chip>{/if}
-      <Chip>{item.estado}</Chip>
+      <!-- Un vídeo subido está en FINAL por definición: la marca dice más que
+           el estado, así que ocupa su sitio. -->
+      {#if item.publicado_en}
+        <Chip tone="ok">subido</Chip>
+      {:else}
+        <Chip>{item.estado}</Chip>
+      {/if}
       <button
         type="button"
         onclick={onopen}

@@ -9,6 +9,7 @@ from ..schemas import (
     MusicaProyectoIn,
     PersonajeNuevoIn,
     PersonajesIn,
+    PublicacionIn,
     RegenerarClipIn,
     RegenerarImagenIn,
     ResumenEpisodioIn,
@@ -376,6 +377,44 @@ def borrar_video(pid: int, con_versiones: bool = False):
         return proyectos_service.borrar_video(pid, con_versiones)
     except proyectos_service.ProyectoNoExiste:
         raise HTTPException(404, "Proyecto no existe")
+
+
+@router.put("/{pid}/publicacion")
+def marcar_publicado(pid: int, body: PublicacionIn):
+    """Apunta que el vídeo ya está subido (y dónde). Vuelve a llamarse para
+    corregir el enlace o la nota."""
+    try:
+        return proyectos_service.marcar_publicado(
+            pid, body.fecha, body.url, body.nota
+        )
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+
+
+@router.delete("/{pid}/publicacion")
+def quitar_publicado(pid: int):
+    """Quita la marca de publicado. No toca el disco."""
+    try:
+        proyectos_service.quitar_publicado(pid)
+        return {"publicado": False}
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+
+
+@router.post("/{pid}/liberar")
+def liberar_espacio(pid: int):
+    """Tira el material intermedio de un proyecto ya publicado (reescalados,
+    clips, subtítulos rasterizados y montajes anteriores)."""
+    try:
+        return proyectos_service.liberar_espacio(pid)
+    except proyectos_service.ProyectoNoExiste:
+        raise HTTPException(404, "Proyecto no existe")
+    except proyectos_service.SinPublicar:
+        raise HTTPException(409, "El vídeo no está marcado como publicado; "
+                                 "márcalo antes de liberar su material")
+    except proyectos_service.ProyectoOcupado:
+        raise HTTPException(409, "El proyecto tiene trabajo en curso; espera a "
+                                 "que termine antes de liberar su material")
 
 
 @router.delete("/{pid}")

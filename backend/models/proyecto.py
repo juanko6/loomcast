@@ -68,6 +68,15 @@ class Proyecto(Base):
     # no se toca (el mismo criterio que el reparto fijo y el hilo). Se marca, y
     # decide el usuario.
     continuidad_rota: Mapped[bool] = mapped_column(default=False)
+    # Cuándo se subió el vídeo y dónde quedó. Es la única parte del proyecto
+    # que habla de fuera de esta máquina: lo de aquí se puede rehacer, un vídeo
+    # ya publicado no. Cadena vacía = sin publicar, que es lo que son todos los
+    # de antes de esta columna; la fecha la pone quien lo marca (ISO corta,
+    # "2026-10-29"), porque subir y marcar no pasan a la vez.
+    publicado_en: Mapped[str] = mapped_column(default="")
+    # Enlace o id del vídeo en YouTube, tal y como se pegó.
+    publicado_url: Mapped[str] = mapped_column(default="")
+    publicado_nota: Mapped[str] = mapped_column(Text, default="")
     estado: Mapped[str] = mapped_column(default="IDEA")
     created_at: Mapped[datetime] = mapped_column(default=now_utc)
 

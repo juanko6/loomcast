@@ -43,6 +43,7 @@ const proyecto = (extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle =>
     guion: null, guion_version: 0, metadatos: null, voz_disponible: false,
     voz_version: 0, subtitulos: null, escenas: [], personajes: [],
     imagenes_completas: false, musica: null, musica_mezclar: false,
+    publicacion: null, disco: { total_mb: 0, liberable_mb: 0 }, liberado: false,
     video_disponible: false, versiones: [], jobs_activos: 0, job_activo: null,
     autopiloto: null, ...extra,
   }) as ProyectoDetalle;

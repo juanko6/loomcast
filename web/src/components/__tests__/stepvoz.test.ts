@@ -10,6 +10,7 @@ const proy = (extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle => ({
   idea: null, guion: null, guion_version: 1, metadatos: null, voz_disponible: false, voz_version: 3,
   subtitulos: null, escenas: [], personajes: [], imagenes_completas: false, video_disponible: false,
   versiones: [], jobs_activos: 0, job_activo: null, musica: null, musica_mezclar: false,
+  publicacion: null, disco: { total_mb: 0, liberable_mb: 0 }, liberado: false,
   serie: null, resumen_episodio: "", ...extra,
 });
 const voz = (slug: string, extra: Partial<Voz> = {}): Voz =>

@@ -37,7 +37,9 @@ def test_listar_incluye_titulo_de_la_idea(client, proy):
          # Un vídeo suelto: sin serie y sin número de episodio.
          "serie": None, "episodio": 0,
          # Y sin autopiloto: se conduce a mano, como siempre.
-         "autopiloto": None}]
+         "autopiloto": None,
+         # Ni subido a ninguna parte.
+         "publicado_en": ""}]
 
 
 def test_detalle_inexistente_404(client):
@@ -449,6 +451,156 @@ def test_borrar_video_con_y_sin_versiones(client, proy, dirs_tmp):
 
 def test_borrar_video_de_proyecto_inexistente_404(client):
     assert client.delete("/api/proyectos/99/video").status_code == 404
+
+
+# --- publicación ------------------------------------------------------------
+
+def test_marcar_publicado_apunta_fecha_enlace_y_nota(client, proy):
+    r = client.put(f"/api/proyectos/{proy.id}/publicacion", json={
+        "fecha": "2026-10-20", "url": "abc123", "nota": "Canal nuevo"})
+    assert r.json() == {"fecha": "2026-10-20", "url": "abc123", "nota": "Canal nuevo"}
+    d = client.get(f"/api/proyectos/{proy.id}").json()
+    assert d["publicacion"] == {"fecha": "2026-10-20", "url": "abc123", "nota": "Canal nuevo"}
+    # Y el listado lo dice sin tener que abrir el proyecto.
+    assert client.get("/api/proyectos").json()[0]["publicado_en"] == "2026-10-20"
+
+
+def test_sin_publicar_el_detalle_lo_dice(client, proy):
+    assert client.get(f"/api/proyectos/{proy.id}").json()["publicacion"] is None
+
+
+@pytest.mark.parametrize("fecha", ["", "ayer", "20/10/2026", "2026-13-45"])
+def test_una_fecha_que_no_es_fecha_se_cambia_por_hoy(client, proy, fecha):
+    """La teclea quien marca el vídeo: una fecha inventada se quedaría
+    guardada y se enseñaría igual."""
+    from datetime import datetime
+
+    r = client.put(f"/api/proyectos/{proy.id}/publicacion", json={"fecha": fecha})
+    assert r.json()["fecha"] == datetime.now().strftime("%Y-%m-%d")
+
+
+def test_volver_a_marcarlo_corrige_los_datos(client, proy):
+    client.put(f"/api/proyectos/{proy.id}/publicacion", json={
+        "fecha": "2026-10-20", "url": "abc123", "nota": "n"})
+    r = client.put(f"/api/proyectos/{proy.id}/publicacion", json={
+        "fecha": "2026-10-21", "url": "https://youtu.be/otro", "nota": ""})
+    assert r.json() == {"fecha": "2026-10-21", "url": "https://youtu.be/otro", "nota": ""}
+
+
+def test_quitar_la_marca_no_toca_el_disco(client, proy, dirs_tmp):
+    final = _archivo(dirs_tmp, "final.mp4")
+    client.put(f"/api/proyectos/{proy.id}/publicacion", json={"fecha": "2026-10-20"})
+    assert client.delete(f"/api/proyectos/{proy.id}/publicacion").json() == {"publicado": False}
+    assert client.get(f"/api/proyectos/{proy.id}").json()["publicacion"] is None
+    assert final.exists()
+
+
+def test_publicacion_de_proyecto_inexistente_404(client):
+    assert client.put("/api/proyectos/99/publicacion", json={}).status_code == 404
+    assert client.delete("/api/proyectos/99/publicacion").status_code == 404
+
+
+# --- liberar espacio --------------------------------------------------------
+
+def test_el_detalle_cuenta_lo_que_ocupa_y_lo_que_se_puede_tirar(client, proy, dirs_tmp):
+    _archivo(dirs_tmp, "final.mp4", contenido=b"x" * 300)
+    _archivo(dirs_tmp, "imagenes", "01.png", contenido=b"x" * 100)
+    _archivo(dirs_tmp, "upscale", "01.png", contenido=b"x" * 500)
+
+    disco = client.get(f"/api/proyectos/{proy.id}").json()["disco"]
+
+    assert disco["total_mb"] == round(900 / 1e6, 1)
+    # Se puede tirar todo menos el vídeo final.
+    assert disco["liberable_mb"] == round(600 / 1e6, 1)
+
+
+def test_liberar_deja_solo_el_video_final(client, proy, dirs_tmp):
+    client.put(f"/api/proyectos/{proy.id}/publicacion", json={"fecha": "2026-10-20"})
+    final = _archivo(dirs_tmp, "final.mp4")
+    tirables = [
+        _archivo(dirs_tmp, "voz.mp3"),
+        _archivo(dirs_tmp, "voz.wav"),
+        _archivo(dirs_tmp, "voz_raw.wav"),
+        _archivo(dirs_tmp, "subtitulos.srt"),
+        _archivo(dirs_tmp, "palabras.json"),
+        _archivo(dirs_tmp, "imagenes", "01.png"),
+        _archivo(dirs_tmp, "upscale", "01.png"),
+        _archivo(dirs_tmp, "clips", "01.mp4"),
+        _archivo(dirs_tmp, "subs", "000.png"),
+        _archivo(dirs_tmp, "armado", "x.mp4"),
+        _archivo(dirs_tmp, "versiones", "final_1.mp4"),
+        _archivo(dirs_tmp, "personajes", "ana.png"),
+    ]
+
+    r = client.post(f"/api/proyectos/{proy.id}/liberar")
+
+    assert r.json()["archivos"] == len(tirables)
+    assert not any(x.exists() for x in tirables)
+    assert final.exists()
+    assert [x.name for x in (dirs_tmp["proyectos"] / "demo").iterdir()] == ["final.mp4"]
+
+
+def test_liberado_el_proyecto_lo_dice_en_vez_de_parecer_a_medio_hacer(client, proy, dirs_tmp):
+    """Sin esto la ficha enseñaría un vídeo publicado como si le faltaran la
+    voz y las imágenes, que es lo que se tiró a propósito."""
+    client.put(f"/api/proyectos/{proy.id}/publicacion", json={"fecha": "2026-10-20"})
+    _archivo(dirs_tmp, "final.mp4")
+    _archivo(dirs_tmp, "imagenes", "01.png")
+    assert client.get(f"/api/proyectos/{proy.id}").json()["liberado"] is False
+
+    client.post(f"/api/proyectos/{proy.id}/liberar")
+
+    d = client.get(f"/api/proyectos/{proy.id}").json()
+    assert d["liberado"] is True
+    # El vídeo sigue ahí y el enlace también; lo que no está es el material.
+    assert d["video_disponible"] and d["publicacion"] is not None
+    assert d["voz_disponible"] is False and d["disco"]["liberable_mb"] == 0
+
+
+def test_volver_a_generar_las_imagenes_deja_de_contar_como_liberado(client, proy, dirs_tmp):
+    """La marca se mira en el disco justo para esto: si vuelve a haber material,
+    deja de ser verdad sola."""
+    client.put(f"/api/proyectos/{proy.id}/publicacion", json={"fecha": "2026-10-20"})
+    _archivo(dirs_tmp, "final.mp4")
+    client.post(f"/api/proyectos/{proy.id}/liberar")
+
+    _archivo(dirs_tmp, "imagenes", "01.png")
+
+    assert client.get(f"/api/proyectos/{proy.id}").json()["liberado"] is False
+
+
+def test_sin_publicar_nunca_cuenta_como_liberado(client, proy, dirs_tmp):
+    _archivo(dirs_tmp, "final.mp4")
+    assert client.get(f"/api/proyectos/{proy.id}").json()["liberado"] is False
+
+
+def test_liberar_sin_publicar_409(client, proy, dirs_tmp):
+    """Hasta que el vídeo está arriba, esto es el material que rehace el
+    montaje; para borrarlo están los botones de siempre."""
+    up = _archivo(dirs_tmp, "upscale", "01.png")
+    assert client.post(f"/api/proyectos/{proy.id}/liberar").status_code == 409
+    assert up.exists()
+
+
+def test_liberar_con_trabajo_en_curso_409(client, session, proy, dirs_tmp):
+    client.put(f"/api/proyectos/{proy.id}/publicacion", json={"fecha": "2026-10-20"})
+    up = _archivo(dirs_tmp, "upscale", "01.png")
+    session.add(Job(tipo="generar_clips", ref_id=proy.id, estado="pendiente"))
+    session.commit()
+    assert client.post(f"/api/proyectos/{proy.id}/liberar").status_code == 409
+    assert up.exists()
+
+
+def test_liberar_dos_veces_no_falla(client, proy, dirs_tmp):
+    client.put(f"/api/proyectos/{proy.id}/publicacion", json={"fecha": "2026-10-20"})
+    _archivo(dirs_tmp, "final.mp4")
+    _archivo(dirs_tmp, "upscale", "01.png")
+    assert client.post(f"/api/proyectos/{proy.id}/liberar").json()["archivos"] == 1
+    assert client.post(f"/api/proyectos/{proy.id}/liberar").json()["archivos"] == 0
+
+
+def test_liberar_de_proyecto_inexistente_404(client):
+    assert client.post("/api/proyectos/99/liberar").status_code == 404
 
 
 # --- borrar proyecto --------------------------------------------------------

@@ -272,6 +272,7 @@ describe("StepVideo", () => {
     guion: null, guion_version: 0, metadatos: null, voz_disponible: true, voz_version: 0, subtitulos: "x",
     escenas: [], personajes: [], imagenes_completas: true, video_disponible: false, versiones: [],
     jobs_activos: 0, job_activo: null, musica: null, musica_mezclar: false,
+    publicacion: null, disco: { total_mb: 0, liberable_mb: 0 }, liberado: false,
     serie: null, resumen_episodio: "", ...extra,
   });
   const acciones = () => ({ ongenerar: vi.fn(), onborrarvideo: vi.fn(), onborrarversion: vi.fn(), onborrarproyecto: vi.fn(), onver: vi.fn() });
@@ -282,6 +283,12 @@ describe("StepVideo", () => {
     expect(screen.getByRole("radio", { name: /Ken Burns/ })).toBeChecked();
     await userEvent.click(screen.getByRole("button", { name: "Generar vídeo" }));
     expect(a.ongenerar).toHaveBeenCalledWith("kenburns", "");
+  });
+
+  it("liberado no se puede rehacer: avisa y no deja encolar un job que falla", () => {
+    render(StepVideo, { p: proy({ video_disponible: true, liberado: true }), ...acciones() });
+    expect(screen.getByText(/su material se liberó/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rehacer vídeo" })).toBeDisabled();
   });
 
   it("se puede cambiar de modo antes de generar", async () => {

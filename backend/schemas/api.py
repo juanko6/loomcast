@@ -221,6 +221,16 @@ class VideoIn(BaseModel):
     motor: str = ""
 
 
+class PublicacionIn(BaseModel):
+    """Que este vídeo ya está subido. La fecha va aparte del momento de marcar
+    porque se sube un día y se apunta otro; vacía = hoy."""
+
+    fecha: str = ""
+    # Enlace o id del vídeo, tal y como se pegue.
+    url: str = ""
+    nota: str = ""
+
+
 class AutopilotoIn(BaseModel):
     """Con qué se lanza una tirada automática.
 

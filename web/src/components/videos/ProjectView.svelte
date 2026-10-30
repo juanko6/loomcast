@@ -7,6 +7,7 @@
   import StepEscenas from "./steps/StepEscenas.svelte";
   import StepMusica from "./steps/StepMusica.svelte";
   import StepVideo from "./steps/StepVideo.svelte";
+  import StepPublicacion from "./steps/StepPublicacion.svelte";
   import Chip from "../primitives/Chip.svelte";
   import BotonParar from "../shell/BotonParar.svelte";
   import {
@@ -41,7 +42,7 @@
   // El paso activo lo elige el usuario; por defecto, el primero sin completar.
   let elegido = $state<string | null>(null);
 
-  const pasos = $derived<Paso[]>([
+  const pasos = $derived<Paso[]>(conLiberado([
     { id: "guion", label: "Guion", hecho: !!p.guion, bloqueado: false },
     { id: "voz", label: "Voz", hecho: p.voz_disponible, bloqueado: !p.guion },
     { id: "metadatos", label: "Metadatos", hecho: !!p.metadatos, bloqueado: !p.voz_disponible },
@@ -60,13 +61,35 @@
       bloqueado: !p.guion,
     },
     { id: "video", label: "Vídeo final", hecho: p.video_disponible, bloqueado: !p.imagenes_completas },
-  ]);
+    {
+      id: "publicacion",
+      label: "Publicación",
+      hecho: !!p.publicacion,
+      // Con el vídeo ya publicado nunca se bloquea: el material de aquí se
+      // puede haber liberado y el vídeo final ya no estar en disco.
+      bloqueado: !p.video_disponible && !p.publicacion,
+    },
+  ]));
 
-  // Primer paso pendiente (o el último si está todo hecho).
+  // De un proyecto liberado ya solo queda el vídeo, así que mirar sus archivos
+  // devuelve "falta la voz, faltan las imágenes": todo lo que se tiró a
+  // propósito saldría como trabajo pendiente y bloquearía los pasos de después.
+  // Lo que pasó es lo contrario —está hecho, subido y recogido—, y eso es lo
+  // que enseña el stepper; cada paso, por dentro, sigue diciendo la verdad de
+  // lo que tiene.
+  function conLiberado(lista: Paso[]): Paso[] {
+    return p.liberado
+      ? lista.map((s) => ({ ...s, hecho: true, bloqueado: false }))
+      : lista;
+  }
+
+  // Primer paso pendiente (o el último —publicarlo— si está todo hecho: al
+  // marcarlo como subido, ahí es donde uno se queda).
   // La música es opcional: no se sugiere sola, se entra a mano. Si no, un
   // proyecto con todo hecho menos la música abriría siempre ahí.
   const sugerido = $derived(
-    pasos.find((s) => s.id !== "musica" && !s.hecho && !s.bloqueado)?.id ?? "video",
+    pasos.find((s) => s.id !== "musica" && !s.hecho && !s.bloqueado)?.id
+      ?? pasos[pasos.length - 1].id,
   );
   const activo = $derived(
     elegido && !pasos.find((s) => s.id === elegido)?.bloqueado ? elegido : sugerido,
@@ -84,6 +107,12 @@
       <Chip tone="accent">{p.serie.nombre} · EP {p.serie.episodio}</Chip>
     {/if}
     <Chip>{p.estado}</Chip>
+    {#if p.publicacion}
+      <Chip tone="ok">subido</Chip>
+    {/if}
+    {#if p.liberado}
+      <Chip tone="warn">solo queda el vídeo</Chip>
+    {/if}
     {#if etapa}
       <span class="flex items-center gap-2 text-sm text-dim">
         <span class="size-4 animate-spin rounded-full border-2 border-line border-t-accent"></span>
@@ -162,6 +191,14 @@
         {bust}
         ongenerar={acciones.generarMusica}
         onfijar={acciones.fijarMusica}
+      />
+    {:else if activo === "publicacion"}
+      <StepPublicacion
+        {p}
+        {busy}
+        onmarcar={acciones.marcarPublicado}
+        onquitar={acciones.quitarPublicado}
+        onliberar={acciones.liberarEspacio}
       />
     {:else}
       <StepVideo
