@@ -297,7 +297,8 @@ def lanzar_autopiloto(pid: int, body: AutopilotoIn):
     """
     try:
         return autopiloto_service.arrancar(
-            pid, body.modo, body.motor, body.voz, body.paradas
+            pid, body.modo, body.motor, body.voz, body.paradas,
+            narracion=body.narracion,
         )
     except autopiloto_service.ProyectoNoExiste:
         raise HTTPException(404, "Proyecto no existe")
@@ -306,10 +307,13 @@ def lanzar_autopiloto(pid: int, body: AutopilotoIn):
     except autopiloto_service.SinVoz:
         raise HTTPException(
             400, "Elige la voz con la que narrar antes de lanzar el autopiloto: "
-                 "la narración se clona de una voz del banco."
+                 "la narración se clona de una voz del banco. O lanza con "
+                 "narración expresiva, que la escribe desde el guion."
         )
     except autopiloto_service.ModoVideoInvalido:
         raise HTTPException(400, "Modo de video inválido")
+    except autopiloto_service.NarracionInvalida as e:
+        raise HTTPException(400, f"Modo de narración desconocido: {e}")
     except autopiloto_service.ParadaInvalida as e:
         raise HTTPException(400, f"Parada de revisión desconocida: {e}")
     except proyectos_service.VozNoDisponible:

@@ -41,8 +41,13 @@ en su vídeo sería media etapa — por eso, cuando la hace el autopiloto, adem�
 enciende la mezcla.
 
 Lo que el autopiloto **no** hace: rehacer una imagen o un clip que no convenza,
-ni elegir la voz (se elige al lanzar, como el modo de vídeo). Y las etapas que
-encola pasan por la cola de siempre, o sea por la descarga del LLM antes de
+ni decidir con qué voz se narra (se elige al lanzar, como el modo de vídeo).
+Pero ahí hay dos respuestas, no una: una voz del banco, que se clona en los diez
+vídeos del lote por igual, o la **narración expresiva**, que la escribe
+VoiceDesign con el estilo que el LLM sacó de cada historia. Lo segundo es lo que
+quieres en un lote de historias distintas: una voz de hombre elegida a mano
+narrando la historia de una mujer suena mal en los diez, y el estilo del guion
+sí sabe quién cuenta esto. Y las etapas que encola pasan por la cola de siempre, o sea por la descarga del LLM antes de
 cualquier etapa de GPU y por la espera real de memoria de `llm_runtime`: no hay
 atajo, y es el mismo camino que recorre un clic.
 """
@@ -87,6 +92,11 @@ ETAPAS = {
     "armar_video",
 }
 
+# Con qué se narra. Son los dos modos de la etapa de voz, los mismos que el
+# paso de voz ofrece a mano: clonar una voz del banco, o que VoiceDesign la
+# escriba desde el estilo que el guion trae para esta historia.
+NARRACIONES = ("clon", "design")
+
 # Lo que se lee en la UI cuando se para en una revisión. Dice qué mirar, porque
 # "esperando" a secas no dice dónde hay que ir.
 MOTIVO_PARADA = {
@@ -124,6 +134,10 @@ class NoEstaEsperando(RuntimeError):
 
 class SinVoz(ValueError):
     """Hace falta la narración y el proyecto no tiene voz elegida."""
+
+
+class NarracionInvalida(ValueError):
+    pass
 
 
 class ModoVideoInvalido(ValueError):
@@ -236,11 +250,11 @@ def _mezclar_su_musica(s, p) -> None:
 def _params(etapa: str, auto) -> dict:
     """Los kwargs con los que se encola cada etapa.
 
-    Son los mismos que manda la UI al pulsarla: el modo de clonado de la voz y
+    Son los mismos que manda la UI al pulsarla: el modo con el que se narra y
     el motor i2v del modo elegido. El resto de las etapas no llevan ninguno.
     """
     if etapa == "generar_voz":
-        return {"modo": "clon"}
+        return {"modo": auto.narracion or "clon"}
     if auto.motor and etapa in ("generar_i2v", "generar_clips_mixto"):
         return {"motor": auto.motor}
     return {}
@@ -266,9 +280,11 @@ def _elegir_voz(pid: int, voz: str) -> None:
     proyectos_service.seleccionar_voz(pid, voz)
 
 
-def _validar(modo_video: str, paradas: list[str]) -> None:
+def _validar(modo_video: str, paradas: list[str], narracion: str) -> None:
     if modo_video not in queue.MODOS_VIDEO:
         raise ModoVideoInvalido(modo_video)
+    if narracion not in NARRACIONES:
+        raise NarracionInvalida(narracion)
     desconocidas = [p for p in paradas if p not in PARADAS]
     if desconocidas:
         raise ParadaInvalida(", ".join(desconocidas))
@@ -285,16 +301,21 @@ def _paradas(paradas: list[str] | None) -> list[str]:
 
 def arrancar(pid: int, modo_video: str = "kenburns", motor: str = "",
              voz: str = "", paradas: list[str] | None = None,
-             lote_id: int | None = None) -> dict:
+             lote_id: int | None = None, narracion: str = "clon") -> dict:
     """Pone un proyecto en automático desde donde esté hasta su final.mp4.
 
     El modo de montaje se elige aquí igual que se elige en el paso de vídeo: es
-    la misma decisión y no tiene un valor obvio. La voz también, porque sin ella
-    la narración no se puede generar y es lo primero que se encontraría.
+    la misma decisión y no tiene un valor obvio. Con qué se narra también, y
+    tiene dos respuestas: una voz del banco, que hay que elegir porque sin ella
+    la narración no se puede clonar, o la narración expresiva (`narracion
+    "design"`), que no necesita ninguna porque el estilo con el que cuenta sale
+    del guion de esta historia.
     """
     paradas = _paradas(paradas)
-    _validar(modo_video, paradas)
-    if voz:
+    _validar(modo_video, paradas, narracion)
+    # Con la narración expresiva no hay voz del banco que fijar: la del proyecto
+    # se queda como estaba, porque lo que narra es el estilo del guion.
+    if voz and narracion == "clon":
         _elegir_voz(pid, voz)
 
     with get_session() as s:
@@ -304,15 +325,18 @@ def arrancar(pid: int, modo_video: str = "kenburns", motor: str = "",
         if autopilotos_repo.vivo_de_proyecto(s, pid) is not None:
             raise YaEnMarcha(pid)
         falta = _que_falta(s, p, modo_video)
-        # La narración se clona de una voz del banco, así que sin voz elegida la
-        # etapa fallaría dos minutos más tarde. Vale más decirlo al lanzar.
+        # El clonado saca la narración de una voz del banco, así que sin voz
+        # elegida la etapa fallaría dos minutos más tarde. Vale más decirlo al
+        # lanzar. La narración expresiva no pasa por aquí: no hay nada que
+        # elegir.
         antes_de_narrar = ("generar_guion", "generar_casting",
                            "generar_metadatos", "generar_voz")
-        if falta in antes_de_narrar and not p.voz:
+        if narracion == "clon" and falta in antes_de_narrar and not p.voz:
             raise SinVoz(pid)
         auto = autopilotos_repo.crear(
             s, pid, modo_video, motor, paradas, lote_id,
             estado="pendiente" if lote_id else "corriendo",
+            narracion=narracion,
         )
         s.flush()
         if falta is None:
@@ -579,7 +603,8 @@ def _entrar_el_siguiente(lote_id: int | None) -> None:
 
 
 def lanzar_lote(tema_id: int, modo_video: str = "kenburns", motor: str = "",
-                voz: str = "", paradas: list[str] | None = None) -> dict:
+                voz: str = "", paradas: list[str] | None = None,
+                narracion: str = "clon") -> dict:
     """Varias ideas de un tema → un proyecto por idea, en producción seguida.
 
     Aquí es donde cuenta la parada de **idea**: con ella puesta (lo normal) solo
@@ -589,7 +614,7 @@ def lanzar_lote(tema_id: int, modo_video: str = "kenburns", motor: str = "",
     descartadas no entran nunca, porque descartarlas ya fue una decisión.
     """
     paradas = _paradas(paradas)
-    _validar(modo_video, paradas)
+    _validar(modo_video, paradas, narracion)
 
     with get_session() as s:
         if temas_repo.obtener(s, tema_id) is None:
@@ -617,7 +642,8 @@ def lanzar_lote(tema_id: int, modo_video: str = "kenburns", motor: str = "",
             if autopilotos_repo.vivo_de_proyecto(s, pid) is not None:
                 continue
         arrancados.append(
-            arrancar(pid, modo_video, motor, voz, paradas, lote_id=lote_id)
+            arrancar(pid, modo_video, motor, voz, paradas, lote_id=lote_id,
+                     narracion=narracion)
         )
 
     _entrar_el_siguiente(lote_id)
@@ -637,6 +663,7 @@ def a_dict(auto) -> dict:
         "estado": auto.estado,
         "modo_video": auto.modo_video,
         "motor": auto.motor,
+        "narracion": auto.narracion or "clon",
         "paradas": auto.paradas_activas,
         "etapa": auto.etapa,
         "motivo": auto.motivo,

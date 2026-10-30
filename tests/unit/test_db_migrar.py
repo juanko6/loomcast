@@ -91,6 +91,28 @@ def test_migrar_anade_los_intentos_a_los_jobs_viejos(engine):
         assert c.execute(text("SELECT intentos FROM jobs")).scalar() == 0
 
 
+def test_migrar_deja_clonando_las_tiradas_de_antes_de_la_expresiva(engine):
+    """Una tirada de antes de la narración expresiva solo sabía clonar la voz
+    del banco que se le eligió: eso es lo que queda escrito."""
+    with engine.begin() as c:
+        c.execute(text("DROP TABLE autopilotos"))
+        c.execute(text(
+            "CREATE TABLE autopilotos (id INTEGER PRIMARY KEY, proyecto_id INTEGER, "
+            "estado VARCHAR, modo_video VARCHAR, motor VARCHAR, paradas VARCHAR, "
+            "etapa VARCHAR, motivo TEXT, created_at DATETIME)"
+        ))
+        c.execute(text(
+            "INSERT INTO autopilotos (proyecto_id, estado) VALUES (1, 'corriendo')"
+        ))
+
+    db_mod._migrar()
+
+    with engine.connect() as c:
+        cols = [r[1] for r in c.execute(text("PRAGMA table_info(autopilotos)"))]
+        assert "narracion" in cols
+        assert c.execute(text("SELECT narracion FROM autopilotos")).scalar() == "clon"
+
+
 def test_migrar_es_idempotente(engine):
     db_mod._migrar()
     db_mod._migrar()

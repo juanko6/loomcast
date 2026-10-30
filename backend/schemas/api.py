@@ -224,10 +224,10 @@ class VideoIn(BaseModel):
 class AutopilotoIn(BaseModel):
     """Con qué se lanza una tirada automática.
 
-    El modo de montaje y la voz se piden aquí porque son las dos decisiones que
-    el flujo a mano también pide (el paso de vídeo y el paso de voz) y ninguna
-    tiene un valor obvio: la voz, además, es lo primero con lo que se tropezaría
-    la narración si faltara.
+    El modo de montaje y con qué se narra se piden aquí porque son las dos
+    decisiones que el flujo a mano también pide (el paso de vídeo y el paso de
+    voz) y ninguna tiene un valor obvio: la voz, además, es lo primero con lo
+    que se tropezaría la narración si faltara.
 
     `paradas` None = las de [autopiloto] de config.toml, que son las tres de
     siempre. Una lista vacía es producción sin manos, y por eso no se puede
@@ -236,6 +236,12 @@ class AutopilotoIn(BaseModel):
     modo: str = "kenburns"  # estatico | kenburns | i2v | mixto
     # Motor i2v ([i2v.motores] de config.toml). Vacío = el de [i2v].motor.
     motor: str = ""
+    # Con qué se narra, igual que en el paso de voz: "clon" clona la voz del
+    # banco de `voz`, y "design" es la narración expresiva, que la escribe
+    # VoiceDesign con el estilo que el LLM saca de cada historia (y entonces
+    # `voz` no hace falta: en un lote de historias distintas es lo que evita que
+    # una voz elegida a mano narre todas las demás).
+    narracion: str = "clon"
     # Slug de la voz del banco con la que narrar. Vacío = la que ya tenga el
     # proyecto elegida.
     voz: str = ""

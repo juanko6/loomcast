@@ -30,7 +30,8 @@ const voces: Voz[] = [
 
 const auto = (extra: Partial<Autopiloto> = {}): Autopiloto => ({
   id: 1, proyecto_id: 7, lote_id: null, estado: "corriendo", modo_video: "kenburns",
-  motor: "", paradas: ["idea", "guion", "escenas"], etapa: "", motivo: "", parada: "",
+  motor: "", narracion: "clon", paradas: ["idea", "guion", "escenas"], etapa: "",
+  motivo: "", parada: "",
   ...extra,
 });
 
@@ -78,7 +79,8 @@ describe("AutopilotoForm", () => {
     await userEvent.click(screen.getByRole("button", { name: "Lanzar autopiloto" }));
 
     expect(onlanzar).toHaveBeenCalledWith({
-      modo: "kenburns", motor: "", voz: "", paradas: ["idea", "guion", "escenas"],
+      modo: "kenburns", motor: "", narracion: "design", voz: "",
+      paradas: ["idea", "guion", "escenas"],
     });
   });
 
@@ -104,6 +106,50 @@ describe("AutopilotoForm", () => {
     expect(select.value).toBe("ana");
     expect(within(select).queryByText("A medias")).toBeNull();
     expect(within(select).getByText("Ana")).toBeInTheDocument();
+  });
+
+  it("sin voz elegida narra la historia: es lo que un lote necesita", async () => {
+    const onlanzar = vi.fn();
+    render(AutopilotoForm, { props: { voces, onlanzar } });
+    const select = screen.getByLabelText("Voz de la narración") as HTMLSelectElement;
+
+    expect(within(select).getByRole("option", { selected: true }).textContent).toMatch(
+      /Narración expresiva/,
+    );
+    expect(screen.getByText(/el estilo que el LLM escribió para su/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Lanzar autopiloto" }));
+    expect(onlanzar).toHaveBeenCalledWith(
+      expect.objectContaining({ narracion: "design", voz: "" }),
+    );
+  });
+
+  it("una voz del banco se sigue clonando, y se avisa de que es la misma para todo", async () => {
+    const onlanzar = vi.fn();
+    render(AutopilotoForm, { props: { voces, vozActual: "ana", onlanzar } });
+
+    expect(screen.getByText(/la misma en todo lo que produzca esta tirada/))
+      .toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Lanzar autopiloto" }));
+    expect(onlanzar).toHaveBeenCalledWith(
+      expect.objectContaining({ narracion: "clon", voz: "ana" }),
+    );
+  });
+
+  it("se puede dejar la voz del proyecto y narrar con la historia de todos modos", async () => {
+    const onlanzar = vi.fn();
+    render(AutopilotoForm, { props: { voces, vozActual: "ana", onlanzar } });
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("Voz de la narración"),
+      screen.getByRole("option", { name: /Narración expresiva/ }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Lanzar autopiloto" }));
+
+    expect(onlanzar).toHaveBeenCalledWith(
+      expect.objectContaining({ narracion: "design", voz: "" }),
+    );
   });
 
   it("el motor solo se pregunta en los modos que animan con i2v", async () => {

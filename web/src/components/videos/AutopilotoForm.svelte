@@ -6,11 +6,23 @@
   // mismas decisiones. Las dos primeras se piden aquí y no se adivinan: el modo
   // de montaje ya se elige a mano en el paso de vídeo, y sin voz la narración no
   // se puede generar.
+  //
+  // De la voz hay dos respuestas, y en un lote la que importa es la segunda:
+  // una voz del banco se clona igual en los diez vídeos (y una de hombre
+  // elegida a mano narrando la historia de una mujer canta en los diez), o la
+  // narración expresiva, que la escribe VoiceDesign con el estilo que el LLM
+  // sacó de cada guion. Por eso, cuando no hay ninguna elegida, lo que viene
+  // puesto es la expresiva: el hueco de antes no se podía lanzar.
   import { onMount } from "svelte";
   import Button from "../primitives/Button.svelte";
   import Field from "../primitives/Field.svelte";
   import { MODOS_VIDEO, listarMotoresI2V, type MotorI2V, type Voz } from "@/lib/proyectos";
-  import { PARADAS, PARADAS_DEFECTO, type OpcionesAutopiloto } from "@/lib/autopiloto";
+  import {
+    PARADAS,
+    PARADAS_DEFECTO,
+    VOZ_EXPRESIVA,
+    type OpcionesAutopiloto,
+  } from "@/lib/autopiloto";
 
   let {
     voces = [],
@@ -30,12 +42,13 @@
   let modo = $state("kenburns");
   let motor = $state("");
   let motores = $state<MotorI2V[]>([]);
-  let voz = $state(vozActual ?? "");
+  let voz = $state(vozActual ?? VOZ_EXPRESIVA);
   // Se arranca con las tres puestas, que es lo que hace el flujo a mano.
   let activas = $state<string[]>([...PARADAS_DEFECTO]);
 
   const conI2V = $derived(modo === "i2v" || modo === "mixto");
   const disponibles = $derived(voces.filter((v) => v.disponible));
+  const expresiva = $derived(voz === VOZ_EXPRESIVA);
 
   onMount(async () => {
     try {
@@ -54,7 +67,10 @@
     onlanzar({
       modo,
       motor: conI2V ? motor : "",
-      voz,
+      narracion: expresiva ? "design" : "clon",
+      // Con la expresiva no hay voz del banco que mandar: la del proyecto se
+      // queda como esté, porque lo que narra es el estilo del guion.
+      voz: expresiva ? "" : voz,
       // Se mandan siempre, incluso vacías: una lista vacía es "producción sin
       // manos" y no es lo mismo que no decir nada (eso serían las de
       // config.toml).
@@ -75,6 +91,7 @@
 
     <Field label="Voz de la narración">
       <select class="control" bind:value={voz}>
+        <option value={VOZ_EXPRESIVA}>Narración expresiva (del guion)</option>
         <option value="">
           {vozActual ? "La que ya tiene elegida" : "— elige una voz del banco —"}
         </option>
@@ -84,6 +101,17 @@
       </select>
     </Field>
   </div>
+
+  <p class="text-xs text-muted">
+    {#if expresiva}
+      Cada vídeo lo narra VoiceDesign con el estilo que el LLM escribió para su
+      guion, así que la voz la pone la historia y no se elige a mano. Las voces del
+      reparto siguen saliendo de la ficha de cada personaje.
+    {:else}
+      Se clona esa voz del banco, la misma en todo lo que produzca esta tirada,
+      también si la historia pide otra.
+    {/if}
+  </p>
 
   {#if conI2V && motores.length > 1}
     <Field label="Motor de movimiento">

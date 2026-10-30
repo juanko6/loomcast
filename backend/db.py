@@ -168,6 +168,17 @@ def _migrar() -> None:
                 c.execute(text(f"ALTER TABLE jobs ADD COLUMN {col} {tipo}"))
         c.commit()
 
+        # Con qué narra cada tirada. Las de antes de la narración expresiva
+        # quedan en "clon", que es lo único que sabían hacer: clonar la voz del
+        # banco que se les eligió al lanzarlas.
+        cols = [r[1] for r in c.execute(text("PRAGMA table_info(autopilotos)"))]
+        if "narracion" not in cols:
+            c.execute(
+                text("ALTER TABLE autopilotos ADD COLUMN narracion "
+                     "VARCHAR DEFAULT 'clon'")
+            )
+            c.commit()
+
         # Conditioning musical de ACE-Step 1.5 (las pistas de v1 se quedan con
         # estos valores por defecto; da igual, hay que regenerarlas de todos
         # modos porque el modelo cambió).

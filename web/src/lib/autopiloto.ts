@@ -33,6 +33,9 @@ export interface Autopiloto {
   estado: string;
   modo_video: string;
   motor: string;
+  // clon = clona la voz del banco elegida al lanzar; design = narración
+  // expresiva, escrita desde el guion de cada historia.
+  narracion: string;
   paradas: string[];
   // Última etapa que terminó bien (tipo de job).
   etapa: string;
@@ -64,9 +67,17 @@ export interface Lote {
   proyectos: LoteProyecto[];
 }
 
+// El valor con el que el formulario dice "no hay voz del banco: que la escriba
+// la historia". No puede chocar con ninguna voz porque los slugs del banco son
+// [a-z0-9-] (ver _slugify en backend/services/voces.py).
+export const VOZ_EXPRESIVA = "@expresiva";
+
 export interface OpcionesAutopiloto {
   modo: string;
   motor?: string;
+  // clon | design. "design" es la narración expresiva y entonces `voz` no hace
+  // falta: el estilo con el que se cuenta sale del guion.
+  narracion?: string;
   voz?: string;
   // null = las paradas de config.toml; [] = producción sin manos. Son dos cosas
   // distintas y la API las distingue.
