@@ -6,7 +6,9 @@ se encarga `test_autopiloto.py` con la cola de verdad.
 """
 import pytest
 
+from backend.db import get_session
 from backend.repositories import autopilotos as autopilotos_repo
+from backend.repositories import proyectos as proyectos_repo
 from backend.repositories import voces as voces_repo
 from tests import factories as f
 
@@ -66,6 +68,42 @@ def test_lanzar_sin_voz_ni_elegida_ni_puesta_es_400(client, session, dirs_tmp):
     r = client.post(f"/api/proyectos/{p.id}/autopiloto", json={"modo": "estatico"})
 
     assert r.status_code == 400 and "voz" in r.text
+
+
+def test_lanzar_con_narracion_expresiva_no_pide_voz(client, session, dirs_tmp):
+    """La narración expresiva la escribe el guion de esa historia, así que no hay
+    voz del banco que elegir y el lanzamiento no se para a pedirla."""
+    p = f.proyecto(session)
+
+    r = client.post(
+        f"/api/proyectos/{p.id}/autopiloto",
+        json={"modo": "estatico", "narracion": "design"},
+    )
+
+    assert r.status_code == 200
+    assert r.json()["narracion"] == "design"
+
+
+def test_la_narracion_expresiva_no_le_cambia_la_voz_al_proyecto(client, proy):
+    """No hay nada que fijar: la voz del banco que tuviera se queda como estaba,
+    porque lo que narra es el estilo del guion."""
+    r = client.post(
+        f"/api/proyectos/{proy.id}/autopiloto",
+        json={"modo": "estatico", "narracion": "design", "voz": "otra"},
+    )
+
+    assert r.status_code == 200
+    with get_session() as s:
+        assert proyectos_repo.obtener(s, proy.id).voz == "narrador"
+
+
+def test_lanzar_con_un_modo_de_narracion_raro_es_400(client, proy):
+    r = client.post(
+        f"/api/proyectos/{proy.id}/autopiloto",
+        json={"modo": "estatico", "narracion": "susurrando"},
+    )
+
+    assert r.status_code == 400 and "narración" in r.text
 
 
 def test_lanzar_con_una_voz_que_no_existe_es_400(client, proy):
@@ -195,6 +233,29 @@ def test_sin_la_parada_de_ideas_el_lote_coge_tambien_las_propuestas(
     }).json()
 
     assert d["total"] == 3
+
+
+def test_un_lote_con_narracion_expresiva_no_pide_voz(client, tema_con_aprobadas):
+    """El caso que lo pedía: diez historias distintas no pueden salir todas con
+    la misma voz elegida a mano."""
+    r = client.post("/api/lotes", json={
+        "tema_id": tema_con_aprobadas.id, "modo": "estatico",
+        "narracion": "design",
+    })
+
+    assert r.status_code == 200
+    assert r.json()["total"] == 2
+
+
+def test_un_lote_sin_voz_y_sin_expresiva_dice_las_dos_salidas(
+    client, tema_con_aprobadas
+):
+    r = client.post("/api/lotes", json={
+        "tema_id": tema_con_aprobadas.id, "modo": "estatico",
+    })
+
+    assert r.status_code == 400
+    assert "expresiva" in r.text
 
 
 def test_un_tema_sin_ideas_aprobadas_explica_que_hacer(client, session, dirs_tmp):

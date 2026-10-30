@@ -18,7 +18,8 @@ def listar(limite: int = 10):
 def lanzar(body: LoteIn):
     try:
         return autopiloto_service.lanzar_lote(
-            body.tema_id, body.modo, body.motor, body.voz, body.paradas
+            body.tema_id, body.modo, body.motor, body.voz, body.paradas,
+            narracion=body.narracion,
         )
     except autopiloto_service.TemaNoExiste:
         raise HTTPException(404, "Tema no existe")
@@ -32,10 +33,14 @@ def lanzar(body: LoteIn):
     except autopiloto_service.SinVoz:
         raise HTTPException(
             400, "Elige la voz con la que narrar antes de lanzar el lote: la "
-                 "narración se clona de una voz del banco."
+                 "narración se clona de una voz del banco. O lanza con "
+                 "narración expresiva, y cada historia se narra con el estilo "
+                 "que el guion trae para ella."
         )
     except autopiloto_service.ModoVideoInvalido:
         raise HTTPException(400, "Modo de video inválido")
+    except autopiloto_service.NarracionInvalida as e:
+        raise HTTPException(400, f"Modo de narración desconocido: {e}")
     except autopiloto_service.ParadaInvalida as e:
         raise HTTPException(400, f"Parada de revisión desconocida: {e}")
 

@@ -88,6 +88,11 @@ class Autopiloto(Base):
     # Motor i2v ([i2v.motores] de config.toml); vacío = el de [i2v].motor. Solo
     # lo miran los modos que animan con i2v.
     motor: Mapped[str] = mapped_column(default="")
+    # Con qué narra: "clon" clona la voz del banco que se eligió al lanzar, y
+    # "design" la escribe VoiceDesign con el estilo que el LLM sacó de esta
+    # historia. Va en la fila y no en los kwargs del job porque la etapa de voz
+    # se encola etapas más tarde, cuando ya nadie recuerda qué se pidió.
+    narracion: Mapped[str] = mapped_column(default="clon")
     # Paradas de revisión que respeta, en CSV. Vacío = producción sin manos.
     paradas: Mapped[str] = mapped_column(default=",".join(PARADAS))
     # Última etapa que terminó bien. Es de donde sale qué toca ahora al pulsar

@@ -348,6 +348,49 @@ def test_sin_voz_elegida_no_arranca(cola, session):
         autopiloto.arrancar(p.id, "estatico")
 
 
+def test_la_narracion_expresiva_no_necesita_voz_del_banco(cola, session):
+    """Es lo que arregla el lote: la voz de un lote de historias distintas la
+    pone cada guion, y entonces no hay nada que elegir al lanzar."""
+    p = f.proyecto(session)
+    recibido = {}
+    _etapas(cola)
+    voz_handler = queue.HANDLERS["generar_voz"]
+    queue.HANDLERS["generar_voz"] = (
+        lambda ref, **kw: recibido.update(kw) or voz_handler(ref)
+    )
+
+    autopiloto.arrancar(p.id, "estatico", paradas=[], narracion="design")
+    _correr()
+
+    assert recibido == {"modo": "design"}
+    assert _auto(p.id).estado == "hecho"
+
+
+def test_con_una_voz_del_banco_la_etapa_sigue_clonando(cola, session):
+    """La expresiva es la otra respuesta, no la nueva de todos: quien eligió una
+    voz del banco la sigue oyendo clonada."""
+    p = _proyecto_con_voz(session)
+    recibido = {}
+    _etapas(cola)
+    voz_handler = queue.HANDLERS["generar_voz"]
+    queue.HANDLERS["generar_voz"] = (
+        lambda ref, **kw: recibido.update(kw) or voz_handler(ref)
+    )
+
+    autopiloto.arrancar(p.id, "estatico", paradas=[])
+    _correr()
+
+    assert recibido == {"modo": "clon"}
+
+
+def test_un_modo_de_narracion_que_no_existe_se_rechaza(cola, session):
+    p = _proyecto_con_voz(session)
+    _etapas(cola)
+
+    with pytest.raises(autopiloto.NarracionInvalida):
+        autopiloto.arrancar(p.id, "estatico", narracion="susurrando")
+
+
 def test_el_motor_i2v_elegido_llega_a_la_etapa(cola, session):
     p = _proyecto_con_voz(session)
     recibido = {}

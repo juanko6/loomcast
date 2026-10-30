@@ -330,17 +330,32 @@ ciento diez clics. El **autopiloto** encadena las etapas de un proyecto hasta su
 `final.mp4`, y un **lote** produce varias ideas de un tema, una detrás de otra.
 
 ```
-POST   /api/proyectos/{id}/autopiloto            lanzar (modo, motor, voz, paradas)
+POST   /api/proyectos/{id}/autopiloto            lanzar (modo, motor, narracion, voz, paradas)
 POST   /api/proyectos/{id}/autopiloto/continuar  seguir tras una revisión
 DELETE /api/proyectos/{id}/autopiloto            apagarlo y cortar lo que tenga en cola
-POST   /api/lotes          {tema_id, modo, motor, voz, paradas}
+POST   /api/lotes          {tema_id, modo, motor, narracion, voz, paradas}
 GET    /api/lotes          en qué proyecto va cada lote, en qué etapa y cuántos quedan
 ```
 
-El modo de montaje y la voz se eligen **al lanzarlo**, igual que se eligen a mano
-en el paso de vídeo y en el de voz: son las mismas dos decisiones y ninguna tiene
-un valor obvio. Sin voz elegida no arranca, y lo dice ahí mismo en vez de fallar
-dos minutos después al generar la narración.
+El modo de montaje y con qué se narra se eligen **al lanzarlo**, igual que se
+eligen a mano en el paso de vídeo y en el de voz: son las mismas dos decisiones y
+ninguna tiene un valor obvio. De la narración hay dos respuestas:
+
+- `narracion: "clon"` clona la voz del banco de `voz`, la misma en todo lo que
+  produzca esa tirada. Sin voz elegida no arranca, y lo dice ahí mismo en vez de
+  fallar dos minutos después al generar la narración.
+- `narracion: "design"` es la **narración expresiva**: la escribe VoiceDesign con
+  el estilo que el LLM sacó del guion de cada historia, así que no hace falta
+  ninguna voz del banco y la voz que tenga el proyecto no se toca. Es lo que
+  quieres en un lote, donde las historias son distintas: una voz de hombre
+  elegida a mano narrando la historia de una mujer suena mal en los diez vídeos,
+  y el estilo del guion sí sabe quién cuenta esto.
+
+Es la decisión de la tirada y viaja en su fila, no en los kwargs del job: la
+etapa de voz se encola etapas más tarde, cuando ya nadie recuerda qué se pidió.
+En el formulario de lanzar, cuando el proyecto no tiene voz elegida —el caso de
+un lote— lo que viene puesto es la expresiva. Las voces del reparto no cambian:
+quien habla sigue diciendo sus líneas con la voz escrita desde su ficha.
 
 ### Las paradas de revisión, y por qué por defecto se respetan
 

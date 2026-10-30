@@ -8,10 +8,11 @@ from ..models.autopiloto import TERMINADOS, VIVOS
 
 def crear(s: Session, proyecto_id: int, modo_video: str, motor: str,
           paradas: list[str], lote_id: int | None = None,
-          estado: str = "corriendo") -> Autopiloto:
+          estado: str = "corriendo", narracion: str = "clon") -> Autopiloto:
     a = Autopiloto(
         proyecto_id=proyecto_id, lote_id=lote_id, estado=estado,
         modo_video=modo_video, motor=motor, paradas=",".join(paradas),
+        narracion=narracion,
     )
     s.add(a)
     return a
