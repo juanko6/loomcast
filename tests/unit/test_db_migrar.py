@@ -23,10 +23,14 @@ def test_migrar_anade_columnas_a_una_bd_antigua(engine):
         # queda sin serie y con el episodio en 0, que es la verdad: es un vídeo
         # suelto y el pipeline lo trata como siempre.
         assert {"serie_id", "episodio", "resumen_episodio"} <= set(cols)
+        # Y si se subió a YouTube. Los de antes quedan sin publicar, que es lo
+        # único que esta máquina sabe de ellos.
+        assert {"publicado_en", "publicado_url", "publicado_nota"} <= set(cols)
         fila = c.execute(text(
-            "SELECT slug, serie_id, episodio, resumen_episodio FROM proyectos"
+            "SELECT slug, serie_id, episodio, resumen_episodio, publicado_en "
+            "FROM proyectos"
         )).one()
-        assert fila == ("viejo", None, 0, "")
+        assert fila == ("viejo", None, 0, "", "")
 
 
 def test_migrar_apunta_de_que_guion_salio_el_resumen_de_cada_episodio(session):

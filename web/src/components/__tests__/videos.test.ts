@@ -15,7 +15,8 @@ function proyecto(extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle {
     guion: null, guion_version: 0, metadatos: null, voz_disponible: false, voz_version: 0,
     subtitulos: null, escenas: [], personajes: [], imagenes_completas: false,
     video_disponible: false, versiones: [], jobs_activos: 0, job_activo: null,
-    musica: null, musica_mezclar: false, serie: null, resumen_episodio: "", ...extra,
+    musica: null, musica_mezclar: false,
+    publicacion: null, disco: { total_mb: 0, liberable_mb: 0 }, liberado: false, serie: null, resumen_episodio: "", ...extra,
   };
 }
 
@@ -279,12 +280,50 @@ describe("ProjectView: qué paso se muestra", () => {
     expect(screen.getByRole("button", { name: /Vídeo final/ })).toBeDisabled();
   });
 
-  it("con todo hecho, el sugerido es el último paso", () => {
+  it("con el vídeo montado, el sugerido es publicarlo", () => {
     montar(proyecto({
-      guion: GUION_FRASES, voz_disponible: true, subtitulos: "x", metadatos: {} as never,
+      guion: GUION_FRASES, voz_disponible: true, subtitulos: "x", metadatos: METADATOS,
       imagenes_completas: true, video_disponible: true,
     }));
-    expect(activo()).toBe("Vídeo final");
+    expect(activo()).toBe("Publicación");
+  });
+
+  it("con todo hecho, incluida la subida, se queda en Publicación", () => {
+    // Y no cae al paso de vídeo, que era el último cuando no había otro: al
+    // marcar el vídeo como subido uno se queda donde lo marcó.
+    montar(proyecto({
+      guion: GUION_FRASES, voz_disponible: true, subtitulos: "x", metadatos: METADATOS,
+      imagenes_completas: true, video_disponible: true,
+      publicacion: { fecha: "2026-10-29", url: "", nota: "" },
+    }));
+    expect(activo()).toBe("Publicación");
+  });
+
+  it("liberado: los pasos quedan hechos y abiertos, y la cabecera lo dice", () => {
+    // Sus archivos ya no están, pero no es trabajo pendiente: se tiró a
+    // propósito. Sin esto, un vídeo publicado se vería como si le faltara la
+    // voz y con los pasos de después bloqueados.
+    montar(proyecto({
+      video_disponible: true, liberado: true,
+      publicacion: { fecha: "2026-10-29", url: "", nota: "" },
+    }));
+    for (const n of ["Voz", "Metadatos", "Escenas e imágenes", "Vídeo final", "Publicación"]) {
+      expect(screen.getByRole("button", { name: new RegExp(n) })).toBeEnabled();
+    }
+    expect(screen.getByText("solo queda el vídeo")).toBeInTheDocument();
+    expect(screen.getByText("subido")).toBeInTheDocument();
+  });
+
+  it("Publicación está bloqueada sin vídeo, y nunca si ya se subió", () => {
+    const { rerender } = render(ProjectView, { p: proyecto(), voces: [], acciones, onver: vi.fn() });
+    expect(screen.getByRole("button", { name: /Publicación/ })).toBeDisabled();
+    // Con el vídeo ya subido se entra aunque el final.mp4 no esté: puede
+    // haberse liberado justo desde ahí.
+    rerender({
+      p: proyecto({ publicacion: { fecha: "2026-10-29", url: "", nota: "" } }),
+      voces: [], acciones, onver: vi.fn(),
+    });
+    expect(screen.getByRole("button", { name: /Publicación/ })).toBeEnabled();
   });
 
   it("el usuario puede elegir un paso desbloqueado, y no uno bloqueado", async () => {

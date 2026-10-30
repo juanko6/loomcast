@@ -18,7 +18,8 @@ const proy = (extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle => ({
   guion: null, guion_version: 1, metadatos: null, voz_disponible: true, voz_version: 0, subtitulos: "x",
   escenas: [escena(0), escena(1), escena(2)], personajes: [], imagenes_completas: false,
   video_disponible: false, versiones: [], jobs_activos: 0, job_activo: null,
-  musica: null, musica_mezclar: false, serie: null, resumen_episodio: "", ...extra,
+  musica: null, musica_mezclar: false,
+  publicacion: null, disco: { total_mb: 0, liberable_mb: 0 }, liberado: false, serie: null, resumen_episodio: "", ...extra,
 });
 
 const miembro = (slug: string, extra: Partial<MiembroReparto> = {}): MiembroReparto =>

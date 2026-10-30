@@ -68,6 +68,9 @@ export interface ProyectoResumen {
   // Estado de su autopiloto si tiene uno en marcha, o null. El listado es desde
   // donde se ve que de diez vídeos tres están esperando que alguien los lea.
   autopiloto: string | null;
+  // Fecha en la que se subió a YouTube ("" = sin publicar). Es la pregunta que
+  // uno se hace delante de la lista: cuáles ya están arriba y cuáles no.
+  publicado_en: string;
 }
 
 export type TipoGaleria = "generar" | "editar" | "quitarfondo";

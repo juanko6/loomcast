@@ -27,7 +27,8 @@ const proyecto = (extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle => ({
   guion: { gancho: "Hola", frases: ["Uno"], cta: "Fin" }, guion_version: 1, metadatos: null,
   voz_disponible: false, voz_version: 0, subtitulos: null, escenas: [], personajes: [],
   imagenes_completas: false, video_disponible: false, versiones: [], jobs_activos: 0, job_activo: null,
-  musica: null, musica_mezclar: false, serie: null, resumen_episodio: "", ...extra,
+  musica: null, musica_mezclar: false,
+  publicacion: null, disco: { total_mb: 0, liberable_mb: 0 }, liberado: false, serie: null, resumen_episodio: "", ...extra,
 });
 
 beforeEach(() => {
@@ -35,7 +36,7 @@ beforeEach(() => {
   m.listarVoces.mockResolvedValue([]);
   m.listarReparto.mockResolvedValue([]);
   m.listarTemas.mockResolvedValue([{ id: 1, texto: "misterios del mar", n_ideas: 3, n_aprobadas: 1 }]);
-  m.listarProyectos.mockResolvedValue([{ id: 1, titulo: "Mi proyecto", slug: "demo", estado: "GUION", serie: null, episodio: 0 }]);
+  m.listarProyectos.mockResolvedValue([{ id: 1, titulo: "Mi proyecto", slug: "demo", estado: "GUION", serie: null, episodio: 0, autopiloto: null, publicado_en: "" }]);
   m.ideasDeTema.mockResolvedValue([
     { id: 5, titulo: "Idea A", gancho: "g", resumen: "r", estado: "propuesta", proyecto_id: null }]);
   m.detalleProyecto.mockResolvedValue(proyecto());
@@ -436,5 +437,44 @@ describe("reparto propio", () => {
     await abrir();
     await userEvent.click(screen.getByRole("button", { name: "Traer" }));
     expect(await screen.findByText("HTTP 404")).toBeInTheDocument();
+  });
+});
+
+describe("el listado dice qué está subido y qué no", () => {
+  const fila = (extra: Record<string, unknown>) => ({
+    id: 1, titulo: "Mi proyecto", slug: "demo", estado: "GUION",
+    serie: null, episodio: 0, autopiloto: null, publicado_en: "", ...extra,
+  });
+
+  beforeEach(() => {
+    m.listarProyectos.mockResolvedValue([
+      fila({}),
+      fila({ id: 2, titulo: "Ya subido", estado: "FINAL", publicado_en: "2026-10-20" }),
+    ] as never);
+  });
+
+  it("marca el subido en vez de repetir su estado", async () => {
+    await montar();
+    const subido = (await screen.findByText("Ya subido")).closest("div")!;
+    expect(within(subido).getByText("subido")).toBeInTheDocument();
+    expect(within(subido).queryByText("FINAL")).toBeNull();
+    const pendiente = screen.getByText("Mi proyecto").closest("div")!;
+    expect(within(pendiente).getByText("GUION")).toBeInTheDocument();
+  });
+
+  it("el filtro deja ver solo lo que falta por subir, o solo lo que ya está", async () => {
+    await montar();
+    await userEvent.click(screen.getByRole("tab", { name: /Sin subir/ }));
+    expect(screen.getByText("Mi proyecto")).toBeInTheDocument();
+    expect(screen.queryByText("Ya subido")).toBeNull();
+
+    await userEvent.click(screen.getByRole("tab", { name: "Subidos" }));
+    expect(screen.queryByText("Mi proyecto")).toBeNull();
+    expect(screen.getByText("Ya subido")).toBeInTheDocument();
+  });
+
+  it("el filtro cuenta los que faltan", async () => {
+    await montar();
+    expect(screen.getByRole("tab", { name: "Sin subir 1" })).toBeInTheDocument();
   });
 });

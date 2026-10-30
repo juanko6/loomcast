@@ -45,6 +45,12 @@ def _migrar() -> None:
             "resumen_version": "INTEGER DEFAULT 0",
             "tramo_desvio": "TEXT DEFAULT ''",
             "continuidad_rota": "BOOLEAN DEFAULT 0",
+            # Cuándo se subió a YouTube, dónde quedó y la nota de quien lo
+            # subió. Los proyectos de antes de la publicación quedan en "",
+            # o sea sin publicar: es lo único que esta máquina sabe de ellos.
+            "publicado_en": "VARCHAR DEFAULT ''",
+            "publicado_url": "VARCHAR DEFAULT ''",
+            "publicado_nota": "TEXT DEFAULT ''",
         }
         for col, tipo in nuevas.items():
             if col not in cols:

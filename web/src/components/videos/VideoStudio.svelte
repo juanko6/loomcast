@@ -4,6 +4,7 @@
   import Field from "../primitives/Field.svelte";
   import Chip from "../primitives/Chip.svelte";
   import IconButton from "../primitives/IconButton.svelte";
+  import Segmented from "../primitives/Segmented.svelte";
   import Viewer from "../primitives/Viewer.svelte";
   import IdeasView from "./IdeasView.svelte";
   import ProjectView from "./ProjectView.svelte";
@@ -61,6 +62,18 @@
   // El tema de una serie no se lista aparte: tiene el mismo nombre que ella y
   // se entra a sus ideas de episodio desde la propia serie.
   const temasSueltos = $derived(temas.filter((t) => !t.serie));
+
+  // Con veinte proyectos en la lista, cuáles están ya subidos es la pregunta
+  // que no se puede contestar mirando: por eso el filtro, y no solo la marca.
+  let filtroPub = $state<"todos" | "sin" | "subidos">("todos");
+  const proyectosVisibles = $derived(
+    proyectos.filter((pr) => {
+      if (filtroPub === "sin") return !pr.publicado_en;
+      if (filtroPub === "subidos") return !!pr.publicado_en;
+      return true;
+    }),
+  );
+  const sinSubir = $derived(proyectos.filter((pr) => !pr.publicado_en).length);
 
   function fallo(e: unknown) {
     error = (e as Error).message;
@@ -521,6 +534,33 @@
     },
     borrarProyecto: () =>
       borrarProyecto(pid(), proyecto?.idea?.titulo ?? proyecto?.slug ?? ""),
+    // --- publicación ---
+    marcarPublicado: (fecha: string, url: string, nota: string) =>
+      tras(API.marcarPublicado(pid(), fecha, url, nota)),
+    quitarPublicado: async () => {
+      if (
+        !confirm(
+          "¿Quitar la marca de publicado?\n\n" +
+            "No se borra nada del disco; el vídeo vuelve a contar como pendiente de subir.",
+        )
+      )
+        return;
+      await tras(API.quitarPublicado(pid()));
+    },
+    liberarEspacio: async () => {
+      const mb = proyecto?.disco.liberable_mb ?? 0;
+      if (
+        !confirm(
+          `¿Liberar ${mb} MB de este proyecto?\n\n` +
+            "En su carpeta queda solo el vídeo final: se borran la narración, los subtítulos, " +
+            "las imágenes, los clips, los reescalados y los montajes anteriores.\n\n" +
+            "El guion, los metadatos, el reparto y el enlace se quedan guardados, pero para " +
+            "rehacer el vídeo habría que generarlo todo otra vez.\n\nNo se puede deshacer.",
+        )
+      )
+        return;
+      await tras(API.liberarEspacio(pid()));
+    },
     // --- autopiloto ---
     lanzarAutopiloto: (o: OpcionesAutopiloto) => tras(Auto.lanzarAutopiloto(pid(), o)),
     continuarAutopiloto: () => tras(Auto.continuarAutopiloto(pid())),
@@ -720,7 +760,20 @@
 
     <div class="space-y-1 border-t border-line p-4">
       <p class="mb-2 text-xs font-medium tracking-wide text-muted">Proyectos</p>
-      {#each proyectos as pr (pr.id)}
+      {#if proyectos.length > 1}
+        <div class="mb-2">
+          <Segmented
+            options={[
+              { value: "todos", label: "Todos" },
+              { value: "sin", label: sinSubir ? `Sin subir ${sinSubir}` : "Sin subir" },
+              { value: "subidos", label: "Subidos" },
+            ]}
+            value={filtroPub}
+            onchange={(v) => (filtroPub = v as "todos" | "sin" | "subidos")}
+          />
+        </div>
+      {/if}
+      {#each proyectosVisibles as pr (pr.id)}
         <div
           class={`group flex items-center gap-2 rounded-lg px-2.5 py-2 transition-colors
             ${vista?.tipo === "proyecto" && vista.id === pr.id ? "bg-accent-soft" : "hover:bg-surface-2"}`}
@@ -741,7 +794,14 @@
                 {pr.autopiloto === "esperando" ? "revisar" : "auto"}
               </Chip>
             {/if}
-            <Chip>{pr.estado}</Chip>
+            <!-- Un vídeo publicado está en FINAL por definición, así que la
+                 marca de subido ocupa el sitio del estado en vez de añadir un
+                 cuarto distintivo a una fila de 320 px. -->
+            {#if pr.publicado_en}
+              <Chip tone="ok">subido</Chip>
+            {:else}
+              <Chip>{pr.estado}</Chip>
+            {/if}
           </button>
           <span class="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
             <IconButton
@@ -754,7 +814,13 @@
           </span>
         </div>
       {:else}
-        <p class="text-xs text-muted">Sin proyectos aún.</p>
+        <p class="text-xs text-muted">
+          {proyectos.length
+            ? filtroPub === "sin"
+              ? "Todos están subidos."
+              : "Ninguno subido todavía."
+            : "Sin proyectos aún."}
+        </p>
       {/each}
     </div>
   </div>

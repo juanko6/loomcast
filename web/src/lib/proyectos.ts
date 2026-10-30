@@ -110,6 +110,40 @@ export interface MusicaProyecto {
   ocupado: boolean;
 }
 
+// Dónde quedó el vídeo una vez subido. null en el detalle = sin publicar.
+export interface Publicacion {
+  // ISO corta ("2026-10-29"): la pone quien lo marca, porque subir y apuntarlo
+  // no pasan el mismo día.
+  fecha: string;
+  // Enlace o id del vídeo en YouTube, tal y como se pegó.
+  url: string;
+  nota: string;
+}
+
+// Lo apuntado puede ser el enlace entero o solo el id del vídeo (es lo que se
+// tiene a mano según de dónde se copie); para abrirlo hace falta una URL.
+// Devuelve "" si no hay nada apuntado.
+export function enlaceYoutube(url: string): string {
+  const v = url.trim();
+  if (!v) return "";
+  return /^https?:\/\//i.test(v) ? v : `https://youtu.be/${v}`;
+}
+
+// La fecha se guarda en ISO corta (que es como la manda el <input type=date>)
+// pero aquí se lee en español, como las de los montajes. Lo que no sea una ISO
+// se devuelve tal cual: mejor enseñar lo que hay que inventarse una fecha.
+export function fechaEnEspanol(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+}
+
+// Cuánto ocupa el proyecto en disco y cuánto de eso es material intermedio que
+// se puede tirar una vez publicado.
+export interface Disco {
+  total_mb: number;
+  liberable_mb: number;
+}
+
 export interface Version {
   nombre: string;
   fecha: string;
@@ -172,6 +206,12 @@ export interface ProyectoDetalle {
   musica_mezclar: boolean;
   video_disponible: boolean;
   versiones: Version[];
+  // null = el vídeo no está subido todavía.
+  publicacion: Publicacion | null;
+  disco: Disco;
+  // De este proyecto ya solo queda el vídeo final: se publicó y se liberó su
+  // material. No es que le falte trabajo, es que se tiró a propósito.
+  liberado: boolean;
   jobs_activos: number;
   job_activo: string | null;
   // Su última tirada automática, viva o terminada; null si nunca tuvo una. Va
@@ -243,6 +283,23 @@ export const generarResumen = (id: number) =>
 
 export const generarMetadatos = (id: number) =>
   api<{ job_id: number }>(`/proyectos/${id}/metadatos`, { method: "POST" });
+
+// --- publicación ---
+export const marcarPublicado = (
+  id: number,
+  fecha: string,
+  url: string,
+  nota: string,
+) =>
+  api<Publicacion>(`/proyectos/${id}/publicacion`, {
+    method: "PUT",
+    body: { fecha, url, nota },
+  });
+export const quitarPublicado = (id: number) =>
+  api<{ publicado: boolean }>(`/proyectos/${id}/publicacion`, { method: "DELETE" });
+// Tira el material intermedio de un proyecto ya publicado; devuelve lo liberado.
+export const liberarEspacio = (id: number) =>
+  api<{ mb: number; archivos: number }>(`/proyectos/${id}/liberar`, { method: "POST" });
 
 export const generarCasting = (id: number) =>
   api<{ job_id: number }>(`/proyectos/${id}/casting`, { method: "POST" });

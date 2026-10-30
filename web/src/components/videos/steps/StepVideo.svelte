@@ -53,6 +53,13 @@
 </script>
 
 <div class="max-w-3xl space-y-5">
+  {#if p.liberado}
+    <p class="rounded-xl border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
+      Este vídeo se publicó y su material se liberó: en disco solo queda el montaje final. Para
+      rehacerlo hay que volver a generar la voz, las escenas y las imágenes desde sus pasos.
+    </p>
+  {/if}
+
   <fieldset class="space-y-2">
     <legend class="mb-2 text-xs font-medium tracking-wide text-dim">Modo de generación</legend>
     {#each MODOS_VIDEO as m (m.id)}
@@ -84,7 +91,13 @@
   {/if}
 
   <div class="flex flex-wrap items-center gap-3">
-    <Button disabled={busy} onclick={() => ongenerar(modo, conI2V ? motor : "")}>
+    <!-- Liberado no hay con qué armar: las imágenes y la narración ya no
+         están, y el botón solo serviría para encolar un job que falla. -->
+    <Button
+      disabled={busy || p.liberado}
+      title={p.liberado ? "Su material se liberó: no hay imágenes con las que armarlo" : undefined}
+      onclick={() => ongenerar(modo, conI2V ? motor : "")}
+    >
       {p.video_disponible ? "Rehacer vídeo" : "Generar vídeo"}
     </Button>
     {#if etapa}

@@ -89,6 +89,10 @@ def listar() -> list[dict]:
                 # distingue un episodio de un vídeo suelto de un vistazo.
                 "serie": serie.nombre if serie else None,
                 "episodio": p.episodio,
+                # Fecha de subida, o "" si sigue sin publicar. Va en el listado
+                # porque la pregunta que se hace delante de veinte proyectos es
+                # justo esa: cuáles ya están arriba.
+                "publicado_en": p.publicado_en or "",
             })
         return out
 
@@ -272,6 +276,13 @@ def detalle(pid: int) -> dict:
             "musica_mezclar": p.musica_mezclar,
             "video_disponible": (base_dir / "final.mp4").exists(),
             "versiones": _versiones(base_dir),
+            # Dónde quedó el vídeo subido (None = sin publicar) y cuánto ocupa
+            # el proyecto, para decidir desde la ficha si toca liberar espacio.
+            "publicacion": _publicacion(p),
+            "disco": _disco(base_dir),
+            # De este proyecto ya solo queda el vídeo: la ficha lo dice en vez
+            # de enseñar los pasos como si les faltara trabajo.
+            "liberado": _liberado(base_dir, p),
             "jobs_activos": activos,
             "job_activo": job_activo,
             # Su última tirada automática (o None si nunca tuvo una). Va la
@@ -608,6 +619,140 @@ def borrar_video(pid: int, con_versiones: bool = False) -> dict:
             f.unlink()
             versiones += 1
     return {"final": borrados, "versiones": versiones}
+
+
+# --- publicación -----------------------------------------------------------
+
+# Lo único que sobrevive a liberar el espacio de un proyecto publicado. Todo lo
+# demás de su carpeta se puede rehacer o ya no hace falta, y lo que de verdad
+# cuenta la historia —el guion, los metadatos, el reparto, el enlace— no vive en
+# disco sino en la base. Es una lista de lo que se queda y no de lo que se va a
+# propósito: así un archivo nuevo del pipeline se tira sin tener que acordarse
+# de apuntarlo aquí.
+SOBREVIVE_AL_LIBERADO = ("final.mp4",)
+
+
+def _mb(tamano: int) -> float:
+    return round(tamano / 1e6, 1)
+
+
+def _peso(ruta) -> int:
+    """Bytes que ocupa un archivo o, si es carpeta, todo lo que hay dentro."""
+    if not ruta.exists():
+        return 0
+    if ruta.is_file():
+        return ruta.stat().st_size
+    return sum(f.stat().st_size for f in ruta.rglob("*") if f.is_file())
+
+
+def _disco(base_dir) -> dict:
+    """Cuánto ocupa el proyecto y cuánto de eso se puede tirar: todo menos el
+    vídeo final."""
+    total = _peso(base_dir)
+    queda = sum(_peso(base_dir / n) for n in SOBREVIVE_AL_LIBERADO)
+    return {"total_mb": _mb(total), "liberable_mb": _mb(total - queda)}
+
+
+def _liberado(base_dir, p) -> bool:
+    """Si de este proyecto ya solo queda el vídeo.
+
+    Se mira el disco en vez de guardar una marca: si se vuelven a generar las
+    imágenes, deja de ser verdad solo, y una marca guardada habría que acordarse
+    de quitarla. Sin esto la ficha enseñaría un vídeo publicado como si le
+    faltara la voz y las imágenes, que es lo que parece cuando se miran los
+    archivos y no se sabe que se tiraron a propósito.
+    """
+    if not p.publicado_en or not (base_dir / "final.mp4").exists():
+        return False
+    return not any((base_dir / "imagenes").glob("*.png"))
+
+
+def _publicacion(p) -> dict | None:
+    """Dónde y cuándo se subió, o None si todavía no se ha subido."""
+    if not p.publicado_en:
+        return None
+    return {
+        "fecha": p.publicado_en,
+        "url": p.publicado_url or "",
+        "nota": p.publicado_nota or "",
+    }
+
+
+def _fecha_valida(fecha: str) -> str:
+    """ISO corta; cualquier otra cosa se cambia por hoy. La fecha la teclea
+    quien marca el vídeo, y una fecha que no es una fecha se quedaría guardada
+    y se enseñaría igual."""
+    try:
+        return datetime.strptime(fecha.strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        return datetime.now().strftime("%Y-%m-%d")
+
+
+def marcar_publicado(pid: int, fecha: str = "", url: str = "", nota: str = "") -> dict:
+    """Apunta que este vídeo ya está subido. Es el único dato del proyecto que
+    no se puede deducir del disco: lo que hay en YouTube no se ve desde aquí."""
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        p.publicado_en = _fecha_valida(fecha)
+        p.publicado_url = url.strip()
+        p.publicado_nota = nota.strip()
+        s.commit()
+        return _publicacion(p)
+
+
+def quitar_publicado(pid: int) -> None:
+    """Quita la marca (se subió por error, se borró de YouTube, se va a volver
+    a montar). No toca nada del disco."""
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        p.publicado_en = ""
+        p.publicado_url = ""
+        p.publicado_nota = ""
+        s.commit()
+
+
+class SinPublicar(RuntimeError):
+    pass
+
+
+def liberar_espacio(pid: int) -> dict:
+    """Deja en la carpeta del proyecto solo el vídeo final.
+
+    Solo de un proyecto publicado: mientras el vídeo no esté subido, esto es
+    material vivo —rehacer el montaje lo necesita— y lo que hay que borrar se
+    borra con los botones de siempre. Una vez subido, el vídeo es el resultado y
+    lo demás son los pasos para llegar a él; el guion, los metadatos, el reparto
+    y el enlace siguen en la base, así que lo que se pierde es lo que habría que
+    volver a generar para rehacer el montaje.
+    """
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        if not p.publicado_en:
+            raise SinPublicar(pid)
+        if jobs_repo.activos_de_proyecto(s, pid, TIPOS_JOB_PROYECTO):
+            raise ProyectoOcupado(pid)
+        slug = p.slug
+
+    base = PROYECTOS_DIR / slug
+    liberado, archivos = 0, 0
+    if base.is_dir():
+        for hijo in base.iterdir():
+            if hijo.name in SOBREVIVE_AL_LIBERADO:
+                continue
+            liberado += _peso(hijo)
+            if hijo.is_dir():
+                archivos += sum(1 for f in hijo.rglob("*") if f.is_file())
+                shutil.rmtree(hijo)
+            else:
+                archivos += 1
+                hijo.unlink()
+    return {"mb": _mb(liberado), "archivos": archivos}
 
 
 def borrar_proyecto(pid: int) -> dict:

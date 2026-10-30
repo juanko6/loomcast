@@ -89,7 +89,8 @@ const proyecto = (extra: Partial<ProyectoDetalle> = {}): ProyectoDetalle => ({
   guion: { gancho: "Hola", frases: ["Uno"], cta: "Fin" }, guion_version: 1, metadatos: null,
   voz_disponible: false, voz_version: 0, subtitulos: null, escenas: [], personajes: [],
   imagenes_completas: false, video_disponible: false, versiones: [], jobs_activos: 0,
-  job_activo: null, musica: null, musica_mezclar: false, ...extra,
+  job_activo: null, musica: null, musica_mezclar: false,
+  publicacion: null, disco: { total_mb: 0, liberable_mb: 0 }, liberado: false, ...extra,
 });
 
 // --- SerieView --------------------------------------------------------------
