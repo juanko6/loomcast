@@ -199,7 +199,7 @@ describe("MusicStudio", () => {
     await screen.findByText("lofi triste");
     await userEvent.type(screen.getByRole("textbox"), "nueva idea");
     await userEvent.click(screen.getByRole("button", { name: "Crear pista" }));
-    await waitFor(() => expect(m.crearMusica).toHaveBeenCalledWith({ tipo: "instrumental", idea: "nueva idea", duracion_s: 30 }));
+    await waitFor(() => expect(m.crearMusica).toHaveBeenCalledWith({ tipo: "instrumental", idea: "nueva idea", duracion_s: 180 }));
     await waitFor(() => expect(m.detalleMusica).toHaveBeenCalledWith(9));
     expect(vi.mocked(m.listarMusica).mock.calls.length).toBeGreaterThanOrEqual(2);
   });

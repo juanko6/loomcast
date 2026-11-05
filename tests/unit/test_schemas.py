@@ -131,6 +131,19 @@ def test_musica_prompt_tiene_valores_por_defecto_musicales():
         MusicaPromptLLM(tags="corto")
 
 
+def test_musica_prompt_recupera_claves_con_errata():
+    # El Qwen 35B en 4 bits escribe "lytics": sin esto el guion se perdía.
+    m = MusicaPromptLLM.model_validate(
+        {"tags": "x" * 20, "lytics": "[Intro - guitarra]", "bpm": 75})
+    assert m.lyrics == "[Intro - guitarra]" and m.bpm == 75
+    # Una clave bien escrita no se pisa con otra parecida.
+    m = MusicaPromptLLM.model_validate(
+        {"tags": "x" * 20, "lyrics": "[A]", "lytics": "[B]"})
+    assert m.lyrics == "[A]"
+    # Lo que no se parece a nada se sigue ignorando.
+    assert MusicaPromptLLM.model_validate({"tags": "x" * 20, "otra": 1}).lyrics == ""
+
+
 def test_personaje_nuevo_in_clave_obligatoria():
     assert PersonajeNuevoIn(clave="A").nombre == ""
     with pytest.raises(ValidationError):

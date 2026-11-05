@@ -59,11 +59,22 @@ def test_mejorar_prompt_guarda_y_normaliza(session, fake_llm, tipo, idioma_llm, 
 
 
 def test_mejorar_prompt_elige_el_prompt_de_sistema_segun_el_tipo(session, fake_llm):
-    fake_llm.responder(MusicaPromptLLM, MusicaPromptLLM(tags=TAGS))
+    fake_llm.responder(MusicaPromptLLM, MusicaPromptLLM(tags=TAGS, lyrics="[Intro - piano]"))
     musica_pipe.mejorar_prompt(_pista(session, "cancion"))
     musica_pipe.mejorar_prompt(_pista(session, "instrumental"))
     cancion, instrumental = (c["system"] for c in fake_llm.llamadas)
     assert cancion != instrumental
+
+
+def test_mejorar_prompt_falla_si_el_guion_llega_vacio(session, fake_llm):
+    # Guardarlo vacío dejaba la pista sin estructura sin que nadie lo viera;
+    # fallando, la cola reintenta.
+    mid = _pista(session, "instrumental", tags=None)
+    fake_llm.responder(MusicaPromptLLM, MusicaPromptLLM(tags=TAGS, lyrics="  "))
+    with pytest.raises(ValueError, match="guion de secciones"):
+        musica_pipe.mejorar_prompt(mid)
+    session.expire_all()
+    assert musica_repo.obtener(session, mid).tags is None
 
 
 def test_mejorar_prompt_inexistente(engine, fake_llm):

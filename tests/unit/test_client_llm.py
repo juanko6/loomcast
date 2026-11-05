@@ -61,6 +61,34 @@ def test_extract_json_sin_json_valido_lanza_llmerror(texto):
         llm._extract_json(texto)
 
 
+def test_extract_json_une_el_guion_partido_en_cadenas_sueltas():
+    """El Qwen de MLX escribe cada marcador como una cadena aparte y se come la coma final."""
+    texto = (
+        '{\n"tags": "jazz noir, tenor sax",\n'
+        '"lyrics": "[Intro - piano alone]",\n'
+        '"[Theme A - sax states the melody, bass walks]",\n'
+        '"[Outro - fades to silence]"\n'
+        '"bpm": 78,\n"keyscale": "D minor"\n}'
+    )
+    assert llm._extract_json(texto) == {
+        "tags": "jazz noir, tenor sax",
+        "lyrics": "[Intro - piano alone]\n[Theme A - sax states the melody, bass walks]\n"
+                  "[Outro - fades to silence]",
+        "bpm": 78,
+        "keyscale": "D minor",
+    }
+
+
+def test_extract_json_pone_la_coma_que_falta_antes_de_la_clave():
+    texto = '{\n"lyrics": "[Intro]\\n[Outro]"\n"bpm": 115\n"timesig": "4"\n}'
+    assert llm._extract_json(texto) == {"lyrics": "[Intro]\n[Outro]", "bpm": 115, "timesig": "4"}
+
+
+def test_extract_json_no_toca_un_json_valido_con_comas_y_saltos_dentro():
+    datos = {"tags": 'una frase, "otra",\n"y más"', "bpm": 90}
+    assert llm._extract_json(json.dumps(datos, indent=1)) == datos
+
+
 # --- chat -------------------------------------------------------------------
 
 def test_chat_pide_streaming_para_poder_pararse(http_mock):

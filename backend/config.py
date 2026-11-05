@@ -293,6 +293,10 @@ MUSICA_LM_DEVICE: str = _musica.get("lm_device", "default")
 # Masterizado EBU R128 de la pista ya generada. lufs = 0 lo desactiva.
 MUSICA_LUFS: float = float(_musica.get("lufs", -14.0))
 MUSICA_TRUE_PEAK: float = float(_musica.get("true_peak", -1.0))
+# Corrección de imagen estéreo: dB que el canal central debe sacarle al lateral.
+# Por debajo de `min` se baja el lateral hasta `objetivo`. Ver [musica].
+MUSICA_MEDIO_LADO_MIN: float = float(_musica.get("medio_lado_min", 3.0))
+MUSICA_MEDIO_LADO_OBJETIVO: float = float(_musica.get("medio_lado_objetivo", 6.0))
 # Lado en píxeles de la portada cuadrada de cada pista.
 MUSICA_PORTADA_PX: int = int(_musica.get("portada_px", 384))
 

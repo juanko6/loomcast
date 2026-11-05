@@ -53,7 +53,30 @@ def _extract_json(text: str) -> dict | list:
                 return json.loads(text[start:end])
             except json.JSONDecodeError:
                 continue
+        try:
+            return json.loads(_reparar_json(text[start : text.rfind("}") + 1]))
+        except json.JSONDecodeError:
+            pass
         raise LLMError(f"JSON inválido del modelo: {text[:300]}")
+
+
+# Una cadena (o un número) al final de una línea seguida de otra clave: falta la coma.
+_COMA_QUE_FALTA = re.compile(r'(?<=[0-9"])(\s*\n\s*)(?="[^"\n]+"\s*:)')
+# Cadenas sueltas en fila cuya siguiente no es una clave: son el mismo valor partido.
+_CADENA_PARTIDA = re.compile(r'(?<!\\)"\s*,\s*\n\s*"(?![^"\n]*"\s*:)')
+
+
+def _reparar_json(text: str) -> str:
+    """Arregla los dos fallos de forma que comete el modelo de MLX, que ignora el json_schema.
+
+    Con el guion de secciones de la música, el Qwen 4-bit a veces escribe cada
+    marcador como una cadena aparte (`"lyrics": "[Intro]",\n"[Tema A]",\n...`)
+    en vez de una sola con saltos de línea, y a veces se come la coma antes de la
+    clave siguiente. El contenido está entero; solo la forma está mal, y la
+    respuesta es determinista, así que reintentar devuelve exactamente lo mismo.
+    """
+    text = _CADENA_PARTIDA.sub(r"\\n", text)
+    return _COMA_QUE_FALTA.sub(r",\1", text)
 
 
 class LLMTruncado(LLMError):

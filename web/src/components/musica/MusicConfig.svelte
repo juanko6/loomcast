@@ -28,7 +28,7 @@
   let idea = $state("");
   let tags = $state("");
   let lyrics = $state("");
-  let duracion = $state(30);
+  let duracion = $state(180);
   let bpm = $state(120);
   let keyscale = $state("C major");
   let timesig = $state("4");
@@ -40,7 +40,7 @@
     idea = d?.idea ?? "";
     tags = d?.tags ?? "";
     lyrics = d?.lyrics ?? "";
-    duracion = d?.duracion_s ?? 30;
+    duracion = d?.duracion_s ?? 180;
     bpm = d?.bpm ?? 120;
     keyscale = d?.keyscale ?? "C major";
     timesig = d?.timesig ?? "4";
