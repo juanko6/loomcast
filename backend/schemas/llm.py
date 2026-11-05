@@ -3,7 +3,9 @@
 Cada modelo cumple doble función: genera el JSON schema que restringe la
 generación en llama-server, y valida/parsea la respuesta al volver.
 """
-from pydantic import BaseModel, Field, RootModel
+import difflib
+
+from pydantic import BaseModel, Field, RootModel, model_validator
 
 
 class IdeaLLM(BaseModel):
@@ -216,3 +218,24 @@ class MusicaPromptLLM(BaseModel):
     # Prompt en inglés para la portada de la pista (imagen cuadrada). Se genera
     # con el motor de imagen en un job encadenado.
     portada: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _claves_mal_escritas(cls, datos):
+        """Recoloca las claves que el modelo escribe con una errata.
+
+        El Qwen 35B en 4 bits devuelve `"lytics"` en vez de `"lyrics"`, y como
+        mlx_lm ignora el json_schema nadie lo frena: Pydantic descarta la clave
+        desconocida, `lyrics` se queda en "" y el guion de secciones se pierde
+        sin ningún aviso (pasó en todas las pistas desde la 33). Una clave que
+        no existe y se parece mucho a un campo que falta es ese campo.
+        """
+        if not isinstance(datos, dict):
+            return datos
+        faltan = [c for c in cls.model_fields if c not in datos]
+        for clave in [k for k in datos if k not in cls.model_fields]:
+            parecida = difflib.get_close_matches(clave, faltan, n=1, cutoff=0.8)
+            if parecida:
+                datos[parecida[0]] = datos.pop(clave)
+                faltan.remove(parecida[0])
+        return datos

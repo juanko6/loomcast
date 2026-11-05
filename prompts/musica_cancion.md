@@ -8,14 +8,21 @@ OBJECTIVE
 Produce a cohesive song: a description that sets the genre, the arrangement and the vocal character, lyrics that fit that style, and the tempo/key/time signature that hold it all together.
 
 THE DESCRIPTION (field "tags")
-ACE-Step 1.5 does NOT want comma-separated tags. It wants prose: one paragraph, 60–130 words, written like a producer describing a finished record. What makes it strong:
+ACE-Step 1.5 does NOT want comma-separated tags. It wants prose: one paragraph, 90–170 words, written like a producer describing a finished record. What makes it strong:
 - Name the genre and subgenre up front (neo-soul, indie folk, dream pop, trap, cumbia…).
 - Name specific instruments, not families: "Rhodes electric piano playing rich ninth chords", "fretless bass", "brushed drums with ghost notes", "muted trumpet".
 - Describe the VOICE in detail: gender, register, texture and delivery. "A powerful, expressive woman moving between a smoky chest voice and an airy falsetto, with tasteful melismatic runs." Mention harmony stacks if the chorus has them.
 - Give each element a ROLE IN THE MIX, because this is what stops instruments from fighting each other and from burying the voice: what anchors the track, what sits far back, where the space is. Say things like "a sub-bass pulse anchors the track without intruding", "the drums rest far back in the mix", "leaving room around the vocal".
-- Describe the production: warm and analog, tape saturation, wide reverb, intimate and dry.
+- **Name at least one element that lives in the top end**, and say it is crisp, bright, airy or detailed: brushed hi-hats, a shaker, rim shots, finger noise on strings, the air on the vocal, the sparkle of a bell. Without this the model returns a track with no treble at all, and that is what makes a mix sound muffled and amateur.
+- Ask for the stereo image explicitly: say the mix is wide, with the lead vocal anchored firmly in the centre and the supporting textures spread to the sides. That phrase is what keeps the two channels coherent instead of smeared.
+- Describe the production as a finished master: warm and analog is fine (tape saturation, wide reverb), but pair it with clarity — warm AND detailed, intimate AND open, full-range and present.
+- Describe how each instrument is PLAYED, not only which one it is: its articulation and how its notes end ("piano chords that ring and decay naturally", "fingerpicked guitar with string noise", "drums with ghost notes and dynamics", "plucky synth with a short envelope"). Left to itself the model plays everything as steady, pure, held tones, and the band sounds like an organ.
+- No permanent glue layer: do not add pads, drones, organ or held string beds under the whole song unless the genre is built on them; when it is, they come and go with the sections. If the genre does not need them, say so with the plain words no pads, no sustained chords underneath (never in quotation marks). The space around the voice comes from instruments that stop, not from pushing them back.
 - Describe how the arrangement EVOLVES across the song: what opens it, where it fills out, how it ends.
 - Stay faithful to the user's idea; do not invent an unrelated genre.
+
+WHAT NOT TO WRITE IN "tags"
+These words make the model hand back a dull, narrow, lifeless mix. Avoid them as a general description of the track, and never stack several of them: muffled, murky, dull, veiled, distant, washed out, buried, heavily filtered. Never write "everything sits far back in the mix" — the voice has to sit in FRONT. A sparse or minimal arrangement is fine — it is often what makes the instruments sound real — but its few elements must be VIVID: close, detailed, with air around them, never faint.
 
 THE LYRICS (field "lyrics")
 - Write them in the language that best fits the user's idea: if the idea is in Spanish, write the lyrics in Spanish; otherwise match the idea's language.
@@ -49,9 +56,9 @@ MUSICAL METADATA
 - "idioma": the short code of the language you wrote the lyrics in — "es" for Spanish, "en" for English, "pt", "fr", "it", "de", "ja"… It must match the lyrics or the singing pronunciation will be wrong.
 
 OUTPUT RULES
-- "tags" is English prose: one paragraph, no line breaks, no headings, no bullets, no markdown.
+- "tags" is English prose: one paragraph, no line breaks, no headings, no bullets, no markdown, and never a double quote character inside it (it would break the JSON).
 - "lyrics" follows the language rule above and includes the [marker] lines separated by line breaks (\n).
 - No commentary outside the JSON.
 
 Respond ONLY with valid JSON, no additional text:
-{"tags": "one paragraph in English describing genre, instrumentation, the voice, each element's role in the mix, production and how the arrangement evolves", "lyrics": "[Intro - ...]\n[Verse 1 - ...]\n...\n[Chorus - ...]\n...", "bpm": 90, "keyscale": "C major", "timesig": "4", "idioma": "es", "portada": "a lone figure walking away down a neon-lit street at dawn, washed-out pastels, grainy film texture, no text"}
+{"tags": "one paragraph in English describing genre, instrumentation, how each instrument is played, the voice, each element's role in the mix, production and how the arrangement evolves", "lyrics": "[Intro - ...]\n[Verse 1 - ...]\n...\n[Chorus - ...]\n...", "bpm": 90, "keyscale": "C major", "timesig": "4", "idioma": "es", "portada": "a lone figure walking away down a neon-lit street at dawn, washed-out pastels, grainy film texture, no text"}

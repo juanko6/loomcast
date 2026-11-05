@@ -18,6 +18,7 @@ from ...config import (
     MUSICA_LM_DEVICE,
     MUSICA_LM_TEMPERATURE,
     MUSICA_LUFS,
+    MUSICA_MEDIO_LADO_OBJETIVO,
     MUSICA_PORTADA_PX,
     MUSICA_TRUE_PEAK,
     PROMPTS_DIR,
@@ -117,8 +118,12 @@ def mejorar_prompt(musica_id: int) -> str:
     # ella: una pista de 30 s lleva 3 o 4 secciones y una de 180 s, siete u ocho.
     r = llm.chat(_sistema(tipo), f"{idea}\n\n(Duración: {duracion_s} segundos)", MusicaPromptLLM)
     # El guion de secciones también va en instrumental: es lo que evita que la
-    # pista sea un mismo bucle repetido durante toda su duración.
+    # pista sea un mismo bucle repetido durante toda su duración. Si llega
+    # vacío se falla, y la cola reintenta: guardarlo vacío deja una pista sin
+    # estructura que nadie nota hasta oírla.
     lyrics = r.lyrics
+    if not lyrics.strip():
+        raise ValueError("El LLM no devolvió el guion de secciones (lyrics vacío)")
 
     with get_session() as s:
         m = musica_repo.obtener(s, musica_id)
@@ -209,7 +214,15 @@ def _masterizar_pista(crudo) -> str:
     except _masterizar.MasterizarError as e:
         sin_tocar.rename(crudo)
         return f" (sin masterizar: {e})"
-    return (
+    nota = (
         f" (masterizada: de {antes['lufs']:.1f} LUFS y pico {antes['pico_dbtp']:.1f} dBTP "
-        f"a {MUSICA_LUFS:.0f} LUFS y {MUSICA_TRUE_PEAK:.0f} dBTP)"
+        f"a {MUSICA_LUFS:.0f} LUFS y {MUSICA_TRUE_PEAK:.0f} dBTP"
     )
+    # El medio/lado solo se nombra cuando hubo que corregirlo: es el dato que
+    # hace falta para entender por qué una pista sonaba hueca en el móvil.
+    if antes.get("estereo_corregido"):
+        nota += (
+            f"; estéreo corregido: el central sacaba {antes['medio_lado']:.1f} dB "
+            f"al lateral y ahora {MUSICA_MEDIO_LADO_OBJETIVO:.0f}"
+        )
+    return nota + ")"
