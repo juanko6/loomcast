@@ -38,11 +38,13 @@
       "vae": [
         "106",
         0
-      ]
+      ],
+      "tile_size": "{TILE_SIZE}",
+      "overlap": "{OVERLAP}"
     },
-    "class_type": "VAEDecodeAudio",
+    "class_type": "VAEDecodeAudioTiled",
     "_meta": {
-      "title": "VAEDecodeAudio"
+      "title": "VAEDecodeAudioTiled"
     }
   },
   "19": {

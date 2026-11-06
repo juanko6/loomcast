@@ -19,7 +19,9 @@ from ...config import (
     MUSICA_LM_TEMPERATURE,
     MUSICA_LUFS,
     MUSICA_MEDIO_LADO_OBJETIVO,
+    MUSICA_OVERLAP,
     MUSICA_PORTADA_PX,
+    MUSICA_TILE_SIZE,
     MUSICA_TRUE_PEAK,
     PROMPTS_DIR,
 )
@@ -179,6 +181,8 @@ def generar(musica_id: int) -> str:
             audio_codes=MUSICA_AUDIO_CODES,
             lm_temperature=MUSICA_LM_TEMPERATURE,
             lm_device=MUSICA_LM_DEVICE,
+            tile_size=MUSICA_TILE_SIZE,
+            overlap=MUSICA_OVERLAP,
         )
     finally:
         comfy.liberar_memoria()

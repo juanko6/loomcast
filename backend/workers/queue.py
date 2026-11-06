@@ -19,9 +19,16 @@ import traceback
 
 import httpx
 
-from .. import parada, procesos
+from .. import memoria, parada, procesos
 from ..clients import comfy, llm, rife
-from ..config import COLA_ESPERA_S, COLA_INTENTOS, COLA_MEMORIA_MODELO_GB
+from ..config import (
+    COLA_ESPERA_S,
+    COLA_INTENTOS,
+    COLA_MEMORIA_MODELO_GB,
+    I2V_MEMORIA_GB,
+    IMAGEN_MEMORIA_GB,
+    MUSICA_MEMORIA_GB,
+)
 from ..db import get_session
 from ..models import (
     ImagenLibre,
@@ -107,17 +114,47 @@ JOBS_LLM = {
     "generar_resumen_episodio",
 }
 
-# Etapas que cargan su modelo DENTRO del backend (Qwen3-TTS, whisper). No le
-# piden nada a ComfyUI, pero se pelean con él por la misma memoria unificada, y
-# el `/free` con el que la etapa anterior soltó al acabar es a ciegas: vuelve en
-# 1 ms con los pesos todavía dentro. Antes de cargar lo nuestro se espera a ver
-# la memoria de verdad (`_hacer_sitio`), que es la mitad que faltaba del mismo
-# error que ya se arregló por el lado del LLM.
-JOBS_MODELO_PROPIO = {
-    "generar_voz",
-    "crear_voz",
-    "clonar_voz",
-    "generar_subtitulos",
+# GiB libres que se esperan a ver antes de dejar que un job cargue su modelo.
+#
+# Todo el que carga algo grande pasa por aquí, porque el `/free` con el que la
+# etapa anterior soltó al terminar es **a ciegas**: vuelve en 1 ms con los pesos
+# todavía dentro, y con --gpu-only la descarga llega ~1,7 s después, bajando
+# primero la memoria libre. `_hacer_sitio` espera a medirla de verdad.
+#
+# Empezó cubriendo solo los modelos que viven DENTRO del backend (Qwen3-TTS,
+# whisper), que era la mitad que faltaba del error ya arreglado por el lado del
+# LLM. Los que viven dentro de ComfyUI se quedaron fuera porque su inquilino
+# mayor era Z-Image, 11,5 GiB, y colaba. ACE-Step 1.5 son 18,5 GiB y dejó de
+# colar: el 2026-11-05, una pista de 300 s cargó sobre un llama-server de 22 GiB
+# que el kernel no había terminado de reclamar, y su portada cargó Z-Image
+# encima de la pista todavía dentro de ComfyUI — 15 GiB al swap.
+#
+# Lo que no está aquí no carga nada que pese: ffmpeg (armado, clips), RIFE, el
+# ESRGAN del upscale (0,06 GiB), el u2net de quitar fondo (0,18) y el motion,
+# que se dibuja con Pillow.
+MEMORIA_JOB: dict[str, float] = {
+    # Dentro del backend: 8 sobra para el TTS en fp16 (3,4 de pesos, pico
+    # medido de 4,2) y no llega a bloquear nunca.
+    "generar_voz": COLA_MEMORIA_MODELO_GB,
+    "crear_voz": COLA_MEMORIA_MODELO_GB,
+    "clonar_voz": COLA_MEMORIA_MODELO_GB,
+    "generar_subtitulos": COLA_MEMORIA_MODELO_GB,
+    # Dentro de ComfyUI: ACE-Step 1.5, el más grande de todos.
+    "generar_musica": MUSICA_MEMORIA_GB,
+    "sintetizar_musica_proyecto": MUSICA_MEMORIA_GB,
+    # Dentro de ComfyUI: los motores de imagen. La portada de la pista está
+    # aquí porque es justo la que llega encadenada detrás de la música.
+    "generar_portada_musica": IMAGEN_MEMORIA_GB,
+    "generar_imagenes": IMAGEN_MEMORIA_GB,
+    "regenerar_imagen": IMAGEN_MEMORIA_GB,
+    "generar_previews_imagen": IMAGEN_MEMORIA_GB,
+    "generar_final_imagen": IMAGEN_MEMORIA_GB,
+    "generar_retrato": IMAGEN_MEMORIA_GB,
+    "generar_retratos": IMAGEN_MEMORIA_GB,
+    "generar_retrato_reparto": IMAGEN_MEMORIA_GB,
+    # Dentro de ComfyUI: los motores i2v. El mixto puede llevar escenas i2v.
+    "generar_i2v": I2V_MEMORIA_GB,
+    "generar_clips_mixto": I2V_MEMORIA_GB,
 }
 
 # Etapas que se disparan solas al terminar la anterior:
@@ -269,17 +306,52 @@ def _tomar() -> int:
     return _cola.get()[1]
 
 
-def _hacer_sitio(tipo: str) -> None:
-    """Espera a tener memoria libre antes de cargar un modelo en el backend.
+def _hacer_sitio(tipo: str, gb: float) -> None:
+    """Espera a tener `gb` libres antes de dejar que el job cargue su modelo.
 
     No lanza nunca, al contrario que su gemelo de `llm_runtime`: allí lo que
     venía detrás eran 22 GiB y arrancarlos a ciegas mataba al backend con
-    `Killed: 9`, así que negarse era lo correcto. Aquí lo que viene son 4, que
-    caben casi siempre; lo que hace falta es no cargarlos encima de algo que
-    está a punto de irse al swap, y dejar dicho cuánta memoria había si pasa.
+    `Killed: 9`, así que negarse era lo correcto. Aquí la etapa tiene que correr
+    igual —negarle la pista al usuario porque el equipo esté ocupado sería
+    peor—; lo que hace falta es no cargar encima de algo que está a punto de
+    irse al swap, y dejar dicho cuánta memoria había si pasa.
+
+    Quién pasa por aquí y con cuánto, en `MEMORIA_JOB`.
     """
-    lib = comfy.liberar_memoria(hasta_gb=COLA_MEMORIA_MODELO_GB)
-    linea = f"Memoria para {tipo} ({COLA_MEMORIA_MODELO_GB:.0f} GiB): {lib}"
+    lib = comfy.liberar_memoria(hasta_gb=gb)
+    linea = f"Memoria para {tipo} ({gb:.0f} GiB): {lib}"
+    print(f"[cola] {linea}", flush=True)
+    apuntes.anotar(linea)
+
+
+# Por debajo de esto no se anota: el sistema pagina un poco por su cuenta y un
+# historial que avise de 80 MiB en cada job no se lee.
+SWAP_AVISO_GB = 0.5
+
+
+def _anotar_swap(tipo: str, antes: float | None) -> None:
+    """Deja dicho en el historial del job si su etapa mandó memoria al swap.
+
+    Es el dato que no se ve de ninguna otra forma: al terminar la etapa, la
+    memoria disponible vuelve a parecer sana y el único rastro de que el equipo
+    ha estado paginando cuatro minutos es este contador. Sin esto, la única
+    manera de enterarse era tener `btop` abierto en el momento justo.
+
+    Mide `Swapouts`, no `Pageouts` (ver `backend/memoria.py`), y nunca lanza:
+    esto corre con el job ya terminado y no puede estropearlo.
+    """
+    if antes is None:
+        return
+    despues = memoria.swapouts_gb()
+    if despues is None or despues - antes < SWAP_AVISO_GB:
+        return
+    linea = (
+        f"{tipo} mandó {despues - antes:.1f} GiB al swap mientras corría: lo "
+        "que cargó no cabía. Si la medición de memoria de arriba dice que al "
+        "empezar había sitio de sobra, entonces no fue un solapamiento con la "
+        "etapa anterior sino el pico de esta, y el sitio donde mirar es lo que "
+        "carga su propio workflow"
+    )
     print(f"[cola] {linea}", flush=True)
     apuntes.anotar(linea)
 
@@ -290,8 +362,9 @@ def _ejecutar(tipo: str, ref_id: int, params: dict) -> str:
         with llm_runtime.en_uso():
             return HANDLERS[tipo](ref_id, **params)
     llm_runtime.liberar(f"empieza {tipo}")
-    if tipo in JOBS_MODELO_PROPIO:
-        _hacer_sitio(tipo)
+    gb = MEMORIA_JOB.get(tipo)
+    if gb:
+        _hacer_sitio(tipo, gb)
     return HANDLERS[tipo](ref_id, **params)
 
 
@@ -387,11 +460,13 @@ def _procesar(job_id: int) -> None:
     parada.iniciar(job_id)
     progreso.iniciar(job_id, tipo)
     apuntes.iniciar()
+    swap = memoria.swapouts_gb()
     try:
         estado, log = _intentar(job_id, tipo, ref_id, params)
         # Se lee antes de limpiar: el handler puede haber terminado bien justo
         # antes del corte, y entonces su trabajo vale pero la cadena no sigue.
         parado = parada.pedida()
+        _anotar_swap(tipo, swap)
         # Lo que midieron las capas de debajo (la memoria que soltó ComfyUI
         # antes de cargar el LLM, por ejemplo): el handler no lo sabe y el
         # historial de la UI es donde se lee.

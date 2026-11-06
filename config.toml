@@ -22,7 +22,14 @@ inactividad_s = 300
 # Se espera a recuperar la mayor parte de lo que ocupaba, no todo: con el
 # compresor y la fragmentación, exigir el 100 % sería esperar siempre el tope.
 # 0 = no esperar (el comportamiento de antes).
-espera_devolucion_s = 20
+#
+# Estaba en 20 s y se quedaba corto, medido: el 2026-11-05, pasando de la
+# sugerencia del LLM a sintetizar una pista de 300 s, se agotaron los 20 s
+# enteros y solo volvieron 13,5 de los 22 GiB («Memoria devuelta: 22.7 → 36.2
+# GiB (+13.5 de los 22 que ocupaba, en 20.0 s)» en el historial del job). Como
+# esto no se niega nunca, ACE-Step cargó sus 18,5 GiB encima de los 8,5 que
+# faltaban por reclamar.
+espera_devolucion_s = 45
 # Cuánto se espera a que el llama-server responda tras lanzarlo antes de darlo
 # por fallido (la primera carga de un modelo grande desde disco es lenta).
 espera_arranque_s = 240
@@ -279,6 +286,10 @@ motor = "ltx25"
 # que el armado concatena los clips, así que cualquier otro valor obliga a
 # ffmpeg a duplicar cuadros al final. RIFE genera los que hagan falta sin coste.
 fps_final = 60
+# GiB libres que se esperan antes de cargar un motor i2v (ver
+# [musica].memoria_gb). El mayor es LTX-2.5: 11,65 del DiT más 1,70 de sus dos
+# VAE, con el text encoder de 14,31 en CPU por lo que se explica en su motor.
+memoria_gb = 14
 
 [i2v.motores.ltx25]
 # LTX-2.5 (22B destilado, GGUF Q4_0). Sustituyó a HunyuanVideo 1.5 el
@@ -345,6 +356,14 @@ motor_editar = "qwen"
 # Tamaño que se usa cuando quien llama no especifica uno (pipeline de vídeo).
 width = 768
 height = 1344
+# GiB libres que se esperan antes de cargar un motor de imagen (ver
+# [musica].memoria_gb). Es uno para todos los motores a propósito: el umbral
+# solo evita cargar encima de algo que se está yendo, así que redondear hacia
+# arriba no cuesta nada y no hay que saber de antemano qué motor elegirá la
+# galería. El mayor es Z-Image, 11,46 del DiT más 0,31 del VAE (su encoder de
+# 3,24 va en CPU y ComfyUI lo suelta tras codificar); medido, soltarlo devuelve
+# 10,6 GiB.
+memoria_gb = 12
 
 [imagen.motores.zimage]
 nombre = "Z-Image Turbo"
@@ -424,6 +443,21 @@ motor_escena = "qwen"
 # Ojo: NO hay versión GGUF usable en ComfyUI (los GGUF que circulan son para
 # acestep.cpp, y ComfyUI-GGUF no soporta la arquitectura ace-step).
 workflow = "workflows/musica_api.json"
+# GiB libres que se esperan a ver ANTES de pedirle a ComfyUI la pista. Mismo
+# mecanismo que [cola].memoria_modelo_gb y por el mismo motivo: el `/free` con
+# el que la etapa anterior soltó al terminar es a ciegas (vuelve en 1 ms con los
+# pesos dentro), así que sin esta espera ACE-Step cargaba encima del modelo que
+# estuviera saliendo. No reserva nada; si no llega, la etapa corre igual y queda
+# anotado en el historial del job.
+#
+# Suman 18,5 GiB de pesos, y con --gpu-only entran los cuatro en la GPU:
+#   9,28  acestep_v1.5_xl_turbo_bf16    (el DiT)
+#   7,80  qwen_4b_ace15                 (el LM planificador)
+#   1,10  qwen_0.6b_ace15
+#   0,31  ace_1.5_vae
+# 20 deja margen para el latente y el KV cache del LM, que crecen con la
+# duración de la pista.
+memoria_gb = 20
 # Duración por defecto de una pista nueva, en segundos.
 duracion_s = 30
 # IMPORTANTE: arranca ComfyUI con --gpu-only (`comfy launch -- --gpu-only`). Sin
@@ -456,7 +490,39 @@ lm_temperature = 0.85
 # CPU.
 # Si alguna vez quieres quitarlo, pon "cpu" aquí: es más lento pero no depende
 # de nada externo.
+#
+# Y es también la salida si el historial de un job de música dice que mandó
+# memoria al swap **aunque al empezar hubiera sitio de sobra**: entonces el
+# solapamiento no es con la etapa anterior, es dentro del propio workflow. Con
+# --gpu-only, el LM planificador (7,80 GiB) y el DiT (9,28) están los dos en la
+# GPU y ComfyUI no hace offload, así que descarga uno para muestrear con el
+# otro y lo recarga después. Es el mismo ir y venir que con el text encoder de
+# LTX-2.5, que disparaba el swap a 15 GB hasta que se puso en CPU.
 lm_device = "default"
+# Decodificación del audio por trozos (nodo nativo VAEDecodeAudioTiled).
+#
+# El último paso de la pista es el VAE convirtiendo el latente en onda, y
+# hacerlo de una pasada es lo que mandaba 12 GiB al swap: el decoder acaba en
+# una capa de 128 canales a 48 kHz, o sea `128 × duración × 48000 × 2 bytes` en
+# UN tensor — 3,43 GiB para 300 s, y medido: ComfyUI falla pidiendo exactamente
+# esos 3,44 GiB si se le pone un techo. No era el asignador de MPS ni un
+# solapamiento entre etapas; era este tensor.
+#
+# `tile_size` va en pasos de latente, y en ACE-Step 1.5 cada paso son 1920
+# muestras (`length = seconds * 48000 / 1920`), así que 1024 pasos son 41 s de
+# audio y 8 trozos para una pista de 300 s. El tensor pasa a costar
+# `tile_size × 1920 × 256` bytes —480 MiB— y deja de crecer con la duración, que
+# es lo que importa: el pico es el del trozo, no el de la pista.
+#
+# `overlap` es el solape entre trozos, también en pasos (128 = 5,1 s). Es lo que
+# difumina el empalme. 1024/128 en vez de los 512/64 de serie porque, con el
+# pico ya en 480 MiB, sobra memoria para gastarla en empalmes: comparadas con la
+# misma semilla contra la decodificación de una pasada, 512/64 deja 16 costuras
+# y la peor a -59 dBFS, y 1024/128 deja 8 y la peor a -65 (con la pista a -14,
+# o sea 51 dB por debajo). Subirlos más cuesta memoria otra vez; bajarlos se
+# acerca a lo audible.
+tile_size = 1024
+overlap = 128
 # Masterizado con ffmpeg al terminar cada pista (EBU R128, en dos pasadas).
 # ACE-Step entrega el audio crudo: ~-17 LUFS y picos a 0,0-0,1 dBTP, o sea
 # distorsionando. -14 LUFS es el nivel al que normalizan YouTube y Spotify;
