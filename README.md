@@ -495,7 +495,7 @@ mlx-qwen36-35b: empieza generar_voz»*) y el pico del TTS detrás se fue casi
 20 GiB al swap. Es el mismo error que el del `/free`, en el otro sentido: allí no
 esperábamos a que ComfyUI soltara, aquí no esperábamos a que el sistema
 recogiera. Ahora `liberar()` no vuelve hasta ver de vuelta tres cuartos de lo que
-ocupaba el modelo (`[llm].espera_devolucion_s`, 20 s de tope), y lo deja medido
+ocupaba el modelo (`[llm].espera_devolucion_s`, 45 s de tope), y lo deja medido
 en el log y en el historial del job: *«Memoria devuelta: 9.0 → 26.0 GiB (+17.0 de
 los 22 que ocupaba, en 2.3 s)»*. No falla nunca: si no vuelve, se anota y se
 sigue, porque bloquear la etapa siguiente no la haría caber.
@@ -503,6 +503,66 @@ sigue, porque bloquear la etapa siguiente no la haría caber.
 Tres cuartos y no todo porque exigir el 100 % sería agotar el tope siempre: entre
 el compresor, la fragmentación y lo que el propio backend tenga dentro, lo último
 no vuelve. Lo que importa es que lo que falte ya no sea un modelo entero.
+
+El tope eran 20 s y se quedaba corto, medido: el 2026-11-05, pasando de la
+sugerencia del LLM a sintetizar una pista de música de 300 s, se agotaron los
+20 s enteros y solo volvieron 13,5 de los 22 GiB (*«Memoria devuelta: 22.7 →
+36.2 GiB (+13.5 de los 22 que ocupaba, en 20.0 s)»*). Como esto no se niega
+nunca, ACE-Step cargó sus 18,5 GiB encima de los 8,5 que faltaban por reclamar.
+
+### Todo el que carga algo grande espera a que haya sitio
+
+La puerta de la espera de memoria la cruzan ahora **todos** los jobs que cargan
+un modelo, cada uno con su presupuesto (`backend/workers/queue.py`,
+`MEMORIA_JOB`):
+
+| Qué carga | GiB que espera | De dónde sale |
+|---|---|---|
+| Qwen3-TTS, whisper (dentro del backend) | 8 | `[cola].memoria_modelo_gb` |
+| ACE-Step 1.5 (música) | 20 | `[musica].memoria_gb` |
+| Motores de imagen | 12 | `[imagen].memoria_gb` |
+| Motores i2v | 14 | `[i2v].memoria_gb` |
+
+Los de ComfyUI se quedaron fuera al principio porque su inquilino mayor era
+Z-Image, 11,5 GiB, y colaba. ACE-Step 1.5 son 18,5 GiB —9,28 del DiT, 7,80 del
+LM planificador, 1,10 del encoder pequeño y 0,31 del VAE, y con `--gpu-only`
+entran los cuatro en la GPU— y dejó de colar: el 2026-11-05 una pista de 300 s
+cargó sobre el llama-server que el kernel no había terminado de reclamar, y su
+portada encadenada cargó Z-Image encima de la pista todavía dentro de ComfyUI,
+porque el `/free` que manda la música al acabar vuelve en 1 ms sin comprobar
+nada. (Los 15 GiB de swap de aquella pista no venían de este solapamiento, sino
+del último paso de la síntesis —ver «El pico del final»—; el solapamiento se vio
+al medirlo y se arregla aquí.)
+
+Lo que no está en la tabla no carga nada que pese: ffmpeg (armado, clips), RIFE,
+el ESRGAN del upscale (0,06 GiB), el u2net de quitar fondo (0,18) y el modo
+motion, que se dibuja con Pillow.
+
+### Si una etapa pagina, lo dice su historial
+
+Cada job mide el contador de swap del sistema al empezar y al terminar, y si la
+diferencia pasa de 0,5 GiB lo deja escrito: *«generar_musica mandó 15.3 GiB al
+swap mientras corría»*. Es un dato que no se ve de ninguna otra forma — al
+terminar la etapa, la memoria disponible vuelve a parecer sana, y el único
+rastro de que el equipo ha estado paginando cuatro minutos es ese contador.
+
+Y distingue los dos casos, que se arreglan en sitios distintos: si la medición
+de memoria del mismo job dice que al empezar había sitio de sobra, entonces no
+fue un solapamiento con la etapa anterior sino el pico de la propia etapa, y hay
+que mirar lo que carga su workflow. Eso es lo que pasó con el text encoder de
+LTX-2.5 (ver su sección) y con el VAE de la música, donde el pico no era un
+modelo sino un tensor de 3,43 GiB (ver «La salida: decodificar el audio por
+trozos»).
+
+Se mide `Swapouts` de `vm_stat`, no `Pageouts`: en este equipo daban 276 MiB
+frente a 123 GiB. Cuidado con `psutil.swap_memory().sout`, que es lo que hay a
+mano y en macOS devuelve justo el `Pageouts`, o sea el número que parece decir
+que no pagina nunca.
+
+Y el contador viene en páginas, no en bytes: `memoria.swapouts_gb()` lee el
+tamaño de página de la primera línea del propio `vm_stat` porque **en este
+equipo son 16 KiB**, no los 4096 de costumbre. Un script que multiplique por
+4096 a mano da la cuarta parte de lo que pasó.
 
 ### De dónde sale la cifra de memoria
 
@@ -969,12 +1029,13 @@ memoria de verdad** (el POST vuelve en 1 ms sin haber soltado nada; ver
 si aun así no llega, el job sale como error contando la medición en vez de
 arrancar el modelo.
 
-Lo mismo, con dos diferencias, antes de una etapa que carga su modelo **dentro
-del backend** (Qwen3-TTS, whisper): los GiB son `[cola].memoria_modelo_gb` y la
-etapa corre igual si no llegan, porque son 4 y caben casi siempre — lo que hace
-falta ahí es no cargarlos encima de algo que está a punto de irse al swap, y que
-el historial lo diga si pasa. Antes no había ninguna puerta en ese lado: la voz
-cargaba el TTS sobre lo que hubiera dentro.
+Lo mismo, con dos diferencias, antes de una etapa que carga su modelo fuera del
+llama-server — dentro del backend (Qwen3-TTS, whisper) o dentro de ComfyUI
+(música, imagen, i2v): los GiB los declara su sección de `config.toml` (ver
+«Todo el que carga algo grande espera a que haya sitio») y la etapa corre igual
+si no llegan, porque negarle la pista al usuario porque el equipo esté ocupado
+sería peor — lo que hace falta ahí es no cargar encima de algo que está a punto
+de irse al swap, y que el historial lo diga si pasa.
 
 ### Los topes del asignador de MPS (lo que mandaba la voz al swap)
 
@@ -1219,6 +1280,145 @@ libera los modelos al terminar).
 El LM planificador se apaga con `config.toml [musica].audio_codes = false`: baja
 a ~2 s por pista, pero sin plan de estructura y con peor calidad.
 
+### Es el inquilino más grande del equipo
+
+Con `--gpu-only` entran los cuatro modelos en la GPU y suman **18,5 GiB**: 9,28
+del DiT, 7,80 del LM planificador, 1,10 del encoder pequeño y 0,31 del VAE. Más
+que Z-Image (11,5) y más que LTX-2.5 (13,4). Por eso la etapa espera a ver
+20 GiB libres antes de pedirle la pista a ComfyUI (`[musica].memoria_gb`; ver
+«Todo el que carga algo grande espera a que haya sitio»): sin esa espera cargaba
+encima del llama-server que acababa de salir.
+
+Esa espera no es, eso sí, de donde venían los 15 GiB de swap que se midieron el
+2026-11-05 con una pista de 300 s: aquello era el último paso del job, y está
+medido en las dos secciones siguientes.
+
+### El pico del final, que la espera de memoria no arregla
+
+Una pista de 300 s **pagina igual aunque empiece con 36 GiB libres**. Medido el
+2026-11-05, dos veces, con el contador de swap del sistema cada 10 s:
+
+| Duración | Al empezar el job | Swap durante la síntesis | En los últimos ~20 s |
+|---|---|---|---|
+| 300 s | 15-21 GiB libres | plano, 0 | **+10,8 GiB** |
+| 300 s | 36,1 GiB libres | plano, 0 | **+11,9 GiB** |
+| 180 s | 37,7 GiB libres | plano, 0 | **+3,2 GiB** |
+
+Lo que manda es la duración, no la memoria que haya: con el doble de memoria
+libre, una pista de 300 s pagina lo mismo, y la de 180 s pagina un tercio. El
+job de 180 s tarda 126 s; el de 300, 232.
+
+O sea: el swap no es el solapamiento con la etapa anterior —con el doble de
+memoria libre pagina lo mismo— sino un pico de la propia síntesis, y llega al
+final, en una ventana de diez segundos, cuando el VAE decodifica los cinco
+minutos de audio. La memoria disponible cae a 5,8 GiB y vuelve a 40 en cuanto
+termina.
+
+Lo que lo explica está en el log de ComfyUI: al pedir el VAE dice *«0 models
+unloaded»*, así que el LM (9127 MB) y el DiT (9511 MB) **siguen dentro** durante
+la decodificación. Son 19 GB que el VAE no necesita, y con `--gpu-only` ComfyUI
+no los suelta porque mide la memoria «disponible» del sistema y le parece que
+hay sitio.
+
+**No es el asignador de MPS.** Era la primera sospecha, porque es lo que
+mandaba la voz al swap y ComfyUI arranca sin los topes que el backend sí se
+pone. Probado el mismo día, tres pistas de 300 s seguidas:
+
+| Topes de MPS en ComfyUI | Libres al empezar | Resultado |
+|---|---|---|
+| ninguno | 36,1 GiB | 11,9 GiB al swap, pista OK en 232 s |
+| 0,90 / 0,75 (33,7 GiB) | 35,7 GiB | 9,0 GiB al swap, pista OK en 242 s |
+| 0,75 / 0,60 (28,0 GiB) | 38,8 GiB | **falla** |
+
+Y el fallo dice exactamente qué pasa:
+
+```
+[VAEDecodeAudio] MPS backend out of memory (MPS allocated: 22.27 GiB,
+other allocations: 3.52 GiB, max allowed: 28.08 GiB).
+Tried to allocate 3.44 GiB on shared pool.
+```
+
+PyTorch suelta su caché antes de rendirse, así que esos 26 GiB son
+**activaciones de verdad**, no caché. Y el bloque que no cabe se puede calcular:
+el decoder del VAE acaba en una capa de 128 canales a la resolución final, y en
+bf16 eso es `128 × duración × 48000 × 2 bytes` en un solo tensor —
+
+| Duración | Un solo tensor de esa capa |
+|---|---|
+| 180 s | 2,06 GiB |
+| 300 s | **3,43 GiB** |
+| 600 s (el tope de la UI) | 6,87 GiB |
+
+— y lo que el fallo dice que intentó asignar son **3,44 GiB** para la pista de
+300 s. Coincide con el cálculo hasta la segunda cifra, así que no hay
+ambigüedad: es un tensor, y su tamaño es la duración de la pista.
+
+**Por qué esto NO es el error del asignador que mandaba la voz al swap**, aunque
+el síntoma sea idéntico: la firma de los dos casos es distinta y se distingue
+con una sola pregunta — *¿el pico crece con el tamaño del dato?*
+
+| | Voz (asignador) | Música (activaciones) |
+|---|---|---|
+| El pico, al doblar el dato | plano: 15,6 → 16,3 GiB con 200 y 400 palabras | escala: 3,2 → 11,9 GiB de swap de 180 a 300 s |
+| Tamaño del pico vs el dato | 53 GiB con un modelo de 4,7 | 26 GiB para 5 min de audio: es el dato |
+| Bloques que pide | miles, pequeños, de forma distinta cada paso | uno de 3,44 GiB, calculable |
+| Con el tope puesto | queda plano en 16 GiB **y va el doble de rápido** | falla, porque el tensor tiene que existir entero |
+
+En la voz el tope obliga al asignador a reutilizar lo que ya tiene en la mano, y
+ahí había de sobra. Aquí no hay nada que reutilizar. Lo que sí había de caché en
+la música son los 2,9 GiB que el tope de 0,90 recuperó: ese trozo pequeño es el
+mismo fenómeno, pero no es de donde viene el swap. El tope no quita el swap, solo
+lo convierte en un fallo (los 2,9 GiB que ahorra el 0,90 no compran bastante
+para arriesgar un i2v o un Qwen-Edit, que no están medidos con techo), y por eso
+el lanzador no se los pone.
+
+Lo que no lo arregla es esperar memoria antes de empezar la etapa: eso tapa el
+solapamiento, que es otro problema y está medido aparte.
+
+### La salida: decodificar el audio por trozos
+
+Si el pico es un tensor cuyo tamaño es la duración de la pista, la salida es no
+pedirlo entero. ComfyUI trae el nodo para eso de serie —`VAEDecodeAudioTiled`,
+en `comfy_extras/nodes_audio.py`—: decodifica el latente en ventanas de
+`tile_size` pasos con `overlap` de solape y pega los trozos. El workflow de
+música usa ese nodo en vez de `VAEDecodeAudio`, y el tamaño de trozo sale de
+config ([musica] `tile_size` y `overlap`) para poder ajustarlo sin reexportar el
+JSON.
+
+Un trozo cuesta `128 × (tile_size × 1920 / 48000) × 48000 × 2` bytes, o sea
+`tile_size × 1920 × 256` bytes, y **ya no depende de la duración de la pista**:
+
+| tile_size | Trozo de audio | El tensor de la última capa |
+|---|---|---|
+| 512 (el del nodo) | 20,5 s | 240 MiB |
+| 1024 (el que usa loomcast) | 41,0 s | 480 MiB |
+| de una pasada, 300 s | 300 s | **3,43 GiB** |
+
+Medido el 2026-11-05 con la misma pista y la misma semilla (123456), 300 s:
+
+| Decodificación | Tiempo del job | Swap |
+|---|---|---|
+| de una pasada | 252 s | **14,0 GiB**, y la memoria disponible cayó a 0,7 GiB |
+| por trozos, 512/64 | 210 s | **ninguno** (contador plano) |
+| por trozos, 1024/128 | **206 s** | **ninguno** (178,30 → 178,30 GiB) |
+
+Sale más rápido porque paginar costaba más que decodificar ocho veces.
+
+Y el audio es el mismo. Comparadas muestra a muestra contra la decodificación de
+una pasada, las dos dan correlación **1,000000**, y fuera de los empalmes son
+idénticas (-104 dBFS de diferencia, ruido numérico). Los empalmes sí se
+localizan —caen cada `(tile_size - overlap) × 1920 / 48000` segundos— pero están
+muy por debajo de la música, que va a -14 dBFS:
+
+| | Costuras en 300 s | La peor | Diferencia total |
+|---|---|---|---|
+| 512/64 | 16, cada 17,9 s | -59 dBFS | -79,4 dBFS |
+| **1024/128** | 8, cada 35,8 s | **-65 dBFS** | **-88,4 dBFS** |
+
+Por eso el ajuste no es el de serie: con el pico ya en 480 MiB sobra memoria
+para gastarla en empalmes, y duplicar trozo y solape los parte por la mitad y
+baja 6 dB el peor. Subir más cuesta memoria otra vez.
+
 ### Portada
 
 Al terminar de generar una pista se encadena un job que le crea una portada
@@ -1230,6 +1430,12 @@ Va después de la pista y no tras la sugerencia del LLM, para que solo tengan
 portada las pistas que existen de verdad; cada regeneración estrena la suya. Una
 pista rellenada a mano, sin pasar por el LLM, no tiene prompt de portada y se
 queda con la miniatura de icono.
+
+Al ser un job aparte, entre pista y portada la cola espera a que ComfyUI suelte
+de verdad los 18,5 GiB de ACE-Step antes de cargar el motor de imagen. Hacía
+falta: el `/free` que manda la música al terminar vuelve en 1 ms con los pesos
+todavía dentro, así que la portada cargaba Z-Image encima de la pista entera y
+una portada de 6 s tardaba 20.
 
 384 px por lado (`[musica].portada_px`). Medido con Z-Image en el M3 Max: 256 en
 4 s, 320 y 384 en 6 s, 512 en 12 s y 640 en 18 s — 384 sale gratis frente a 320.

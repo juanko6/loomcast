@@ -100,10 +100,11 @@ class FakeComfy:
 
     def generar_musica(self, tags, lyrics, seed, duracion_s, bpm, keyscale, timesig,
                        idioma, destino, audio_codes=True, lm_temperature=0.85,
-                       lm_device="cpu"):
+                       lm_device="cpu", tile_size=512, overlap=64):
         self._reg("generar_musica", tags=tags, lyrics=lyrics, seed=seed,
                   duracion_s=duracion_s, bpm=bpm, keyscale=keyscale,
-                  timesig=timesig, idioma=idioma, destino=destino)
+                  timesig=timesig, idioma=idioma, destino=destino,
+                  tile_size=tile_size, overlap=overlap)
         # Como el real: conserva la extensión del audio de origen (ACE-Step: FLAC).
         final = Path(destino).with_suffix(".flac")
         _bytes(final, b"fake-audio")

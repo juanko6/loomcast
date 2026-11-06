@@ -190,6 +190,10 @@ if I2V_MOTOR not in I2V_MOTORES:
     )
 
 I2V_FPS_FINAL: int = _i2v.get("fps_final", 48)
+# GiB libres que se esperan antes de cargar un motor i2v en ComfyUI. Es el mismo
+# mecanismo que COLA_MEMORIA_MODELO_GB, pero para los modelos que viven dentro
+# de ComfyUI y no dentro del backend. Ver [i2v].memoria_gb en config.toml.
+I2V_MEMORIA_GB: float = float(_i2v.get("memoria_gb", 14))
 
 
 def motor_i2v(id_: str | None = None) -> MotorI2V:
@@ -257,6 +261,9 @@ for _modo, _defecto in (("generar", IMAGEN_MOTOR_GENERAR), ("editar", IMAGEN_MOT
 
 IMAGEN_WIDTH: int = _imagen.get("width", 768)
 IMAGEN_HEIGHT: int = _imagen.get("height", 1344)
+# GiB libres que se esperan antes de cargar un motor de imagen. Uno para todos
+# los motores: ver [imagen].memoria_gb en config.toml.
+IMAGEN_MEMORIA_GB: float = float(_imagen.get("memoria_gb", 12))
 
 # Retratos de referencia del reparto ([personajes] de config.toml).
 _personajes = _cfg.get("personajes", {})
@@ -281,6 +288,11 @@ for _clave, _id, _modo in (
 # {SEED}, {DURACION}, {BPM}, {KEYSCALE}, {TIMESIG}, {IDIOMA} y {AUDIO_CODES}.
 _musica = _cfg.get("musica", {})
 MUSICA_WORKFLOW: str = _musica.get("workflow", "workflows/musica_api.json")
+# GiB libres que se esperan antes de pedirle la pista a ComfyUI. ACE-Step 1.5 es
+# el inquilino más grande del equipo (18,5 GiB de pesos, los cuatro en GPU con
+# --gpu-only), y es lo que hacía que cargara encima del modelo que salía. Ver
+# [musica].memoria_gb en config.toml.
+MUSICA_MEMORIA_GB: float = float(_musica.get("memoria_gb", 20))
 MUSICA_DURACION_S: int = _musica.get("duracion_s", 30)
 MUSICA_AUDIO_CODES: bool = _musica.get("audio_codes", True)
 # Temperatura del LM planificador: a 0 (argmax) las pistas salen monótonas.
@@ -290,6 +302,12 @@ MUSICA_LM_TEMPERATURE: float = float(_musica.get("lm_temperature", 0.85))
 # Metal; "cpu" no depende de nada pero es ~7× más lento. Ver [musica] en
 # config.toml.
 MUSICA_LM_DEVICE: str = _musica.get("lm_device", "default")
+# Decodificación por trozos del VAE: `tile_size` en pasos de latente (1920
+# muestras cada uno) y `overlap` el solape. Es lo que acota el pico del último
+# paso, que de una pasada pedía un tensor de 3,43 GiB para 300 s y paginaba.
+# Ver [musica] en config.toml.
+MUSICA_TILE_SIZE: int = int(_musica.get("tile_size", 512))
+MUSICA_OVERLAP: int = int(_musica.get("overlap", 64))
 # Masterizado EBU R128 de la pista ya generada. lufs = 0 lo desactiva.
 MUSICA_LUFS: float = float(_musica.get("lufs", -14.0))
 MUSICA_TRUE_PEAK: float = float(_musica.get("true_peak", -1.0))

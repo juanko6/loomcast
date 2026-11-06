@@ -453,6 +453,8 @@ def generar_musica(
     audio_codes: bool = True,
     lm_temperature: float = 0.85,
     lm_device: str = "cpu",
+    tile_size: int = 512,
+    overlap: int = 64,
 ) -> Path:
     """Genera una pista de música con el workflow ACE-Step 1.5 configurable y la
     guarda junto a `destino` conservando la extensión de origen (devuelve la
@@ -460,9 +462,9 @@ def generar_musica(
 
     El workflow (config: [musica].workflow) debe traer los placeholders de texto
     {TAGS}, {LYRICS}, {KEYSCALE}, {TIMESIG} e {IDIOMA}, los numéricos {SEED},
-    {DURACION} y {BPM}, el booleano {AUDIO_CODES}, y terminar en un nodo de
-    guardado de audio. Los numéricos y el booleano van entrecomillados en el
-    JSON; ver `_render`.
+    {DURACION}, {BPM}, {TILE_SIZE} y {OVERLAP}, el booleano {AUDIO_CODES}, y
+    terminar en un nodo de guardado de audio. Los numéricos y el booleano van
+    entrecomillados en el JSON; ver `_render`.
 
     {BPM}, {KEYSCALE} y {TIMESIG} son el conditioning musical que ACE-Step 1.5
     añade sobre v1: fijan tempo, tonalidad y compás para que el arreglo no
@@ -476,6 +478,12 @@ def generar_musica(
     `lm_temperature` y `lm_device` van juntos: la temperatura alta es lo que
     hace el plan elaborado, pero obliga a `lm_device="cpu"` porque
     `torch.multinomial` está roto en Metal. Ver [musica] en config.toml.
+
+    `tile_size` y `overlap` son del nodo VAEDecodeAudioTiled, que decodifica el
+    latente por trozos en vez de la pista entera de una vez. No es una opción de
+    calidad: es lo que acota el pico del último paso. De una pasada, el decoder
+    pide `128 × duración × 48000 × 2 bytes` en un solo tensor —3,43 GiB para
+    300 s— y eso es lo que mandaba 12 GiB al swap en un equipo de 48 GB.
     """
     wf_path = ROOT / MUSICA_WORKFLOW
     if not wf_path.exists():
@@ -483,8 +491,9 @@ def generar_musica(
             f"No existe el workflow de música en {wf_path}. Exporta la plantilla "
             "ACE-Step 1.5 de ComfyUI en formato API con los placeholders {TAGS}, "
             "{LYRICS}, {SEED}, {DURACION}, {BPM}, {KEYSCALE}, {TIMESIG}, "
-            "{IDIOMA} y {AUDIO_CODES} (y un nodo de guardado de audio), y ponlo "
-            "en esa ruta (o ajusta config.toml [musica].workflow)."
+            "{IDIOMA}, {AUDIO_CODES}, {TILE_SIZE} y {OVERLAP} (y un nodo de "
+            "guardado de audio), y ponlo en esa ruta (o ajusta config.toml "
+            "[musica].workflow)."
         )
     with httpx.Client(timeout=30) as c:
         wf = _render(
@@ -500,6 +509,8 @@ def generar_musica(
             AUDIO_CODES=audio_codes,
             LM_TEMP=float(lm_temperature),
             LM_DEVICE=lm_device,
+            TILE_SIZE=int(tile_size),
+            OVERLAP=int(overlap),
         )
         try:
             entry = _encolar_y_esperar(c, wf)

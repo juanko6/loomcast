@@ -536,3 +536,27 @@ def test_liberacion_se_cuenta_sola_en_una_linea():
 
     dos = comfy.Liberacion(16.4, 16.4, 20.0, 2, False)
     assert "2 peticiones a /free" in str(dos)
+
+
+def test_el_workflow_de_musica_decodifica_por_trozos(tmp_path, monkeypatch):
+    """El workflow de verdad del repo, no uno de prueba: que decodifique por
+    trozos es la diferencia entre 14 GiB de swap y ninguno.
+
+    De una pasada, el último paso del decoder pide `128 × duración × 48000 × 2`
+    bytes en un solo tensor (3,43 GiB para 300 s) encima de los 19 GiB de
+    modelos que ComfyUI no suelta con `--gpu-only`. Un cambio de nodo en el
+    workflow lo devolvería sin que falle nada más, así que se fija aquí.
+    """
+    enviados = {}
+    monkeypatch.setattr(comfy, "_encolar_y_esperar",
+                        lambda c, wf: enviados.update(wf) or {"outputs": {}})
+    monkeypatch.setattr(comfy, "_descargar_primer_audio", lambda c, e, d: d)
+
+    comfy.generar_musica("t", "", 1, 300, 120, "C major", "4", "es",
+                         tmp_path / "m.flac", tile_size=1024, overlap=128)
+
+    tiled = [n for n in enviados.values() if n["class_type"] == "VAEDecodeAudioTiled"]
+    assert len(tiled) == 1, "el workflow de música no decodifica el audio por trozos"
+    assert tiled[0]["inputs"]["tile_size"] == 1024
+    assert tiled[0]["inputs"]["overlap"] == 128
+    assert not any(n["class_type"] == "VAEDecodeAudio" for n in enviados.values())

@@ -103,6 +103,20 @@ def test_generar_pasa_el_conditioning_a_comfy_y_marca_generada(session, dirs_tmp
     assert musica_pipe.ruta_audio(mid) == car / "musica.flac"
 
 
+def test_generar_pasa_los_trozos_del_decoder_desde_config(session, dirs_tmp, fake_comfy,
+                                                         sin_masterizar, monkeypatch):
+    """El tamaño de trozo y el solape no son del workflow: salen de config, para
+    poder ajustarlos sin reexportar el JSON. Si se quedaran en el valor por
+    defecto del nodo, el pico del decoder volvería a mandar la pista al swap."""
+    monkeypatch.setattr(musica_pipe, "MUSICA_TILE_SIZE", 2048)
+    monkeypatch.setattr(musica_pipe, "MUSICA_OVERLAP", 256)
+
+    musica_pipe.generar(_pista(session, seed=42))
+
+    llamada = dict(fake_comfy.llamadas)["generar_musica"]
+    assert (llamada["tile_size"], llamada["overlap"]) == (2048, 256)
+
+
 def test_generar_sin_seed_elige_uno_aleatorio_y_lo_guarda(session, dirs_tmp, fake_comfy, sin_masterizar):
     mid = _pista(session)
     musica_pipe.generar(mid)

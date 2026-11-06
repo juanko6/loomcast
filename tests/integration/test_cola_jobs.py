@@ -423,6 +423,81 @@ def test_si_la_memoria_no_llega_la_etapa_de_voz_corre_igual(cola, monkeypatch):
     assert estado == "ok" and "6.0 → 6.0" in log
 
 
+def test_la_musica_espera_la_memoria_de_ace_step(cola, monkeypatch):
+    """El agujero del 2026-11-05. Los jobs de ComfyUI no pasaban por esta
+    puerta porque su inquilino mayor era Z-Image (11,5 GiB) y colaba; ACE-Step
+    son 18,5 y cargó sobre el llama-server que el kernel aún no había
+    reclamado."""
+    pedido = _mide(monkeypatch)
+    queue.HANDLERS["generar_musica"] = lambda ref: "pista"
+    jid = queue.encolar("generar_musica", 1)
+
+    queue._procesar(queue._tomar())
+
+    assert pedido == [queue.MUSICA_MEMORIA_GB]
+    estado, log = _estado(jid)
+    assert estado == "ok" and "16.4 → 27.0" in log
+
+
+def test_la_portada_encadenada_tambien_espera(cola, monkeypatch):
+    """La otra mitad: la portada sale detrás de la pista y cargaba su motor de
+    imagen con los 18,5 GiB de ACE-Step todavía dentro de ComfyUI, porque el
+    `/free` que manda la música al terminar vuelve en 1 ms sin comprobar nada."""
+    pedido = _mide(monkeypatch)
+    queue.HANDLERS["generar_musica"] = lambda ref: "pista"
+    queue.HANDLERS["generar_portada_musica"] = lambda ref: "portada"
+    queue.encolar("generar_musica", 1)
+
+    queue._procesar(queue._tomar())  # la pista
+    queue._procesar(queue._tomar())  # la portada, que encadena
+
+    assert pedido == [queue.MUSICA_MEMORIA_GB, queue.IMAGEN_MEMORIA_GB]
+
+
+def test_una_etapa_que_no_carga_nada_no_espera_memoria(cola, monkeypatch):
+    """El armado es ffmpeg: esperar memoria ahí solo metería una espera y una
+    nota en el historial de un job que no carga ningún modelo."""
+    monkeypatch.setattr(
+        queue.comfy,
+        "liberar_memoria",
+        lambda hasta_gb=None: pytest.fail("el armado no carga ningún modelo"),
+    )
+    queue.HANDLERS["armar_video"] = lambda ref: "armado"
+    queue.encolar("armar_video", 1)
+
+    queue._procesar(queue._tomar())
+
+
+def test_el_swap_de_una_etapa_queda_en_su_historial(cola, monkeypatch):
+    """Lo que no se ve de ninguna otra forma: al terminar, la memoria vuelve a
+    parecer sana y el único rastro de que el equipo ha estado paginando es el
+    contador."""
+    _mide(monkeypatch)
+    lecturas = iter([100.0, 115.3])
+    monkeypatch.setattr(queue.memoria, "swapouts_gb", lambda: next(lecturas))
+    queue.HANDLERS["generar_musica"] = lambda ref: "pista"
+    jid = queue.encolar("generar_musica", 1)
+
+    queue._procesar(queue._tomar())
+
+    estado, log = _estado(jid)
+    assert estado == "ok" and "15.3 GiB al swap" in log
+
+
+def test_un_swap_de_nada_no_se_anota(cola, monkeypatch):
+    """El sistema pagina un poco por su cuenta y un historial que avise de
+    80 MiB en cada job no se lee."""
+    _mide(monkeypatch)
+    lecturas = iter([100.0, 100.08])
+    monkeypatch.setattr(queue.memoria, "swapouts_gb", lambda: next(lecturas))
+    queue.HANDLERS["generar_musica"] = lambda ref: "pista"
+    jid = queue.encolar("generar_musica", 1)
+
+    queue._procesar(queue._tomar())
+
+    assert "swap" not in _estado(jid)[1]
+
+
 def test_una_etapa_de_texto_no_pasa_por_esa_puerta(cola, monkeypatch):
     """El LLM tiene la suya, y pide los GiB que declare su modelo."""
     monkeypatch.setattr(

@@ -35,6 +35,61 @@ def test_si_psutil_falla_por_dentro_tampoco_revienta(monkeypatch):
     assert memoria.disponible_gb() is None
 
 
+# --- el contador de swap ----------------------------------------------------
+# La memoria disponible dice si algo cabe ahora; esto dice si lo que ya corrió
+# cupo. Al terminar una etapa, la disponible vuelve a parecer sana y el único
+# rastro de que el equipo ha estado paginando es este contador.
+
+def test_los_swapouts_son_una_cifra_creible():
+    gb = memoria.swapouts_gb()
+    # Acumulado desde el arranque del equipo: puede ser 0 en uno recién
+    # encendido, pero no negativo ni petabytes.
+    assert gb is not None and 0 <= gb < 1_000_000
+
+
+def test_mide_swapouts_y_no_pageouts(monkeypatch):
+    """La trampa de este contador. `Pageouts` cuenta también las escrituras de
+    archivos mapeados, que son normales: en este equipo daba 276 MiB frente a
+    los 123 GiB de `Swapouts`. Y `psutil.swap_memory().sout`, que es lo que
+    había a mano, devuelve en macOS justo el Pageouts."""
+    import subprocess
+
+    salida = (
+        "Mach Virtual Memory Statistics: (page size of 16384 bytes)\n"
+        "Pages free:                       1200346.\n"
+        "Pageouts:                           16842.\n"
+        "Swapouts:                         7517499.\n"
+    )
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, salida, "")
+    )
+    # 7517499 páginas de 16 KiB, no 16842.
+    assert round(memoria.swapouts_gb(), 1) == 114.7
+
+
+def test_sin_el_campo_devuelve_none(monkeypatch):
+    """Un `vm_stat` de otro sistema operativo, o que cambie de formato: la cola
+    lo llama con el job ya terminado y no puede estropearlo."""
+    import subprocess
+
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(a, 0, "nada que ver\n", ""),
+    )
+    assert memoria.swapouts_gb() is None
+
+
+def test_si_vm_stat_no_esta_tampoco_revienta(monkeypatch):
+    import subprocess
+
+    def explota(*a, **k):
+        raise FileNotFoundError("vm_stat")
+
+    monkeypatch.setattr(subprocess, "run", explota)
+    assert memoria.swapouts_gb() is None
+
+
 # --- los topes del asignador de MPS -----------------------------------------
 # Lo que mandaba la voz al swap: el asignador cachea lo que libera y en una
 # generación autorregresiva cada paso pide una forma distinta, así que no

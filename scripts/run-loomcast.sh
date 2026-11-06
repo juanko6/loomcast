@@ -165,6 +165,25 @@ if [ "$DEV" -eq 0 ]; then
 fi
 
 # ---------------------------------------------------------------- ComfyUI
+# A ComfyUI **no** se le ponen los topes del asignador de MPS que el backend se
+# pone a sí mismo (`[voz].mps_tope`), y está medido el 2026-11-05 generando tres
+# veces la misma pista de 300 s:
+#
+#   sin topes        36,1 GiB libres al empezar → 11,9 GiB al swap, pista OK
+#   0,90 / 0,75      35,7 GiB libres            →  9,0 GiB al swap, pista OK
+#   0,75 / 0,60      38,8 GiB libres            → falla: [VAEDecodeAudio] MPS
+#                                                 backend out of memory
+#
+# O sea: en el backend el pico era el asignador cacheando y el tope lo dejaba
+# plano; aquí el pico son activaciones de verdad —`VAEDecodeAudio` necesita unos
+# 26 GiB para cinco minutos de audio—, así que el techo no quita el swap, solo
+# lo convierte en un fallo. Los 2,9 GiB que ahorra el 0,90 no compran bastante
+# para arriesgarse a tumbar un i2v a 768×1376 o un Qwen-Edit con referencias,
+# que no están medidos con techo.
+#
+# Si quieres probarlos, se exportan a mano antes de lanzar:
+#   PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.90 scripts/run-loomcast.sh
+
 if [ "$CON_COMFY" -eq 1 ]; then
   if escucha "$PUERTO_COMFY"; then
     echo "${GRIS}ComfyUI ya escucha en $PUERTO_COMFY, lo reutilizo.${FIN}"

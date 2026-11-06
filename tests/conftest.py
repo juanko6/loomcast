@@ -232,6 +232,7 @@ def ningun_llama_server_de_verdad(monkeypatch):
     probar esos caminos pone sus propios dobles y gana, porque su monkeypatch
     se aplica después de este.
     """
+    from backend import memoria
     from backend.clients import comfy, llm
     from backend.services import llm_runtime
     from backend.workers import queue
@@ -245,6 +246,15 @@ def ningun_llama_server_de_verdad(monkeypatch):
     # y además ataba el resultado a cuánta memoria tuviera la máquina.
     monkeypatch.setattr(llm_runtime, "comfy", _ComfySinModelos(comfy))
     monkeypatch.setattr(queue, "comfy", _ComfySinModelos(comfy))
+    # Y el contador de swap del equipo, que la cola lee al abrir y al cerrar
+    # cada job: un pico de swap de la máquina —real, pero ajeno al test— le
+    # pegaría una nota al log y rompería a los que lo comparan entero.
+    #
+    # Se sustituye el nombre con el que la cola ve al módulo, por lo mismo que
+    # arriba: parcheando `memoria.swapouts_gb` se quedaban sin medición los
+    # tests del propio módulo, que son los que prueban que lee Swapouts y no
+    # Pageouts.
+    monkeypatch.setattr(queue, "memoria", _MemoriaSinSwap(memoria))
     monkeypatch.setattr(llm_runtime, "_pids_en_puerto", lambda url: [])
     monkeypatch.setattr(llm_runtime, "_lanzar", lambda modelo: _ProcDeTest())
     monkeypatch.setattr(llm_runtime, "_matar", lambda proc: None)
@@ -274,6 +284,21 @@ class _ClienteSinServidor:
         return False
 
     def que_hay(self, url=None):
+        return None
+
+
+class _MemoriaSinSwap:
+    """La memoria del equipo vista por la cola: el contador de swap no se puede
+    leer, que es lo que no anota nada en el historial. Lo demás lo pasa al
+    módulo de verdad."""
+
+    def __init__(self, real):
+        self._real = real
+
+    def __getattr__(self, nombre):
+        return getattr(self._real, nombre)
+
+    def swapouts_gb(self):
         return None
 
 
