@@ -21,6 +21,11 @@ class Escena(Base):
     # Prompt de movimiento en inglés para el modo i2v (qué se mueve en la
     # escena). El prompt visual describe una imagen fija y no dirige movimiento.
     prompt_movimiento: Mapped[str] = mapped_column(Text, default="")
+    # La ficha de composición, en JSON, cuando la plantilla es de montaje
+    # motion: qué bloque de anotación lleva la escena, en qué banda va, qué
+    # texto se ve y con qué movimiento de cámara. Vacía en las plantillas de
+    # imagen, que es lo que son todas las demás.
+    ficha: Mapped[str] = mapped_column(Text, default="")
     seed: Mapped[int] = mapped_column(default=0)
     # Claves de los personajes que salen en la escena, separadas por coma. Se
     # deduce de qué fichas se sustituyeron de verdad en el prompt, no de lo que

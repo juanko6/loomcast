@@ -182,6 +182,9 @@ export interface ProyectoDetalle {
   slug: string;
   estado: string;
   plantilla: string;
+  // De qué está hecho el vídeo, según la plantilla: "imagen" (un prompt y un
+  // PNG por escena) o "motion" (una ficha de composición dibujada por código).
+  montaje: string;
   serie: SerieDelProyecto | null;
   // En qué quedó ESTE episodio, para el guion del siguiente. Vacío = sin cerrar
   // (o proyecto suelto).
@@ -506,6 +509,7 @@ export const NOMBRE_MODO: Record<string, string> = {
   estatico: "Estático",
   kenburns: "Ken Burns",
   i2v: "i2v",
+  motion: "Motion",
 };
 
 // Etiquetas legibles de la etapa en curso (job activo del proyecto).

@@ -37,3 +37,6 @@ web/.astro/
 .coverage
 .pytest_cache/
 web/coverage/
+
+# Referencias sacadas de YouTube (material de consulta personal, no se publica)
+/referencias/youtube/

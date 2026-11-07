@@ -55,6 +55,7 @@ from ..services.pipeline import (
     imagen_animada,
     imagen_libre,
     imagenes,
+    motion,
     musica,
     musica_proyecto,
     quitar_fondo,
@@ -101,6 +102,7 @@ HANDLERS = {
     "generar_portada_album": album.generar_portada_album,
     "regenerar_clip": escena_individual.regenerar_clip,
     "generar_clips_mixto": escena_individual.generar_clips_mixto,
+    "generar_clips_motion": motion.generar_clips_motion,
     "generar_upscale": upscale.generar_upscale,
     "generar_clips": clips.generar_clips,
     "generar_i2v": i2v.generar_i2v,
@@ -203,6 +205,7 @@ CADENA = {
     # síntesis no se encadena: antes el usuario revisa el álbum y lo lanza.
     "planificar_album": "escribir_album",
     "generar_clips_mixto": "armar_video",
+    "generar_clips_motion": "armar_video",
 }
 
 # Modo de video → job con el que arranca. El estático es un solo job; el de
@@ -215,10 +218,13 @@ MODOS_VIDEO = {
     "i2v": "generar_i2v",
     # Respeta el modo elegido en cada escena: el video puede mezclarlos.
     "mixto": "generar_clips_mixto",
+    # Dibujado por código: ni imágenes ni reescalado, directo a los clips. No
+    # se elige a mano — lo impone la plantilla (ver `Plantilla.montaje`).
+    "motion": "generar_clips_motion",
 }
 
 
-def _encadenado(tipo: str, ref_id: int) -> str | None:
+def _encadenado(tipo: str, ref_id: int, params: dict | None = None) -> str | None:
     """Qué job sale solo tras este, si sale alguno. Todo está en `CADENA`.
 
     El resumen del episodio **estuvo aquí**, encadenado al armado, y de ahí se
@@ -231,6 +237,14 @@ def _encadenado(tipo: str, ref_id: int) -> str | None:
     verdad cerrada. Encadenarlo aquí no valdría: la cadena se come el
     `tras_etapa` del guion, o sea la propia parada de revisión.
     """
+    # Un lote de pistas (`musica.crear_lote`) va solo de la idea al audio: tras
+    # el brief, la síntesis, y sin portada. Las portadas se dejan fuera porque
+    # alternar ACE-Step y el motor de imagen pista a pista es pagar las dos
+    # cargas 300 veces. Los briefs salen todos antes que ninguna síntesis: cada
+    # `generar_musica` se encola al acabar su brief, o sea detrás de los briefs
+    # del lote que ya esperaban, y el LLM no se carga y descarga entre pista y pista.
+    if (params or {}).get("lote"):
+        return "generar_musica" if tipo == "mejorar_prompt_musica" else None
     # Una pista de álbum no estrena portada: la del disco se hace una vez al
     # final (cargar el motor de imagen entre pista y pista es pagar la carga de
     # ACE-Step otra vez en cada vuelta).
@@ -544,13 +558,14 @@ def _procesar(job_id: int) -> None:
     # Las etapas no lo hacen por su cuenta a propósito (ver models/autopiloto),
     # porque entonces parar no pararía nada.
     if estado == "ok" and not parado:
-        siguiente = _encadenado(tipo, ref_id)
+        siguiente = _encadenado(tipo, ref_id, params)
         if siguiente:
             # La cadena hereda la prioridad: una tirada del autopiloto no debe
             # adelantar a lo que se pida a mano por el hecho de ir encadenada, y
             # un upscale pedido a mano no debe perder su sitio al llegar a los
             # clips.
-            encolar(siguiente, ref_id, prioridad=prioridad)
+            encolar(siguiente, ref_id, prioridad=prioridad,
+                    **({"lote": True} if params.get("lote") else {}))
             return
         autopiloto.tras_etapa(ref_id, tipo)
         return

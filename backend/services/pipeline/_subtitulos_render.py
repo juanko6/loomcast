@@ -10,6 +10,7 @@ from pathlib import Path
 ANCHO, ALTO = 1080, 1920
 TAM_FUENTE = 88
 MARGEN_INFERIOR = 420
+MARGEN_SUPERIOR = 120
 ANCHO_MAX_TEXTO = 980
 
 DIRS_FUENTES = [
@@ -55,19 +56,32 @@ def buscar_fuente(nombre: str) -> Path | None:
     return None
 
 
-def dibujar_subtitulo(img, texto: str, fuente_path: Path, color: str, borde: str):
-    """Dibuja el texto centrado en la franja inferior de `img` (RGB o RGBA)."""
+def dibujar_subtitulo(img, texto: str, fuente_path: Path, color: str, borde: str,
+                      posicion: str = "abajo", tam: int = TAM_FUENTE):
+    """Dibuja el texto centrado en una franja de `img` (RGB o RGBA).
+
+    Arriba y pequeño es para el modo motion, donde el tercio de abajo lo ocupa
+    la capa de titulares: dos textos grandes en el mismo sitio no se leen ni
+    por separado. El subtítulo pasa entonces a ser lo que es en ese lenguaje
+    —la transcripción literal, de apoyo— y el titular se queda con el peso.
+    """
     from PIL import ImageDraw, ImageFont
 
     draw = ImageDraw.Draw(img)
-    tam = TAM_FUENTE
-    while tam > 40:
+    grosor = max(2, round(tam / 15))
+    minimo = max(24, tam // 2)
+    while tam > minimo:
         font = ImageFont.truetype(str(fuente_path), tam)
-        caja = draw.textbbox((0, 0), texto, font=font, stroke_width=6)
+        caja = draw.textbbox((0, 0), texto, font=font, stroke_width=grosor)
         if caja[2] - caja[0] <= ANCHO_MAX_TEXTO:
             break
         tam -= 6
+    else:
+        font = ImageFont.truetype(str(fuente_path), tam)
+        caja = draw.textbbox((0, 0), texto, font=font, stroke_width=grosor)
     x = (ANCHO - (caja[2] - caja[0])) // 2 - caja[0]
-    y = ALTO - MARGEN_INFERIOR - (caja[3] - caja[1])
-    draw.text((x, y), texto, font=font, fill=color, stroke_width=6, stroke_fill=borde)
+    y = (MARGEN_SUPERIOR - caja[1] if posicion == "arriba"
+         else ALTO - MARGEN_INFERIOR - (caja[3] - caja[1]))
+    draw.text((x, y), texto, font=font, fill=color, stroke_width=grosor,
+              stroke_fill=borde)
     return img

@@ -835,3 +835,24 @@ def test_continuar_en_medio_de_un_lote_espera_su_turno(cola, session):
     assert _auto(primero).estado == "pendiente"
     _correr(tope=80)
     assert [_auto(primero).estado, _auto(segundo).estado] == ["esperando", "esperando"]
+
+
+# --- motion -----------------------------------------------------------------
+
+def test_en_motion_se_pasa_de_las_escenas_a_los_clips(session, dirs_tmp, monkeypatch):
+    """Sin un solo PNG en disco. En motion no hay imágenes que esperar: la
+    escena está lista en cuanto tiene su ficha, y de ahí se va al dibujo.
+
+    La música se aparta porque es la otra cosa que va antes del montaje y aquí
+    no se está mirando eso.
+    """
+    monkeypatch.setattr(autopiloto, "_falta_musica", lambda s, p: None)
+    p = f.proyecto(session, slug="motion", plantilla="explica")
+    f.escenas(session, p.id, 2)
+    assert autopiloto._que_falta(session, p, "kenburns") == "generar_clips_motion"
+
+
+def test_sin_motion_las_escenas_sin_imagen_siguen_pidiendolas(session, dirs_tmp):
+    p = f.proyecto(session, slug="demo")
+    f.escenas(session, p.id, 2)
+    assert autopiloto._que_falta(session, p, "kenburns") == "generar_imagenes"

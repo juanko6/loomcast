@@ -55,6 +55,77 @@ _vivos: set[subprocess.Popen] = set()
 _parados: set[subprocess.Popen] = set()
 
 
+def _cerrar(f) -> None:
+    """Cierra stdin sin que el cierre sea lo que rompa el render: si el proceso
+    ya murió, el vaciado del buffer da BrokenPipeError, y lo que importa decir
+    es por qué murió."""
+    import contextlib
+
+    with contextlib.suppress(OSError, ValueError):
+        f.close()
+
+
+def ejecutar_alimentado(cmd: list[str], *, timeout: float, que: str,
+                        alimentar) -> None:
+    """Como `ejecutar`, pero entregándole los datos por stdin según se generan.
+
+    Lo necesita el render del modo motion: los fotogramas se dibujan en memoria
+    y se le pasan a ffmpeg crudos, que es lo que evita escribir —y volver a
+    leer— miles de PNG de 1080x1920. La razón por la que `ejecutar` manda stdin
+    a /dev/null (no heredar la terminal y comerse un SIGTTIN que suspende el
+    grupo entero) se cumple igual: stdin es una tubería nuestra.
+
+    `alimentar` recibe el fichero de stdin y escribe en él. Si se para la
+    generación desde dentro, o revienta por cualquier motivo, el proceso se
+    mata en vez de dejarle terminar: un clip con la mitad de los fotogramas
+    existe en disco y las etapas de después lo darían por bueno.
+    """
+    import tempfile
+
+    tarea = que or cmd[0]
+    # stderr a un fichero y no a una tubería: alimentar puede tardar minutos, y
+    # un proceso que llenara el buffer de la tubería mientras tanto se quedaría
+    # bloqueado esperando a que alguien lea.
+    with tempfile.TemporaryFile() as err:
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                                stdout=subprocess.DEVNULL, stderr=err)
+        with _lock:
+            _vivos.add(proc)
+        try:
+            try:
+                alimentar(proc.stdin)
+                _cerrar(proc.stdin)
+            except BaseException:
+                proc.kill()
+                _cerrar(proc.stdin)
+                proc.wait()
+                raise
+            # `wait` y no `communicate`: stdin ya está cerrado y communicate
+            # querría vaciarlo otra vez. Y no hay nada que drenar — stdout va a
+            # /dev/null y stderr a un fichero—, así que no hay tubería que se
+            # pueda llenar mientras se espera.
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+                raise ProcesoTimeout(
+                    f"{tarea} no terminó en {timeout:.0f} s; se cancela para no "
+                    "dejar el job colgado"
+                ) from None
+        finally:
+            with _lock:
+                _vivos.discard(proc)
+                parado = proc in _parados
+                _parados.discard(proc)
+        if parado:
+            raise ProcesoParado(f"{tarea} se paró a petición del usuario")
+        if proc.returncode != 0:
+            err.seek(0)
+            cola = err.read().decode("utf-8", "replace")[-500:]
+            raise RuntimeError(f"{tarea} falló: {cola}")
+
+
 def terminar_actual() -> int:
     """Corta los procesos externos en marcha. Devuelve cuántos había.
 

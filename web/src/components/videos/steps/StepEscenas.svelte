@@ -57,6 +57,10 @@
   } = $props();
 
   const MODOS = ["estatico", "kenburns", "i2v"];
+  // En motion la escena no es un prompt de imagen sino una ficha de
+  // composición: ni reparto que inyectar, ni imágenes que generar, ni modo que
+  // elegir por escena. El texto editable es lo que se va a leer en pantalla.
+  const esMotion = $derived(p.montaje === "motion");
 
   // Borrador local de prompts y modos por escena.
   let prompts = $state<Record<number, string>>({});
@@ -178,6 +182,9 @@
   // falta y qué se quedó viejo, sin leer trece chips de texto.
   function aviso(e: (typeof p.escenas)[number]): string {
     if (e.en_cola) return "en cola";
+    // En motion no falta ninguna imagen: lo que define la escena es su ficha,
+    // y lo que puede faltar es el clip.
+    if (esMotion) return !e.clip ? "sin clip" : e.clip_viejo ? "clip viejo" : "";
     if (!e.imagen) return "sin imagen";
     if (e.clip_viejo) return "clip viejo";
     return "";
@@ -190,7 +197,9 @@
   }
 </script>
 
-<!-- Reparto: va antes de los prompts porque es lo que se inyecta en ellos. -->
+<!-- Reparto: va antes de los prompts porque es lo que se inyecta en ellos.
+     En motion no hay prompts en los que inyectarlo, así que no se enseña. -->
+{#if !esMotion}
 <section class="mb-5 max-w-3xl rounded-xl border border-line bg-surface-2 p-4">
   <h3 class="text-sm font-semibold">Reparto</h3>
   <p class="mt-1 text-sm text-dim">
@@ -453,14 +462,22 @@
     {/if}
   </details>
 </section>
+{/if}
 
 {#if !p.escenas.length}
   <div class="max-w-2xl space-y-3">
     <p class="text-sm text-dim">
-      El LLM propone un prompt visual por segmento de la narración, que puedes editar antes de
-      gastar GPU en las imágenes.
+      {#if esMotion}
+        El LLM reparte la narración en planos y escribe la ficha de composición de cada uno:
+        qué bloque sale, en qué banda y qué dice. Puedes corregir el texto antes de dibujar.
+      {:else}
+        El LLM propone un prompt visual por segmento de la narración, que puedes editar antes de
+        gastar GPU en las imágenes.
+      {/if}
     </p>
-    <Button disabled={busy} onclick={ongenerar}>Generar prompts de escenas</Button>
+    <Button disabled={busy} onclick={ongenerar}>
+      {esMotion ? "Generar fichas de composición" : "Generar prompts de escenas"}
+    </Button>
   </div>
 {:else}
   <div class="space-y-4">
@@ -469,9 +486,11 @@
         Regenerar prompts
       </Button>
       <Button size="sm" onclick={() => onguardar(recogerPrompts())}>Guardar prompts</Button>
+      {#if !esMotion}
       <Button size="sm" disabled={busy} onclick={() => ongenerarimagenes(recogerPrompts())}>
         {p.imagenes_completas ? "Regenerar imágenes" : "Generar imágenes"}
       </Button>
+      {/if}
       {#if conRetrato || sinRetrato}
         <span class="text-xs text-muted">
           {#if conRetrato}
@@ -482,6 +501,7 @@
           {/if}
         </span>
       {/if}
+      {#if !esMotion}
       <label class="ml-auto flex items-center gap-2 text-xs text-muted">
         Modo de todas
         <select
@@ -498,6 +518,7 @@
           {/each}
         </select>
       </label>
+      {/if}
     </div>
 
     <!-- Tira de escenas: el vídeo entero de un vistazo, en orden y con scroll
@@ -523,6 +544,18 @@
               class="w-full object-cover"
               style="aspect-ratio:9/16"
             />
+          {:else if esMotion}
+            <!-- No hay miniatura que enseñar, pero sí lo que se va a leer en
+                 pantalla: con eso la tira sigue siendo el vídeo de un vistazo
+                 en vez de una fila de cajas vacías. Un titular por línea, que
+                 es como se relevan en el clip. -->
+            <div
+              class="grid w-full place-items-center whitespace-pre-line bg-surface-3
+                     px-1 text-center text-[10px] leading-tight text-dim"
+              style="aspect-ratio:9/16"
+            >
+              {e.prompt}
+            </div>
           {:else}
             <div class="w-full bg-surface-3" style="aspect-ratio:9/16"></div>
           {/if}
@@ -594,7 +627,7 @@
                 style="aspect-ratio:9/16"
               />
             </button>
-          {:else}
+          {:else if !esMotion}
             <div
               class="grid w-28 shrink-0 place-items-center rounded-md bg-surface-3 text-xs text-muted"
               style="aspect-ratio:9/16"
@@ -604,20 +637,28 @@
           {/if}
 
           <div class="min-w-0 flex-1 space-y-2">
+            <!-- En motion son los titulares, uno por línea y en el orden en
+                 que se dicen: cada uno entra con su frase, así que una línea de
+                 más o de menos descoloca el relevo. -->
             <textarea
               class="control text-xs"
-              rows="3"
+              rows={esMotion ? 4 : 3}
               bind:value={prompts[e.orden]}
-              placeholder="Prompt visual (imagen)"
+              placeholder={esMotion
+                ? "Un titular por línea, uno por frase"
+                : "Prompt visual (imagen)"}
             ></textarea>
+            {#if !esMotion}
             <textarea
               class="control text-xs"
               rows="2"
               bind:value={movs[e.orden]}
               placeholder="Prompt de movimiento (solo modo i2v)"
             ></textarea>
+            {/if}
 
             <div class="flex flex-wrap items-center gap-1.5">
+              {#if !esMotion}
               <Button size="sm" variant="secondary" disabled={!!e.en_cola}
                 onclick={() => onregenimagen(e.orden, true)}
                 title="Genera otra imagen distinta (seed nuevo)">Otra imagen</Button>
@@ -634,9 +675,12 @@
                   <option value={m}>{NOMBRE_MODO[m]}</option>
                 {/each}
               </select>
-              <Button size="sm" variant="secondary" disabled={!!e.en_cola || !e.imagen}
-                onclick={() => onregenclip(e.orden, modos[e.orden])}
-                title={e.imagen ? "Regenera el clip de esta escena" : "Genera antes la imagen"}>Clip</Button>
+              {/if}
+              <Button size="sm" variant="secondary" disabled={!!e.en_cola || !(esMotion || e.imagen)}
+                onclick={() => onregenclip(e.orden, esMotion ? "motion" : modos[e.orden])}
+                title={esMotion || e.imagen
+                  ? "Regenera el clip de esta escena"
+                  : "Genera antes la imagen"}>Clip</Button>
               {#if e.clip}
                 <Button size="sm" variant="ghost"
                   onclick={() =>

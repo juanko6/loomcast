@@ -321,6 +321,13 @@ class MusicaGenerarIn(BaseModel):
     idioma: str | None = None
 
 
+class MusicaLoteIn(BaseModel):
+    # Una pista instrumental por idea; todas con la misma duración, que el LLM
+    # recibe para repartir el guion de secciones.
+    ideas: list[str] = Field(min_length=1, max_length=1000)
+    duracion_s: int = 180
+
+
 class MusicaCamposIn(BaseModel):
     # Edición de los campos antes de generar (None = no tocar).
     tags: str | None = None
