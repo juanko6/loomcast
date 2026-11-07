@@ -1,4 +1,6 @@
 """Contratos de la API HTTP (entrada de los routers)."""
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -285,6 +287,21 @@ class GaleriaPreviewsIn(BaseModel):
 
 class GaleriaFinalIn(BaseModel):
     indice: int
+
+
+class GaleriaAnimadaIn(BaseModel):
+    idea: str
+    width: int = 768
+    height: int = 1344
+
+
+class GaleriaMovimientoIn(BaseModel):
+    prompt: str
+    duracion_s: int = Field(12, ge=10, le=15)
+
+
+class GaleriaEscalarIn(BaseModel):
+    escala: Literal["2k", "4k"]
 
 
 class MusicaGenerarIn(BaseModel):

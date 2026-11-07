@@ -197,6 +197,13 @@ class ImagenLibrePromptLLM(BaseModel):
     prompt: str = Field(min_length=20)
 
 
+class AnimadaMovimientoLLM(BaseModel):
+    # Prompt de movimiento pulido (inglés) para el bucle de una imagen animada,
+    # y la duración que el LLM recomienda para él.
+    prompt: str = Field(min_length=20)
+    duracion_s: int = Field(ge=10, le=15)
+
+
 class MusicaPromptLLM(BaseModel):
     # Descripción de estilo para ACE-Step 1.5 (inglés, en prosa): género,
     # instrumentación, rol de cada elemento en la mezcla, producción y cómo

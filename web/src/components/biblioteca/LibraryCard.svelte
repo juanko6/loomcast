@@ -40,6 +40,11 @@
       });
     } else if (item.kind === "video" && item.src) {
       onview(`<video src="${esc(item.src)}" controls autoplay playsinline></video>`, item.titulo);
+    } else if (item.kind === "imagen" && item.video) {
+      onview(
+        `<video src="${esc(item.video)}" controls autoplay loop muted playsinline></video>`,
+        item.titulo,
+      );
     } else if (item.kind === "imagen" && item.src) {
       onview(`<img src="${esc(item.src)}" alt="${esc(item.titulo)}">`, item.titulo);
     } else {
@@ -60,7 +65,18 @@
     class="relative block aspect-video w-full overflow-hidden bg-surface-3"
     aria-label={reproducible ? `Abrir ${item.titulo}` : item.titulo}
   >
-    {#if item.thumb && !sinThumb}
+    {#if item.video}
+      <!-- El bucle es la portada: se ve tal cual empalma. -->
+      <video
+        src={item.video}
+        poster={item.thumb ?? undefined}
+        autoplay
+        loop
+        muted
+        playsinline
+        class="size-full object-cover"
+      ></video>
+    {:else if item.thumb && !sinThumb}
       <img
         src={item.thumb}
         alt=""

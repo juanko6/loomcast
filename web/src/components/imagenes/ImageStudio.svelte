@@ -13,6 +13,12 @@
     crearGenerar,
     crearEditar,
     crearQuitarFondo,
+    crearAnimada,
+    guardarMovimiento,
+    mejorarMovimiento,
+    animar,
+    escalar,
+    type Escala,
     editarPrompt,
     mejorarPrompt,
     lanzarPreviews,
@@ -84,6 +90,32 @@
   const handleEditar = (p: { idea: string; file: File; motor: string }) =>
     crearY(crearEditar(p.idea, p.file, p.motor));
   const handleFondo = (p: { file: File }) => crearY(crearQuitarFondo(p.file));
+  const handleAnimada = (p: { idea: string; width: number; height: number }) =>
+    crearY(crearAnimada(p));
+
+  // Pasos de la animada tras aprobar la preview. El movimiento se guarda antes
+  // de pedir nada: tanto el LLM como el render leen el que está en la base.
+  async function pasoAnimada(trabajo: () => Promise<unknown>) {
+    if (selectedId == null) return;
+    try {
+      await trabajo();
+      refrescarJobs();
+      loadDetail(selectedId);
+    } catch (e) {
+      error = (e as Error).message;
+    }
+  }
+  const onmejorarmov = (prompt: string, duracion: number) =>
+    pasoAnimada(async () => {
+      await guardarMovimiento(selectedId!, prompt, duracion);
+      await mejorarMovimiento(selectedId!);
+    });
+  const onanimar = (prompt: string, duracion: number) =>
+    pasoAnimada(async () => {
+      await guardarMovimiento(selectedId!, prompt, duracion);
+      await animar(selectedId!);
+    });
+  const onescalar = (escala: Escala) => pasoAnimada(() => escalar(selectedId!, escala));
 
   async function onmejorar() {
     if (selectedId == null) return;
@@ -117,7 +149,10 @@
   async function onfinal() {
     if (selectedId == null || previewSel == null) return;
     try {
-      await lanzarFinal(selectedId, previewSel);
+      const { job_id } = await lanzarFinal(selectedId, previewSel);
+      // En una animada aprobar es inmediato (sin job que drene): la imagen
+      // aprobada cambia ya y hay que forzar que se vuelva a pedir.
+      if (job_id == null) bust = Date.now();
       verGrid = false;
       refrescarJobs();
       loadDetail(selectedId);
@@ -168,7 +203,7 @@
 <div class="flex min-h-0 flex-1">
   <!-- Config (izquierda) -->
   <div class="flex w-[360px] min-w-0 shrink-0 flex-col border-r border-line bg-surface" style={reservaPlayer}>
-    <ImageConfig {busy} oncreateGenerar={handleGenerar} oncreateEditar={handleEditar} oncreateFondo={handleFondo} />
+    <ImageConfig {busy} oncreateGenerar={handleGenerar} oncreateEditar={handleEditar} oncreateFondo={handleFondo} oncreateAnimada={handleAnimada} />
   </div>
 
   <!-- Lista (centro) -->
@@ -204,5 +239,5 @@
   </div>
 
   <!-- Trabajo (derecha) -->
-  <ImageDetail {detail} {busy} {previewSel} {verGrid} {bust} {onpreviews} {onmejorar} {onpick} {onfinal} {onreelegir} />
+  <ImageDetail {detail} {busy} {previewSel} {verGrid} {bust} {onpreviews} {onmejorar} {onpick} {onfinal} {onreelegir} {onmejorarmov} {onanimar} {onescalar} />
 </div>

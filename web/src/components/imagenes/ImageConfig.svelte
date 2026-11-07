@@ -12,6 +12,7 @@
     oncreateGenerar,
     oncreateEditar,
     oncreateFondo,
+    oncreateAnimada,
   }: {
     busy?: boolean;
     oncreateGenerar: (p: {
@@ -22,6 +23,7 @@
     }) => void;
     oncreateEditar: (p: { idea: string; file: File; motor: string }) => void;
     oncreateFondo: (p: { file: File }) => void;
+    oncreateAnimada: (p: { idea: string; width: number; height: number }) => void;
   } = $props();
 
   let tipo = $state<TipoGaleria>("generar");
@@ -30,9 +32,12 @@
   // elección del otro, y cada modo tiene su propio motor por defecto.
   let motorPorModo = $state<Record<string, string>>({ generar: "", editar: "" });
 
-  // Motores que saben hacer el modo activo (quitarfondo no pasa por ComfyUI).
+  // Motores que saben hacer el modo activo. Quitar fondo no pasa por ComfyUI,
+  // y la animada usa siempre el motor de generar por defecto (Z-Image).
   const motoresDelModo = $derived(
-    tipo === "quitarfondo" ? [] : motores.filter((m) => m.modos.includes(tipo)),
+    tipo === "quitarfondo" || tipo === "animada"
+      ? []
+      : motores.filter((m) => m.modos.includes(tipo)),
   );
   const motorElegido = $derived(motorPorModo[tipo] ?? "");
 
@@ -67,8 +72,10 @@
   }
 
   const usaArchivo = $derived(tipo === "editar" || tipo === "quitarfondo");
+  // Generar y animada piden lo mismo para empezar: una idea y un tamaño.
+  const conTamano = $derived(tipo === "generar" || tipo === "animada");
   const puedeCrear = $derived(
-    tipo === "generar"
+    conTamano
       ? !!idea.trim()
       : tipo === "editar"
         ? !!idea.trim() && !!file
@@ -79,6 +86,9 @@
     if (tipo === "generar") {
       const [w, h] = tamanoElegido();
       oncreateGenerar({ idea: idea.trim(), width: w, height: h, motor: motorElegido });
+    } else if (tipo === "animada") {
+      const [w, h] = tamanoElegido();
+      oncreateAnimada({ idea: idea.trim(), width: w, height: h });
     } else if (tipo === "editar" && file) {
       oncreateEditar({ idea: idea.trim(), file, motor: motorElegido });
     } else if (tipo === "quitarfondo" && file) {
@@ -87,12 +97,23 @@
   }
 
   const ideaLabel = $derived(
-    tipo === "editar" ? "¿Qué cambios o efectos quieres aplicar?" : "¿Qué imagen quieres?",
+    tipo === "editar"
+      ? "¿Qué cambios o efectos quieres aplicar?"
+      : tipo === "animada"
+        ? "¿Qué imagen quieres animar?"
+        : "¿Qué imagen quieres?",
   );
   const ideaPlaceholder = $derived(
     tipo === "editar"
       ? "Ej: cambia el cielo a un atardecer dramático y añade niebla"
-      : "Ej: un faro solitario en un acantilado bajo una tormenta eléctrica",
+      : tipo === "animada"
+        ? "Ej: un personaje groovy con gafas redondas tomándose un batido, en pose chill"
+        : "Ej: un faro solitario en un acantilado bajo una tormenta eléctrica",
+  );
+  const ideaHint = $derived(
+    tipo === "animada"
+      ? "Primero salen 4 previews; apruebas una y luego escribes cómo se mueve. El vídeo dura 10–15 s y vuelve al principio para que empalme en bucle."
+      : "Después puedes escribir el prompt a mano o pedirle al LLM que lo mejore.",
   );
   const ctaLabel = $derived(
     tipo === "quitarfondo" ? "Quitar fondo" : tipo === "editar" ? "Subir imagen" : "Crear",
@@ -107,6 +128,7 @@
         { value: "generar", label: "Generar" },
         { value: "editar", label: "Editar" },
         { value: "quitarfondo", label: "Quitar fondo" },
+        { value: "animada", label: "Animada" },
       ]}
       value={tipo}
       onchange={(v) => (tipo = v as TipoGaleria)}
@@ -141,15 +163,12 @@
     {/if}
 
     {#if tipo !== "quitarfondo"}
-      <Field
-        label={ideaLabel}
-        hint="Después puedes escribir el prompt a mano o pedirle al LLM que lo mejore."
-      >
+      <Field label={ideaLabel} hint={ideaHint}>
         <textarea class="control" rows="3" bind:value={idea} placeholder={ideaPlaceholder}></textarea>
       </Field>
     {/if}
 
-    {#if tipo === "generar"}
+    {#if conTamano}
       <Field label="Tamaño">
         <select class="control" bind:value={tamano}>
           {#each TAMANOS as t (t.label)}

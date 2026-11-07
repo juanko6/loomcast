@@ -10,6 +10,7 @@ import httpx
 
 from .. import memoria
 from ..config import (
+    ANIMADA_WORKFLOW,
     COMFY_ESPERA_LIBERACION_S,
     COMFY_TIMEOUT_S,
     COMFY_URL,
@@ -435,6 +436,48 @@ def generar_video_i2v(
             PROMPT=prompt,
             SEED=seed,
             FRAMES=m.frames,
+        )
+        entry = _encolar_y_esperar(c, wf)
+        _descargar_primer_video(c, entry, destino)
+
+
+def generar_video_loop(
+    imagen: Path,
+    prompt: str,
+    seed: int,
+    frames: int,
+    fps: int,
+    width: int,
+    height: int,
+    destino: Path,
+) -> None:
+    """Anima una imagen en un clip cuyo último cuadro es el primero.
+
+    Usa el workflow de [animada].workflow (LTX-2.5 con la misma imagen como guía
+    en el primer cuadro y en el último, `LTXVAddGuide` con frame_idx=-1). Aquí
+    los cuadros, el fps de condicionamiento y el tamaño sí son parámetros: los
+    pone la duración que pidió el usuario y la forma de la imagen. `frames`
+    tiene que ser 8n+1, que es lo que admite el VAE temporal de LTX.
+    """
+    if (frames - 1) % 8:
+        raise ComfyError(f"LTX quiere 8n+1 cuadros y se pidieron {frames}")
+    wf_path = ROOT / ANIMADA_WORKFLOW
+    if not wf_path.exists():
+        raise ComfyError(
+            f"No existe el workflow de la imagen animada en {wf_path}. "
+            "Revisa config.toml [animada].workflow."
+        )
+    with httpx.Client(timeout=30) as c:
+        nombre = _subir_imagen(c, imagen)
+        wf = _render(
+            wf_path.read_text(),
+            IMAGE=nombre,
+            PROMPT=prompt,
+            SEED=seed,
+            FRAMES=frames,
+            FPS=fps,
+            WIDTH=width,
+            HEIGHT=height,
         )
         entry = _encolar_y_esperar(c, wf)
         _descargar_primer_video(c, entry, destino)

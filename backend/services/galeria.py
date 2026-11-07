@@ -14,7 +14,7 @@ from ..config import IMAGEN_MOTOR_EDITAR, IMAGEN_MOTOR_GENERAR, IMAGEN_MOTORES
 from ..db import get_session
 from ..repositories import galeria as galeria_repo
 from ..repositories import jobs as jobs_repo
-from ..services.pipeline import imagen_libre
+from ..services.pipeline import imagen_animada, imagen_libre
 from ..workers import queue
 
 TIPOS_JOB = [
@@ -22,7 +22,12 @@ TIPOS_JOB = [
     "generar_previews_imagen",
     "generar_final_imagen",
     "quitar_fondo",
+    "mejorar_movimiento_animada",
+    "animar_imagen",
+    "escalar_animada",
 ]
+# Estados de una animada que ya tiene una preview aprobada.
+ESTADOS_APROBADA = ("final", "movimiento", "animada", "escalada")
 # Tamaño mínimo/máximo del lado en píxeles (múltiplos de 64 fuera).
 LADO_MIN, LADO_MAX = 256, 1536
 
@@ -33,6 +38,10 @@ class ImagenNoExiste(LookupError):
 
 class MotorInvalido(ValueError):
     pass
+
+
+class PasoInvalido(ValueError):
+    """La entrada no está en el punto del flujo que pide la operación."""
 
 
 def _normalizar_lado(v: int) -> int:
@@ -104,6 +113,17 @@ def crear_editar(
     return {"id": imagen_id}
 
 
+def crear_animada(idea: str, width: int, height: int) -> dict:
+    """Una imagen animada: arranca como una de generar (previews con el motor
+    de generar por defecto, Z-Image) y sigue con el movimiento."""
+    w, h = _normalizar_lado(width), _normalizar_lado(height)
+    with get_session() as s:
+        img = galeria_repo.crear(s, "animada", idea.strip(), w, h,
+                                 _validar_motor(None, "generar"))
+        s.commit()
+        return {"id": img.id}
+
+
 def lanzar_mejorar(imagen_id: int) -> int:
     """Mejora el prompt con el LLM. Paso opcional, a petición del usuario."""
     with get_session() as s:
@@ -148,6 +168,15 @@ def _a_dict(s, img) -> dict:
         "estado": img.estado,
         "seeds": json.loads(img.seeds or "[]"),
         "seed_elegido": img.seed_elegido,
+        "prompt_movimiento": img.prompt_movimiento or "",
+        "duracion_s": img.duracion_s,
+        "seed_video": img.seed_video,
+        "escala": img.escala,
+        # Qué vídeos hay en disco: "base" es el bucle tal cual sale de animar.
+        "videos": [
+            e for e in ("base", *imagen_animada.LADO_ESCALA)
+            if imagen_animada.ruta_video(img.id, None if e == "base" else e).exists()
+        ] if img.tipo == "animada" else [],
         "ocupado": _ocupado(s, img.id),
     }
 
@@ -195,12 +224,70 @@ def lanzar_previews(imagen_id: int, width: int | None, height: int | None) -> in
     return queue.encolar("generar_previews_imagen", imagen_id)
 
 
-def lanzar_final(imagen_id: int, indice: int) -> int:
+def lanzar_final(imagen_id: int, indice: int) -> int | None:
+    """Aprueba una preview. En generar/editar eso es ampliarla con ESRGAN (un
+    job); en una animada es solo quedársela, al momento, y devuelve None."""
     with get_session() as s:
         img = galeria_repo.obtener(s, imagen_id)
         if img is None:
             raise ImagenNoExiste(imagen_id)
+        tipo = img.tipo
+    if tipo == "animada":
+        try:
+            imagen_animada.aprobar(imagen_id, indice)
+        except ValueError as e:
+            raise PasoInvalido(str(e)) from e
+        return None
     return queue.encolar("generar_final_imagen", imagen_id, indice=indice)
+
+
+def _animada(s, imagen_id: int):
+    img = galeria_repo.obtener(s, imagen_id)
+    if img is None:
+        raise ImagenNoExiste(imagen_id)
+    if img.tipo != "animada":
+        raise PasoInvalido("Solo una imagen animada tiene movimiento")
+    if img.estado not in ESTADOS_APROBADA:
+        raise PasoInvalido("Aprueba antes una de las previews")
+    return img
+
+
+def guardar_movimiento(imagen_id: int, prompt: str, duracion_s: int) -> None:
+    with get_session() as s:
+        img = _animada(s, imagen_id)
+        estado = img.estado
+        galeria_repo.guardar_movimiento(
+            s, img, prompt.strip(), imagen_animada.acotar_duracion(duracion_s)
+        )
+        # Cambiar el texto no tira el vídeo que ya hay: sigue ahí hasta que se
+        # vuelva a animar, y la entrada no debe aparentar que no lo tiene.
+        if estado in ("animada", "escalada"):
+            img.estado = estado
+        s.commit()
+
+
+def lanzar_mejorar_movimiento(imagen_id: int) -> int:
+    with get_session() as s:
+        img = _animada(s, imagen_id)
+        if not img.prompt_movimiento.strip():
+            raise PasoInvalido("Escribe primero qué quieres que se mueva")
+    return queue.encolar("mejorar_movimiento_animada", imagen_id)
+
+
+def lanzar_animar(imagen_id: int) -> int:
+    with get_session() as s:
+        img = _animada(s, imagen_id)
+        if not img.prompt_movimiento.strip():
+            raise PasoInvalido("Falta el prompt de movimiento")
+    return queue.encolar("animar_imagen", imagen_id)
+
+
+def lanzar_escalar(imagen_id: int, escala: str) -> int:
+    with get_session() as s:
+        _animada(s, imagen_id)
+    if not imagen_animada.ruta_video(imagen_id).exists():
+        raise PasoInvalido("Todavía no hay vídeo que escalar: anímalo primero")
+    return queue.encolar("escalar_animada", imagen_id, escala=escala)
 
 
 def borrar(imagen_id: int) -> dict:

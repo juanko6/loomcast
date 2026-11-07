@@ -205,6 +205,30 @@ def motor_i2v(id_: str | None = None) -> MotorI2V:
         )
     return motor
 
+# Imagen animada en bucle (galería, tipo «Animada»). Ver [animada] en config.toml.
+_animada = _cfg.get("animada", {})
+ANIMADA_WORKFLOW: str = _animada.get("workflow", "workflows/loop_ltx25_api.json")
+ANIMADA_FPS_ORIGEN: int = int(_animada.get("fps_origen", 8))
+ANIMADA_FPS_FINAL: int = int(_animada.get("fps_final", 24))
+if ANIMADA_FPS_FINAL % ANIMADA_FPS_ORIGEN:
+    raise ValueError(
+        f"[animada].fps_final ({ANIMADA_FPS_FINAL}) tiene que ser múltiplo de "
+        f"fps_origen ({ANIMADA_FPS_ORIGEN}): RIFE mete el mismo número de "
+        "cuadros entre cada par, y si no el bucle no cierra en cuadro entero."
+    )
+ANIMADA_LADO_LARGO: int = int(_animada.get("lado_largo", 864))
+ANIMADA_FUNDIDO: int = int(_animada.get("fundido", 12))
+ANIMADA_DURACION_MIN_S: int = int(_animada.get("duracion_min_s", 10))
+ANIMADA_DURACION_MAX_S: int = int(_animada.get("duracion_max_s", 15))
+# "comfy" (Real-ESRGAN x4plus por ComfyUI, cuadro a cuadro) o "ncnn"
+# (realesrgan-ncnn-vulkan, todos los cuadros de una pasada).
+ANIMADA_ESCALADOR: str = _animada.get("escalador", "comfy")
+ANIMADA_ESCALADOR_BIN: str = _animada.get(
+    "escalador_bin", "tools/realesrgan-ncnn-vulkan-20220424-macos/realesrgan-ncnn-vulkan"
+)
+ANIMADA_ESCALADOR_MODELO: str = _animada.get("escalador_modelo", "realesr-animevideov3-x4")
+ANIMADA_CRF: int = int(_animada.get("crf", 14))
+
 _rife = _cfg.get("rife", {})
 RIFE_BIN: str = _rife.get("bin", "tools/rife-ncnn-vulkan-20221029-macos/rife-ncnn-vulkan")
 RIFE_MODELO: str = _rife.get("modelo", "rife-v4.6")
