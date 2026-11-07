@@ -183,9 +183,9 @@ def imagen_final(imagen_id: int):
 
 @router.get("/{imagen_id}/video")
 def video(imagen_id: int, escala: str | None = None):
-    """El bucle animado; con `escala` (2k | 4k), su versión escalada."""
+    """El bucle animado; con `escala` (1080p | 2k | 4k), su versión escalada."""
     if escala is not None and escala not in imagen_animada.LADO_ESCALA:
-        raise HTTPException(400, "Escala desconocida: usa 2k o 4k")
+        raise HTTPException(400, "Escala desconocida: usa 1080p, 2k o 4k")
     ruta = imagen_animada.ruta_video(imagen_id, escala)
     if not ruta.exists():
         raise HTTPException(404, "Aún no hay vídeo")

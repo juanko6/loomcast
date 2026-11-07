@@ -355,6 +355,8 @@ fps_origen = 24
 #
 # Prueba real de principio a fin por la API (768x1344 → 480x864):
 #   personaje groovy, 10 s ... animar 265 s en frío, 0 GB; 4K 725 s, 0 GB
+#   el mismo en horizontal (1344x768 → 854x480), 10 s ... animar 268 s,
+#     0 GB; Full HD 1920x1080 647 s, 0 GB. Cuesta lo mismo que el vertical.
 #   escena sin personaje, 15 s ... animar 391 s, 1,0 GB a swap (justo tras
 #   las previews de Z-Image; en el banco los mismos 121 cuadros daban 0)
 workflow = "workflows/loop_ltx25_api.json"
@@ -375,8 +377,13 @@ duracion_max_s = 15
 # un parpadeo. Con 12 (medio segundo) el salto queda en 1,3 veces el paso.
 # 0 = sin fundido.
 fundido = 12
-# Escalado a 2K/4K. "comfy" es Real-ESRGAN x4plus dentro de ComfyUI, un prompt
-# por cuadro: 4,06 s/cuadro medidos, o sea ~16 min para 10 s en 4K. "ncnn" es
+# Escalado a Full HD, 2K o 4K. En 16:9 y 9:16 (aunque la preview no lo sea
+# justo: 1344x768 es 1,75) salen los tamaños exactos de YouTube, 1920x1080,
+# 2560x1440 y 3840x2160, y el bucle base sale a 854x480; en otras formas manda
+# el lado largo. Lo caro es el x4 de ESRGAN, igual para las tres escalas.
+#
+# "comfy" es Real-ESRGAN x4plus dentro de ComfyUI, un prompt por cuadro: 4,06
+# s/cuadro medidos (3 en caliente), ~12–16 min para 10 s. "ncnn" es
 # realesrgan-ncnn-vulkan con el modelo de vídeo realesr-animevideov3, de una
 # pasada; todavía sin medir aquí.
 escalador = "comfy"

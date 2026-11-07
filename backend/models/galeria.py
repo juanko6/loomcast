@@ -52,5 +52,5 @@ class ImagenLibre(Base):
     duracion_s: Mapped[int] = mapped_column(default=12)
     # Semilla del último vídeo animado (None hasta animar).
     seed_video: Mapped[int | None] = mapped_column(default=None)
-    # Última versión escalada: None | "2k" | "4k".
+    # Última versión escalada: None | "1080p" | "2k" | "4k".
     escala: Mapped[str | None] = mapped_column(default=None)

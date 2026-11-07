@@ -359,14 +359,16 @@ def animada_pequena(monkeypatch):
 def rife_real(monkeypatch):
     """RIFE de mentira que entrega un clip de verdad con los cuadros pedidos,
     para que el cierre del bucle trabaje sobre algo que ffmpeg sabe leer."""
-    llamadas = []
+    class Llamadas(list):
+        tam = (576, 1024)   # tamaño de la imagen; el clip sale al que pide LTX
+
+    llamadas = Llamadas()
 
     def interpolar(entrada, salida, fps_origen, fps_final, frames=None):
         llamadas.append({"fps_origen": fps_origen, "fps_final": fps_final, "frames": frames})
-        _video(salida, frames, *imagen_animada.tamano_generacion(*rife_real.tam), fps_final)
+        _video(salida, frames, *imagen_animada.tamano_generacion(*llamadas.tam), fps_final)
 
     monkeypatch.setattr("backend.clients.rife.interpolar", interpolar)
-    rife_real.tam = (576, 1024)
     return llamadas
 
 
@@ -400,10 +402,21 @@ def test_tamano_de_generacion_respeta_la_forma_en_multiplos_de_32(w, h, esperado
 
 
 @pytest.mark.parametrize("w,h,escala,esperado", [
-    (576, 1024, "2k", (1440, 2560)), (576, 1024, "4k", (2160, 3840)),
-    (1024, 576, "4k", (3840, 2160)), (768, 1344, "2k", (1462, 2560))])
+    # 16:9 y 9:16, aunque la preview no lo sea justo: los tamaños de YouTube.
+    (1344, 768, "1080p", (1920, 1080)), (768, 1344, "1080p", (1080, 1920)),
+    (1344, 768, "2k", (2560, 1440)), (1344, 768, "4k", (3840, 2160)),
+    (576, 1024, "4k", (2160, 3840)),
+    # Otras formas: el lado largo manda y el corto sale de la proporción.
+    (1024, 1024, "1080p", (1920, 1920)), (1344, 896, "4k", (3840, 2560))])
 def test_tamano_escalado_lo_manda_el_lado_largo(w, h, escala, esperado):
     assert imagen_animada.tamano_escala(w, h, escala) == esperado
+
+
+@pytest.mark.parametrize("w,h,esperado", [
+    (864, 480, (854, 480)), (480, 864, (480, 854)), (864, 864, (864, 864)),
+    (864, 576, (864, 576))])
+def test_el_bucle_base_sale_en_16_9_exacto(w, h, esperado):
+    assert imagen_animada.tamano_salida(w, h, min(w, h)) == esperado
 
 
 def test_aprobar_copia_la_preview_sin_esrgan(session, dirs_tmp, fake_comfy):
@@ -454,7 +467,7 @@ def test_animar_pide_8n_mas_1_interpola_y_quita_el_ultimo_cuadro(
 
     llamada = dict(fake_comfy.llamadas)["generar_video_loop"]
     assert (llamada["frames"], llamada["fps"]) == (81, 8)
-    assert (llamada["width"], llamada["height"]) == (32, 64)
+    assert (llamada["width"], llamada["height"]) == (32, 64)   # 9:16 a 64: 32×64 (no es exacto)
     assert llamada["imagen"] == imagen_libre.ruta_final(iid)
     assert llamada["prompt"] == "sways gently and comes back"
     # RIFE: (81-1)·3+1, el último sigue siendo copia del primero…
@@ -484,6 +497,25 @@ def test_cerrar_bucle_funde_la_cola_hacia_el_primer_cuadro(tmp_path):
     hacia_el_primero = [dif(out[i], out[0]) for i in range(40, 48)]
     assert hacia_el_primero == sorted(hacia_el_primero, reverse=True)
     assert dif(out[-1], out[0]) < dif(orig[47], orig[0]) / 4
+
+
+def test_animar_en_horizontal_deja_el_bucle_en_16_9_exacto(
+        session, dirs_tmp, fake_comfy, rife_real, monkeypatch):
+    monkeypatch.setattr(imagen_animada, "ANIMADA_LADO_LARGO", 576)
+    rife_real.tam = (1344, 768)
+    iid = _animada(session, width=1344, height=768)
+    assert "568×320" in imagen_animada.animar(iid)
+    llamada = dict(fake_comfy.llamadas)["generar_video_loop"]
+    assert (llamada["width"], llamada["height"]) == (576, 320)   # lo que pide LTX (1,8)
+    # Recortado al centro a 16:9 con el mismo alto.
+    assert _cuadros(imagen_animada.ruta_video(iid)) == (240, 568, 320)
+
+
+def test_cerrar_bucle_recorta_al_centro(tmp_path):
+    entrada, salida = tmp_path / "in.mp4", tmp_path / "out.mp4"
+    _video(entrada, 25, 96, 48)
+    imagen_animada.cerrar_bucle(entrada, salida, 24, 6, 96, 48, recorte=(86, 48))
+    assert _cuadros(salida) == (24, 86, 48)
 
 
 def test_cerrar_bucle_sin_fundido_solo_recorta(tmp_path):
@@ -528,18 +560,18 @@ def test_animar_con_parada_pedida_no_llama_a_comfy(session, dirs_tmp, fake_comfy
 
 def test_escalar_lleva_el_bucle_al_tamano_exacto(
         session, dirs_tmp, fake_comfy, fake_escalador, monkeypatch):
-    monkeypatch.setitem(imagen_animada.LADO_ESCALA, "2k", 128)
-    iid = _animada(session, estado="animada")
-    _video(imagen_animada.ruta_video(iid), 12, 18, 32)
+    monkeypatch.setitem(imagen_animada.LADO_ESCALA, "1080p", 128)
+    iid = _animada(session, estado="animada", width=1344, height=768)
+    _video(imagen_animada.ruta_video(iid), 12, 34, 18)
 
-    assert "2K" in imagen_animada.escalar(iid, "2k")
+    assert "1080p" in imagen_animada.escalar(iid, "1080p")
 
     assert len(fake_escalador.llamadas) == 1
-    assert _cuadros(imagen_animada.ruta_video(iid, "2k")) == (12, 72, 128)
+    assert _cuadros(imagen_animada.ruta_video(iid, "1080p")) == (12, 128, 72)
     assert fake_comfy.nombres()[-1] == "liberar_memoria"
     session.expire_all()
     img = galeria_repo.obtener(session, iid)
-    assert (img.estado, img.escala) == ("escalada", "2k")
+    assert (img.estado, img.escala) == ("escalada", "1080p")
 
 
 def test_escalar_sin_video_o_escala_rara(session, dirs_tmp, fake_escalador):

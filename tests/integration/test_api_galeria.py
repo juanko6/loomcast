@@ -291,12 +291,14 @@ def test_video_y_versiones_escaladas(client, dirs_tmp):
     assert client.get(f"/api/galeria/{iid}/video").status_code == 404
     imagen_animada.ruta_video(iid).write_bytes(b"base")
     imagen_animada.ruta_video(iid, "4k").write_bytes(b"cuatro")
+    imagen_animada.ruta_video(iid, "1080p").write_bytes(b"fullhd")
     r = client.get(f"/api/galeria/{iid}/video")
     assert r.status_code == 200 and r.headers["content-type"] == "video/mp4" and r.content == b"base"
     assert client.get(f"/api/galeria/{iid}/video?escala=4k").content == b"cuatro"
     assert client.get(f"/api/galeria/{iid}/video?escala=2k").status_code == 404
     assert client.get(f"/api/galeria/{iid}/video?escala=8k").status_code == 400
-    assert client.get(f"/api/galeria/{iid}").json()["videos"] == ["base", "4k"]
+    assert client.get(f"/api/galeria/{iid}/video?escala=1080p").content == b"fullhd"
+    assert client.get(f"/api/galeria/{iid}").json()["videos"] == ["base", "1080p", "4k"]
 
 
 # --- borrar y archivos ------------------------------------------------------

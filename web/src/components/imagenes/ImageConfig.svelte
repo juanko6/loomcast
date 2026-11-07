@@ -4,7 +4,7 @@
   import Segmented from "../primitives/Segmented.svelte";
   import Button from "../primitives/Button.svelte";
   import Icon from "../primitives/Icon.svelte";
-  import { TAMANOS, listarMotores, type MotorImagen } from "@/lib/galeria";
+  import { TAMANO_ANIMADA, TAMANOS, listarMotores, type MotorImagen } from "@/lib/galeria";
   import type { TipoGaleria } from "@/lib/types";
 
   let {
@@ -58,6 +58,17 @@
   let previewUrl = $state<string | null>(null);
 
   const esCustom = $derived(tamano === "custom");
+
+  // La animada va a YouTube: arranca en horizontal. Al volver a Generar se
+  // recupera el vertical, salvo que se hubiera elegido otro tamaño a mano.
+  const TAMANO_INICIAL = `${TAMANOS[0].w}x${TAMANOS[0].h}`;
+  function elegirTipo(v: string) {
+    const nuevo = v as TipoGaleria;
+    if (nuevo === "animada" && tamano === TAMANO_INICIAL) tamano = TAMANO_ANIMADA;
+    else if (tipo === "animada" && nuevo !== "animada" && tamano === TAMANO_ANIMADA)
+      tamano = TAMANO_INICIAL;
+    tipo = nuevo;
+  }
   function tamanoElegido(): [number, number] {
     if (esCustom) return [customW || 1024, customH || 1024];
     const [w, h] = tamano.split("x").map(Number);
@@ -131,7 +142,7 @@
         { value: "animada", label: "Animada" },
       ]}
       value={tipo}
-      onchange={(v) => (tipo = v as TipoGaleria)}
+      onchange={elegirTipo}
     />
 
     {#if motoresDelModo.length > 1}
