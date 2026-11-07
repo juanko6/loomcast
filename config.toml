@@ -352,6 +352,11 @@ fps_origen = 24
 # A 12 fps los 15 s pedirían 177 cuadros y ya 161 paginaban; además el
 # movimiento se frenaba en el último segundo y se paraba a mitad. A 8 fps los
 # 15 s caben en 121 cuadros, sin swap, y el movimiento llega vivo al final.
+#
+# Prueba real de principio a fin por la API (768x1344 → 480x864):
+#   personaje groovy, 10 s ... animar 265 s en frío, 0 GB; 4K 725 s, 0 GB
+#   escena sin personaje, 15 s ... animar 391 s, 1,0 GB a swap (justo tras
+#   las previews de Z-Image; en el banco los mismos 121 cuadros daban 0)
 workflow = "workflows/loop_ltx25_api.json"
 # fps al que se condiciona LTX (los cuadros se piden de la forma 8n+1 que
 # cubre la duración) y fps del mp4 tras RIFE. El final tiene que ser múltiplo
