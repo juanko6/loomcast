@@ -23,7 +23,11 @@ export interface GaleriaDetalle {
   ocupado: boolean;
 }
 
-export type Escala = "2k" | "4k";
+export type Escala = "1080p" | "2k" | "4k";
+export const ESCALAS: Escala[] = ["1080p", "2k", "4k"];
+export const NOMBRE_ESCALA: Record<Escala, string> = { "1080p": "Full HD", "2k": "2K", "4k": "4K" };
+// Tamaño con el que arranca una animada: horizontal, el de YouTube.
+export const TAMANO_ANIMADA = "1344x768";
 
 // Duración del bucle de una animada, en segundos (backend: [animada]).
 export const DURACION_MIN_S = 10;

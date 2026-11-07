@@ -167,11 +167,23 @@ describe("ImageConfig", () => {
     expect(screen.queryByLabelText("Modelo")).toBeNull();
     const crear = screen.getByRole("button", { name: "Crear" });
     expect(crear).toBeDisabled();
+    // Arranca en horizontal (YouTube).
+    expect((screen.getByLabelText("Tamaño") as HTMLSelectElement).value).toBe("1344x768");
     await userEvent.type(screen.getByRole("textbox"), " un gato groovy ");
-    await userEvent.selectOptions(screen.getByLabelText("Tamaño"), "1024x1024");
     await userEvent.click(crear);
-    expect(p.oncreateAnimada).toHaveBeenCalledWith({ idea: "un gato groovy", width: 1024, height: 1024 });
+    expect(p.oncreateAnimada).toHaveBeenCalledWith({ idea: "un gato groovy", width: 1344, height: 768 });
     expect(p.oncreateGenerar).not.toHaveBeenCalled();
+  });
+
+  it("animada respeta un tamaño elegido a mano, y al salir vuelve al vertical", async () => {
+    await montar();
+    const tam = () => (screen.getByLabelText("Tamaño") as HTMLSelectElement).value;
+    await userEvent.click(screen.getByRole("tab", { name: "Animada" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Generar" }));
+    expect(tam()).toBe("768x1344");
+    await userEvent.selectOptions(screen.getByLabelText("Tamaño"), "1024x1024");
+    await userEvent.click(screen.getByRole("tab", { name: "Animada" }));
+    expect(tam()).toBe("1024x1024");
   });
 
   it("las etiquetas cambian según el modo", async () => {
@@ -356,7 +368,7 @@ describe("ImageStudio", () => {
       await userEvent.click(screen.getByRole("tab", { name: "Animada" }));
       await userEvent.type(screen.getAllByRole("textbox")[0], "un gato groovy");
       await userEvent.click(screen.getByRole("button", { name: "Crear" }));
-      await waitFor(() => expect(g.crearAnimada).toHaveBeenCalledWith({ idea: "un gato groovy", width: 768, height: 1344 }));
+      await waitFor(() => expect(g.crearAnimada).toHaveBeenCalledWith({ idea: "un gato groovy", width: 1344, height: 768 }));
       await waitFor(() => expect(g.detalleGaleria).toHaveBeenCalledWith(9));
     });
 
@@ -413,6 +425,8 @@ describe("ImageStudio", () => {
       expect(screen.getByText("Descargar MP4").closest("a")).toHaveAttribute("href", "/api/galeria/2/video");
       expect(screen.getByText("MP4 2K").closest("a")).toHaveAttribute("href", "/api/galeria/2/video?escala=2k");
       expect(screen.queryByRole("button", { name: "Escalar a 2K" })).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "Escalar a Full HD" }));
+      await waitFor(() => expect(g.escalar).toHaveBeenCalledWith(2, "1080p"));
       expect(screen.getByRole("button", { name: "Volver a animar" })).toBeEnabled();
       await userEvent.click(screen.getByRole("button", { name: "Escalar a 4K" }));
       await waitFor(() => expect(g.escalar).toHaveBeenCalledWith(2, "4k"));

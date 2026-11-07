@@ -6,7 +6,9 @@
   import {
     DURACION_MAX_S,
     DURACION_MIN_S,
+    ESCALAS,
     ESTADOS_APROBADA,
+    NOMBRE_ESCALA,
     rutaVideo,
     type Escala,
     type GaleriaDetalle,
@@ -61,7 +63,6 @@
   const esAnimada = $derived(detail?.tipo === "animada");
   const aprobada = $derived(!!detail && esAnimada && ESTADOS_APROBADA.includes(detail.estado));
   const hayVideo = $derived(!!detail && detail.videos.includes("base"));
-  const ESCALAS: Escala[] = ["2k", "4k"];
 
   // `?v=` para que el navegador no se quede con el bucle anterior al reanimar.
   function srcVideo(escala?: Escala) {
@@ -247,11 +248,11 @@
                       download={`loomcast_${detail.id}_${e}.mp4`}
                       class="inline-flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3 py-2 text-sm text-text transition hover:border-accent"
                     >
-                      <Icon name="download" size={16} /> MP4 {e.toUpperCase()}
+                      <Icon name="download" size={16} /> MP4 {NOMBRE_ESCALA[e]}
                     </a>
                   {:else}
                     <Button size="sm" variant="secondary" disabled={busy} onclick={() => onescalar(e)}>
-                      Escalar a {e.toUpperCase()}
+                      Escalar a {NOMBRE_ESCALA[e]}
                     </Button>
                   {/if}
                 {/each}

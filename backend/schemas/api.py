@@ -301,7 +301,7 @@ class GaleriaMovimientoIn(BaseModel):
 
 
 class GaleriaEscalarIn(BaseModel):
-    escala: Literal["2k", "4k"]
+    escala: Literal["1080p", "2k", "4k"]
 
 
 class MusicaGenerarIn(BaseModel):

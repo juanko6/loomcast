@@ -35,9 +35,38 @@ from .. import progreso
 from ._ffmpeg import args_video, sin_restos
 from .imagen_libre import carpeta, ruta_final, ruta_preview
 
-# Lado largo de cada escala. El corto sale de la proporción de la imagen: en
-# 9:16, 1440×2560 y 2160×3840.
-LADO_ESCALA = {"2k": 2560, "4k": 3840}
+# Lado largo de cada escala. En 16:9 y 9:16 el corto es el exacto de YouTube
+# (1920×1080, 2560×1440, 3840×2160 o sus verticales); en otras formas sale de la
+# proporción de la imagen.
+LADO_ESCALA = {"1080p": 1920, "2k": 2560, "4k": 3840}
+# Cuánto puede separarse una imagen de 16:9 (o 9:16) para tratarla como tal.
+# Las previews van en múltiplos de 64 y no llegan a 16:9 justo: 1344×768 es
+# 1,75 y no 1,78. Al vídeo se le recorta esa diferencia (un 1,6 %) para que
+# YouTube no le ponga bandas.
+TOLERANCIA_FORMA = 0.04
+
+
+def _par(x: float) -> int:
+    return max(2, round(x / 2) * 2)
+
+
+def forma_youtube(width: int, height: int) -> tuple[int, int] | None:
+    """(16, 9) o (9, 16) si la imagen está a menos de TOLERANCIA_FORMA de
+    serlo; None si es de otra forma (cuadrada, 3:2…)."""
+    for forma in ((16, 9), (9, 16)):
+        if abs((width / height) / (forma[0] / forma[1]) - 1) <= TOLERANCIA_FORMA:
+            return forma
+    return None
+
+
+def tamano_salida(width: int, height: int, corto: int) -> tuple[int, int]:
+    """Tamaño del bucle base: el lado corto de lo que generó LTX y, si es 16:9
+    o 9:16, el largo exacto de esa forma (864×480 → 854×480)."""
+    forma = forma_youtube(width, height)
+    if forma is None:
+        return width, height
+    largo = _par(corto * max(forma) / min(forma))
+    return (largo, corto) if forma[0] > forma[1] else (corto, largo)
 
 
 def ruta_video(imagen_id: int, escala: str | None = None) -> Path:
@@ -68,8 +97,12 @@ def tamano_generacion(width: int, height: int) -> tuple[int, int]:
 def tamano_escala(width: int, height: int, escala: str) -> tuple[int, int]:
     """Tamaño final de la versión escalada, pares para yuv420p."""
     largo = LADO_ESCALA[escala]
+    forma = forma_youtube(width, height)
+    if forma is not None:
+        corto = _par(largo * min(forma) / max(forma))
+        return (largo, corto) if forma[0] > forma[1] else (corto, largo)
     f = largo / max(width, height)
-    return round(width * f / 2) * 2, round(height * f / 2) * 2
+    return _par(width * f), _par(height * f)
 
 
 def pesos_fundido(fundido: int) -> list[float]:
@@ -82,10 +115,11 @@ def pesos_fundido(fundido: int) -> list[float]:
 
 
 def cerrar_bucle(entrada: Path, salida: Path, cuadros: int, fundido: int,
-                 w: int, h: int, fps: int = ANIMADA_FPS_FINAL) -> None:
+                 w: int, h: int, fps: int = ANIMADA_FPS_FINAL,
+                 recorte: tuple[int, int] | None = None) -> None:
     """Escribe los `cuadros` primeros de `entrada` (de `w`×`h`) —el último,
     copia del primero, se queda fuera— fundiendo los `fundido` finales hacia el
-    primero.
+    primero. Con `recorte` (ancho, alto) se recorta al centro a ese tamaño.
 
     La guía final de LTX deja la pose donde empezó, pero no el cuadro idéntico:
     el VAE devuelve la textura con un brillo algo distinto (medido: 1,6 niveles
@@ -105,6 +139,7 @@ def cerrar_bucle(entrada: Path, salida: Path, cuadros: int, fundido: int,
 
     fundido = max(0, min(fundido, cuadros - 1))
     desde = cuadros - fundido
+    corte = f",crop={recorte[0]}:{recorte[1]}" if recorte and recorte != (w, h) else ""
     tam = w * h * 3 // 2
     with tempfile.TemporaryDirectory() as tmp:
         if fundido:
@@ -129,12 +164,12 @@ def cerrar_bucle(entrada: Path, salida: Path, cuadros: int, fundido: int,
             mezclados.round().clip(0, 255).astype(np.uint8).tofile(mezcla)
             filtro = (
                 f"[0:v]trim=end_frame={desde},setpts=PTS-STARTPTS[cab];"
-                f"[1:v]setpts=PTS-STARTPTS[mez];[cab][mez]concat=n=2:v=1[v]"
+                f"[1:v]setpts=PTS-STARTPTS[mez];[cab][mez]concat=n=2:v=1{corte}[v]"
             )
             entradas = ["-i", str(entrada), "-f", "rawvideo", "-pix_fmt", "yuv420p",
                         "-s", f"{w}x{h}", "-framerate", str(fps), "-i", str(mezcla)]
         else:
-            filtro = f"[0:v]trim=end_frame={cuadros},setpts=PTS-STARTPTS[v]"
+            filtro = f"[0:v]trim=end_frame={cuadros},setpts=PTS-STARTPTS{corte}[v]"
             entradas = ["-i", str(entrada)]
         procesos.ejecutar(
             ["ffmpeg", "-loglevel", "error", "-y", *entradas,
@@ -201,6 +236,7 @@ def animar(imagen_id: int) -> str:
 
     frames = cuadros_para(duracion)
     w, h = tamano_generacion(width, height)
+    salida = tamano_salida(w, h, min(w, h))
     k = ANIMADA_FPS_FINAL // ANIMADA_FPS_ORIGEN
     # RIFE mete k-1 cuadros entre cada par: (frames-1)·k+1 y el último sigue
     # siendo copia del primero. Se tira ese último y el bucle cierra limpio.
@@ -223,7 +259,8 @@ def animar(imagen_id: int) -> str:
             rife.interpolar(crudo, suave, ANIMADA_FPS_ORIGEN, ANIMADA_FPS_FINAL,
                             frames=finales + 1)
             with sin_restos(destino):
-                cerrar_bucle(suave, destino, finales, ANIMADA_FUNDIDO, w, h)
+                cerrar_bucle(suave, destino, finales, ANIMADA_FUNDIDO, w, h,
+                             recorte=salida)
     finally:
         comfy.liberar_memoria()
 
@@ -234,7 +271,7 @@ def animar(imagen_id: int) -> str:
         img = galeria_repo.obtener(s, imagen_id)
         galeria_repo.guardar_video(s, img, seed)
         s.commit()
-    return (f"Bucle de {finales / ANIMADA_FPS_FINAL:.1f} s a {w}×{h}, "
+    return (f"Bucle de {finales / ANIMADA_FPS_FINAL:.1f} s a {salida[0]}×{salida[1]}, "
             f"{frames} cuadros a {ANIMADA_FPS_ORIGEN} fps → {ANIMADA_FPS_FINAL} fps")
 
 
@@ -270,7 +307,11 @@ def escalar(imagen_id: int, escala: str) -> str:
                 procesos.ejecutar(
                     ["ffmpeg", "-loglevel", "error", "-y",
                      "-framerate", str(ANIMADA_FPS_FINAL), "-i", str(dout / "%06d.png"),
-                     "-vf", f"scale={w}:{h}:flags=lanczos",
+                     # Rellenar y recortar al centro: en 16:9 el bucle ya
+                     # viene exacto y esto no corta nada; en otras formas
+                     # absorbe el redondeo a par.
+                     "-vf", f"scale={w}:{h}:force_original_aspect_ratio=increase"
+                            f":flags=lanczos,crop={w}:{h}",
                      "-c:v", "libx264", "-preset", "slow", "-crf", str(ANIMADA_CRF),
                      "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an",
                      str(destino)],
@@ -283,4 +324,4 @@ def escalar(imagen_id: int, escala: str) -> str:
         img = galeria_repo.obtener(s, imagen_id)
         galeria_repo.guardar_escala(s, img, escala)
         s.commit()
-    return f"Bucle escalado a {escala.upper()} ({w}×{h})"
+    return f"Bucle escalado a {escala.upper().replace('P', 'p')} ({w}×{h})"
