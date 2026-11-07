@@ -90,6 +90,8 @@ export interface MusicaResumen {
   // La portada la genera el LLM+motor de imagen al pedir la sugerencia; hasta
   // entonces la miniatura cae al icono por defecto.
   tiene_portada: boolean;
+  // Álbum al que pertenece, o null si es una pista suelta.
+  album_id?: number | null;
 }
 
 // Modos de nivel superior del estudio (el rail izquierdo).

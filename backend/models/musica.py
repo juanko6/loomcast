@@ -54,4 +54,12 @@ class Musica(Base):
     seed: Mapped[int | None] = mapped_column(default=None)
     # nueva | generada
     estado: Mapped[str] = mapped_column(default="nueva")
+    # Pista de un álbum (models/album.py), o None si es suelta. En un álbum la
+    # duración no la elige el usuario: sale de los compases del guion
+    # (`services/musica_compases.py`), y el título y la intención son lo que
+    # distingue esta pista de las demás del disco.
+    album_id: Mapped[int | None] = mapped_column(default=None)
+    pista_n: Mapped[int | None] = mapped_column(default=None)
+    titulo: Mapped[str] = mapped_column(default="")
+    intencion: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(default=now_utc)

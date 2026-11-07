@@ -8,6 +8,26 @@ import difflib
 from pydantic import BaseModel, Field, RootModel, model_validator
 
 
+def _recolocar_erratas(cls, datos):
+    """Recoloca las claves que el modelo escribe con una errata.
+
+    El Qwen 35B en 4 bits devuelve `"lytics"` en vez de `"lyrics"`, y como
+    mlx_lm ignora el json_schema nadie lo frena: Pydantic descarta la clave
+    desconocida, `lyrics` se queda en "" y el guion de secciones se pierde
+    sin ningún aviso (pasó en todas las pistas desde la 33). Una clave que
+    no existe y se parece mucho a un campo que falta es ese campo.
+    """
+    if not isinstance(datos, dict):
+        return datos
+    faltan = [c for c in cls.model_fields if c not in datos]
+    for clave in [k for k in datos if k not in cls.model_fields]:
+        parecida = difflib.get_close_matches(clave, faltan, n=1, cutoff=0.8)
+        if parecida:
+            datos[parecida[0]] = datos.pop(clave)
+            faltan.remove(parecida[0])
+    return datos
+
+
 class IdeaLLM(BaseModel):
     titulo: str = Field(min_length=1, max_length=200)
     gancho: str = Field(min_length=1)
@@ -222,20 +242,52 @@ class MusicaPromptLLM(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _claves_mal_escritas(cls, datos):
-        """Recoloca las claves que el modelo escribe con una errata.
+        """Ver `_recolocar_erratas`."""
+        return _recolocar_erratas(cls, datos)
 
-        El Qwen 35B en 4 bits devuelve `"lytics"` en vez de `"lyrics"`, y como
-        mlx_lm ignora el json_schema nadie lo frena: Pydantic descarta la clave
-        desconocida, `lyrics` se queda en "" y el guion de secciones se pierde
-        sin ningún aviso (pasó en todas las pistas desde la 33). Una clave que
-        no existe y se parece mucho a un campo que falta es ese campo.
-        """
-        if not isinstance(datos, dict):
-            return datos
-        faltan = [c for c in cls.model_fields if c not in datos]
-        for clave in [k for k in datos if k not in cls.model_fields]:
-            parecida = difflib.get_close_matches(clave, faltan, n=1, cutoff=0.8)
-            if parecida:
-                datos[parecida[0]] = datos.pop(clave)
-                faltan.remove(parecida[0])
-        return datos
+
+class PistaAlbumLLM(BaseModel):
+    """Una pista del tracklist: lo que la distingue de las demás del disco."""
+
+    titulo: str = Field(min_length=1, max_length=120)
+    # Su papel en el arco: opener, single, ballad, interlude, peak, closer…
+    papel: str = ""
+    # Qué cuenta, en una o dos frases: la escena, la emoción, hacia dónde va.
+    intencion: str = Field(min_length=10)
+    # Quién lleva la melodía, siempre de la banda del álbum.
+    lead: str = ""
+    # Forma: AABA, tema y variaciones, crescendo largo, groove con solos…
+    forma: str = ""
+    # Energía de 1 a 5, para que la secuencia tenga contraste.
+    energia: int = 3
+    bpm: int = 100
+    keyscale: str = "C major"
+    timesig: str = "4"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _claves_mal_escritas(cls, datos):
+        return _recolocar_erratas(cls, datos)
+
+
+class AlbumPlanLLM(BaseModel):
+    """El ADN del álbum (lo que no cambia) y su tracklist (lo que sí)."""
+
+    titulo: str = Field(min_length=1, max_length=120)
+    # Género y subgénero, en inglés.
+    genero: str = Field(min_length=3)
+    # La banda: 2-5 instrumentos con su timbre concreto, en inglés.
+    banda: list[str] = Field(min_length=1)
+    # Párrafo de producción y mezcla en inglés, que se pega literal al final del
+    # brief de cada pista: sala, micros, carácter, agudos, imagen estéreo.
+    firma: str = Field(min_length=40)
+    # El arco del disco en una o dos frases.
+    arco: str = ""
+    # Prompt en inglés de la portada del álbum.
+    portada: str = ""
+    pistas: list[PistaAlbumLLM] = Field(min_length=1)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _claves_mal_escritas(cls, datos):
+        return _recolocar_erratas(cls, datos)

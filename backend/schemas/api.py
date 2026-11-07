@@ -326,3 +326,30 @@ class MusicaLanzarIn(BaseModel):
     keyscale: str | None = None
     timesig: str | None = None
     idioma: str | None = None
+
+
+class AlbumNuevoIn(BaseModel):
+    # Una de las dos: la idea (álbum desde cero) o la pista que gustó (su
+    # estilo, banda y semilla son el ADN del álbum).
+    idea: str = ""
+    musica_id: int | None = None
+    num_pistas: int = 12
+
+
+class AlbumEditarIn(BaseModel):
+    titulo: str | None = None
+    firma: str | None = None
+
+
+class AlbumPistaIn(BaseModel):
+    # None = no tocar. Cambiar el tempo recalcula la duración desde los
+    # compases del guion.
+    titulo: str | None = None
+    intencion: str | None = None
+    bpm: int | None = None
+    keyscale: str | None = None
+    timesig: str | None = None
+
+
+class AlbumOrdenIn(BaseModel):
+    ids: list[int]

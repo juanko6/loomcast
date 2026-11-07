@@ -195,6 +195,11 @@ def _migrar() -> None:
             "timesig": "VARCHAR DEFAULT '4'",
             "idioma": "VARCHAR DEFAULT 'es'",
             "portada": "TEXT",
+            # Pistas de un álbum (models/album.py).
+            "album_id": "INTEGER",
+            "pista_n": "INTEGER",
+            "titulo": "VARCHAR DEFAULT ''",
+            "intencion": "TEXT DEFAULT ''",
         }
         for col, tipo in nuevas.items():
             if col not in cols:

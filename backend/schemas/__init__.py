@@ -1,5 +1,9 @@
 """Contratos Pydantic por ámbito: API HTTP, LLMs y plantillas."""
 from .api import (
+    AlbumEditarIn,
+    AlbumNuevoIn,
+    AlbumOrdenIn,
+    AlbumPistaIn,
     AutopilotoIn,
     EscenaPromptIn,
     EscenasIn,
@@ -53,7 +57,9 @@ from .llm import (
     IdeasLLM,
     ImagenLibrePromptLLM,
     LineaGuionLLM,
+    AlbumPlanLLM,
     MusicaPromptLLM,
+    PistaAlbumLLM,
     PersonajeLLM,
     PlanoLLM,
     ResumenEpisodioLLM,
@@ -69,6 +75,7 @@ from .plantilla import (
 )
 
 __all__ = [
+    "AlbumEditarIn", "AlbumNuevoIn", "AlbumOrdenIn", "AlbumPistaIn",
     "AutopilotoIn", "EscenaPromptIn", "EscenasIn", "GaleriaFinalIn",
     "GaleriaGenerarIn", "GaleriaPreviewsIn", "GaleriaPromptIn", "HiloIn",
     "LoteIn",
@@ -85,6 +92,7 @@ __all__ = [
     "CastingLLM", "DescripcionLLM", "EscenaLLM", "EtiquetasLLM",
     "GuionLineasLLM", "GuionLLM", "GuionNarracionLLM", "HiloLLM", "IdeaLLM",
     "IdeasLLM", "ImagenLibrePromptLLM", "LineaGuionLLM", "MusicaPromptLLM",
+    "AlbumPlanLLM", "PistaAlbumLLM",
     "PersonajeLLM", "PlanoLLM", "ResumenEpisodioLLM", "StoryboardLLM",
     "TituloLLM", "TramoLLM",
     "Plantilla", "RitmoPlantilla", "SubtitulosPlantilla", "VozPlantilla",

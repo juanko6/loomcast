@@ -1,5 +1,6 @@
 """Modelos ORM: un archivo por entidad, re-exportados aquí."""
 from .ajuste import Ajuste
+from .album import Album
 from .autopiloto import (
     PARADA_TRAS,
     PARADAS,
@@ -23,7 +24,7 @@ from .tema import Tema
 from .voz import REF_TEXT, Voz
 
 __all__ = [
-    "Ajuste", "Autopiloto", "Base", "Escena", "Guion", "Hilo", "Idea",
+    "Ajuste", "Album", "Autopiloto", "Base", "Escena", "Guion", "Hilo", "Idea",
     "ImagenLibre", "Job", "Lote", "Metadatos", "MiembroReparto", "Musica",
     "ORDEN_ESTADOS", "PARADA_TRAS", "PARADAS", "Personaje", "Proyecto",
     "REF_TEXT", "Serie", "SerieMiembro", "Tema", "Voz", "avanzar_estado",
