@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { get } from "svelte/store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +10,8 @@ vi.mock("@/lib/galeria", async (o) => {
     listarGaleria: vi.fn(), detalleGaleria: vi.fn(), listarMotores: vi.fn(), crearGenerar: vi.fn(),
     crearEditar: vi.fn(), crearQuitarFondo: vi.fn(), editarPrompt: vi.fn(), mejorarPrompt: vi.fn(),
     lanzarPreviews: vi.fn(), lanzarFinal: vi.fn(), borrarGaleria: vi.fn(),
+    crearAnimada: vi.fn(), guardarMovimiento: vi.fn(), mejorarMovimiento: vi.fn(), animar: vi.fn(),
+    escalar: vi.fn(),
   };
 });
 vi.mock("@/lib/api", async (o) => ({ ...(await o<typeof import("@/lib/api")>()), api: vi.fn().mockResolvedValue([]) }));
@@ -26,6 +28,7 @@ const MOTORES: MotorImagen[] = [
   { id: "qwen", nombre: "Qwen-Image-Edit", modos: ["editar"], defecto_en: ["editar"] },
   { id: "flux2klein", nombre: "FLUX.2 Klein", modos: ["generar", "editar"], defecto_en: [] },
 ];
+const fireInput = (el: HTMLInputElement, v: string) => fireEvent.input(el, { target: { value: v } });
 const archivo = () => new File(["x"], "foto.png", { type: "image/png" });
 
 beforeEach(() => {
@@ -34,7 +37,9 @@ beforeEach(() => {
 });
 
 describe("ImageConfig", () => {
-  const props = () => ({ oncreateGenerar: vi.fn(), oncreateEditar: vi.fn(), oncreateFondo: vi.fn() });
+  const props = () => ({
+    oncreateGenerar: vi.fn(), oncreateEditar: vi.fn(), oncreateFondo: vi.fn(), oncreateAnimada: vi.fn(),
+  });
   const montar = async (p = props(), extra = {}) => {
     const r = render(ImageConfig, { ...p, ...extra });
     await waitFor(() => expect(g.listarMotores).toHaveBeenCalled());
@@ -154,6 +159,33 @@ describe("ImageConfig", () => {
     expect(screen.getByRole("button", { name: "Crear" })).toBeDisabled();
   });
 
+  it("animada: idea y tamaño, sin selector de modelo, y lo manda a su creación", async () => {
+    const { p } = await montar();
+    await userEvent.click(screen.getByRole("tab", { name: "Animada" }));
+    expect(screen.getByText("¿Qué imagen quieres animar?")).toBeInTheDocument();
+    expect(screen.getByText(/vuelve al principio/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Modelo")).toBeNull();
+    const crear = screen.getByRole("button", { name: "Crear" });
+    expect(crear).toBeDisabled();
+    // Arranca en horizontal (YouTube).
+    expect((screen.getByLabelText("Tamaño") as HTMLSelectElement).value).toBe("1344x768");
+    await userEvent.type(screen.getByRole("textbox"), " un gato groovy ");
+    await userEvent.click(crear);
+    expect(p.oncreateAnimada).toHaveBeenCalledWith({ idea: "un gato groovy", width: 1344, height: 768 });
+    expect(p.oncreateGenerar).not.toHaveBeenCalled();
+  });
+
+  it("animada respeta un tamaño elegido a mano, y al salir vuelve al vertical", async () => {
+    await montar();
+    const tam = () => (screen.getByLabelText("Tamaño") as HTMLSelectElement).value;
+    await userEvent.click(screen.getByRole("tab", { name: "Animada" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Generar" }));
+    expect(tam()).toBe("768x1344");
+    await userEvent.selectOptions(screen.getByLabelText("Tamaño"), "1024x1024");
+    await userEvent.click(screen.getByRole("tab", { name: "Animada" }));
+    expect(tam()).toBe("1024x1024");
+  });
+
   it("las etiquetas cambian según el modo", async () => {
     await montar();
     expect(screen.getByText("¿Qué imagen quieres?")).toBeInTheDocument();
@@ -165,8 +197,12 @@ describe("ImageConfig", () => {
 describe("ImageStudio", () => {
   const detalle = (extra: Partial<GaleriaDetalle> = {}): GaleriaDetalle => ({
     id: 2, tipo: "generar", motor: "zimage", motor_nombre: "Z-Image", idea: "zorro", prompt: "a fox",
-    width: 768, height: 1344, estado: "nueva", seeds: [], seed_elegido: null, ocupado: false, ...extra,
+    width: 768, height: 1344, estado: "nueva", seeds: [], seed_elegido: null,
+    prompt_movimiento: "", duracion_s: 12, seed_video: null, escala: null, videos: [],
+    ocupado: false, ...extra,
   });
+  const animada = (extra: Partial<GaleriaDetalle> = {}) =>
+    detalle({ tipo: "animada", estado: "final", seeds: [1, 2, 3, 4], seed_elegido: 1, ...extra });
   const resumen = (id: number, idea: string) => ({ id, idea, tipo: "generar" as const, estado: "nueva" });
 
   beforeEach(() => {
@@ -180,6 +216,11 @@ describe("ImageStudio", () => {
     vi.mocked(g.lanzarPreviews).mockResolvedValue({ job_id: 2 });
     vi.mocked(g.lanzarFinal).mockResolvedValue({ job_id: 3 });
     vi.mocked(g.borrarGaleria).mockResolvedValue({ borrada: 2, archivos: 0 });
+    vi.mocked(g.crearAnimada).mockResolvedValue({ id: 9 });
+    vi.mocked(g.guardarMovimiento).mockResolvedValue({ ok: true });
+    vi.mocked(g.mejorarMovimiento).mockResolvedValue({ job_id: 4 });
+    vi.mocked(g.animar).mockResolvedValue({ job_id: 5 });
+    vi.mocked(g.escalar).mockResolvedValue({ job_id: 6 });
     currentTrack.set(null);
     seleccionPendiente.set(null);
     jobsDrenados.set(0);
@@ -318,5 +359,94 @@ describe("ImageStudio", () => {
     await abrir();
     await userEvent.click(screen.getByRole("button", { name: "+ Nueva imagen" }));
     expect(await screen.findByText(/Selecciona una imagen/)).toBeInTheDocument();
+  });
+
+  describe("animada", () => {
+    it("crear una animada la abre", async () => {
+      render(ImageStudio);
+      await screen.findByText("zorro");
+      await userEvent.click(screen.getByRole("tab", { name: "Animada" }));
+      await userEvent.type(screen.getAllByRole("textbox")[0], "un gato groovy");
+      await userEvent.click(screen.getByRole("button", { name: "Crear" }));
+      await waitFor(() => expect(g.crearAnimada).toHaveBeenCalledWith({ idea: "un gato groovy", width: 1344, height: 768 }));
+      await waitFor(() => expect(g.detalleGaleria).toHaveBeenCalledWith(9));
+    });
+
+    it("en las previews se aprueba una para animar, no se amplía", async () => {
+      vi.mocked(g.detalleGaleria).mockResolvedValue(animada({ estado: "previews", seed_elegido: null }));
+      vi.mocked(g.lanzarFinal).mockResolvedValue({ job_id: null });
+      await abrir();
+      expect(screen.getByText("Elige la que quieres animar")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Generar máxima resolución" })).toBeNull();
+      await userEvent.click(screen.getByAltText("preview 3"));
+      await userEvent.click(screen.getByRole("button", { name: "Aprobar esta imagen" }));
+      await waitFor(() => expect(g.lanzarFinal).toHaveBeenCalledWith(2, 2));
+    });
+
+    it("aprobada: escribe el movimiento y anima guardándolo antes", async () => {
+      vi.mocked(g.detalleGaleria).mockResolvedValue(animada());
+      await abrir();
+      expect(screen.getByAltText("imagen aprobada")).toBeInTheDocument();
+      const animar = screen.getByRole("button", { name: "Animar" });
+      const mejorar = screen.getByRole("button", { name: "Mejorar con IA" });
+      expect(animar).toBeDisabled();
+      expect(mejorar).toBeDisabled();
+      await userEvent.type(screen.getByLabelText("Prompt de movimiento"), "se balancea y da un sorbo");
+      const dur = screen.getByRole("slider") as HTMLInputElement;
+      expect(dur.min).toBe("10");
+      expect(dur.max).toBe("15");
+      await fireInput(dur, "14");
+      await userEvent.click(animar);
+      await waitFor(() => expect(g.animar).toHaveBeenCalledWith(2));
+      expect(g.guardarMovimiento).toHaveBeenCalledWith(2, "se balancea y da un sorbo", 14);
+      expect(vi.mocked(g.guardarMovimiento).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(g.animar).mock.invocationCallOrder[0],
+      );
+    });
+
+    it("«Mejorar con IA» guarda el texto y pide pulirlo", async () => {
+      vi.mocked(g.detalleGaleria).mockResolvedValue(animada({ estado: "movimiento", prompt_movimiento: "que baile", duracion_s: 11 }));
+      await abrir();
+      expect(screen.getByDisplayValue("que baile")).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Mejorar con IA" }));
+      await waitFor(() => expect(g.mejorarMovimiento).toHaveBeenCalledWith(2));
+      expect(g.guardarMovimiento).toHaveBeenCalledWith(2, "que baile", 11);
+    });
+
+    it("con vídeo: bucle mudo en loop, descarga y escalado de lo que falta", async () => {
+      vi.mocked(g.detalleGaleria).mockResolvedValue(
+        animada({ estado: "escalada", prompt_movimiento: "x", videos: ["base", "2k"], escala: "2k" }),
+      );
+      await abrir();
+      const video = document.querySelector("video")!;
+      expect(video.loop).toBe(true);
+      expect(video.muted).toBe(true);
+      expect(video.getAttribute("src")).toMatch(/^\/api\/galeria\/2\/video\?v=/);
+      expect(screen.getByText("Descargar MP4").closest("a")).toHaveAttribute("href", "/api/galeria/2/video");
+      expect(screen.getByText("MP4 2K").closest("a")).toHaveAttribute("href", "/api/galeria/2/video?escala=2k");
+      expect(screen.queryByRole("button", { name: "Escalar a 2K" })).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "Escalar a Full HD" }));
+      await waitFor(() => expect(g.escalar).toHaveBeenCalledWith(2, "1080p"));
+      expect(screen.getByRole("button", { name: "Volver a animar" })).toBeEnabled();
+      await userEvent.click(screen.getByRole("button", { name: "Escalar a 4K" }));
+      await waitFor(() => expect(g.escalar).toHaveBeenCalledWith(2, "4k"));
+    });
+
+    it("ocupada bloquea animar y escalar", async () => {
+      vi.mocked(g.detalleGaleria).mockResolvedValue(
+        animada({ estado: "animada", prompt_movimiento: "x", videos: ["base"], ocupado: true }),
+      );
+      await abrir();
+      expect(screen.getByRole("button", { name: "Volver a animar" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Escalar a 4K" })).toBeDisabled();
+    });
+
+    it("si animar falla muestra el error", async () => {
+      vi.mocked(g.detalleGaleria).mockResolvedValue(animada({ prompt_movimiento: "x" }));
+      vi.mocked(g.animar).mockRejectedValue(new Error("HTTP 409"));
+      await abrir();
+      await userEvent.click(screen.getByRole("button", { name: "Animar" }));
+      expect(await screen.findByText("HTTP 409")).toBeInTheDocument();
+    });
   });
 });

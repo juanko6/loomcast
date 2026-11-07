@@ -14,8 +14,29 @@ export interface GaleriaDetalle {
   estado: string;
   seeds: number[];
   seed_elegido: number | null;
+  // Solo en las animadas: el movimiento, su duración y qué vídeos hay.
+  prompt_movimiento: string;
+  duracion_s: number;
+  seed_video: number | null;
+  escala: Escala | null;
+  videos: ("base" | Escala)[];
   ocupado: boolean;
 }
+
+export type Escala = "1080p" | "2k" | "4k";
+export const ESCALAS: Escala[] = ["1080p", "2k", "4k"];
+export const NOMBRE_ESCALA: Record<Escala, string> = { "1080p": "Full HD", "2k": "2K", "4k": "4K" };
+// Tamaño con el que arranca una animada: horizontal, el de YouTube.
+export const TAMANO_ANIMADA = "1344x768";
+
+// Duración del bucle de una animada, en segundos (backend: [animada]).
+export const DURACION_MIN_S = 10;
+export const DURACION_MAX_S = 15;
+
+// Estados de una animada que ya tiene la preview aprobada.
+export const ESTADOS_APROBADA = ["final", "movimiento", "animada", "escalada"];
+// Estados en los que ya hay bucle en disco.
+export const ESTADOS_CON_VIDEO = ["animada", "escalada"];
 
 // Un modelo de [imagen.motores] de config.toml. `modos` son los que sabe hacer
 // y `defecto_en` aquellos en los que va preseleccionado.
@@ -48,6 +69,9 @@ export const crearGenerar = (body: {
   motor: string;
 }) => api<{ id: number }>("/galeria", { method: "POST", body });
 
+export const crearAnimada = (body: { idea: string; width: number; height: number }) =>
+  api<{ id: number }>("/galeria/animada", { method: "POST", body });
+
 export function crearEditar(idea: string, file: File, motor: string) {
   const fd = new FormData();
   fd.append("idea", idea);
@@ -75,8 +99,29 @@ export const lanzarPreviews = (id: number, width?: number, height?: number) =>
     body: width && height ? { width, height } : {},
   });
 
+// Aprueba una preview. En generar/editar encola el ESRGAN; en una animada es
+// inmediato y no encola nada (job_id null).
 export const lanzarFinal = (id: number, indice: number) =>
-  api<{ job_id: number }>(`/galeria/${id}/final`, { method: "POST", body: { indice } });
+  api<{ job_id: number | null }>(`/galeria/${id}/final`, { method: "POST", body: { indice } });
+
+export const guardarMovimiento = (id: number, prompt: string, duracion_s: number) =>
+  api<{ ok: boolean }>(`/galeria/${id}/movimiento`, {
+    method: "PUT",
+    body: { prompt, duracion_s },
+  });
+
+export const mejorarMovimiento = (id: number) =>
+  api<{ job_id: number }>(`/galeria/${id}/movimiento/mejorar`, { method: "POST" });
+
+export const animar = (id: number) =>
+  api<{ job_id: number }>(`/galeria/${id}/animar`, { method: "POST" });
+
+export const escalar = (id: number, escala: Escala) =>
+  api<{ job_id: number }>(`/galeria/${id}/escalar`, { method: "POST", body: { escala } });
+
+// Ruta (para `media`) del bucle, o de su versión escalada.
+export const rutaVideo = (id: number, escala?: Escala | null) =>
+  `/galeria/${id}/video${escala ? `?escala=${escala}` : ""}`;
 
 export const borrarGaleria = (id: number) =>
   api<{ borrada: number; archivos: number }>(`/galeria/${id}`, { method: "DELETE" });

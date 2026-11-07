@@ -7,7 +7,10 @@ from .api import (
     AutopilotoIn,
     EscenaPromptIn,
     EscenasIn,
+    GaleriaAnimadaIn,
+    GaleriaEscalarIn,
     GaleriaFinalIn,
+    GaleriaMovimientoIn,
     GaleriaGenerarIn,
     GaleriaPreviewsIn,
     GaleriaPromptIn,
@@ -45,6 +48,7 @@ from .api import (
     VozSeleccionIn,
 )
 from .llm import (
+    AnimadaMovimientoLLM,
     CastingLLM,
     DescripcionLLM,
     EscenaLLM,
@@ -76,7 +80,8 @@ from .plantilla import (
 
 __all__ = [
     "AlbumEditarIn", "AlbumNuevoIn", "AlbumOrdenIn", "AlbumPistaIn",
-    "AutopilotoIn", "EscenaPromptIn", "EscenasIn", "GaleriaFinalIn",
+    "AutopilotoIn", "EscenaPromptIn", "EscenasIn", "GaleriaAnimadaIn",
+    "GaleriaEscalarIn", "GaleriaFinalIn", "GaleriaMovimientoIn",
     "GaleriaGenerarIn", "GaleriaPreviewsIn", "GaleriaPromptIn", "HiloIn",
     "LoteIn",
     "ModoEscenaIn", "ModosEscenasIn",
@@ -91,7 +96,7 @@ __all__ = [
     "VozSeleccionIn",
     "CastingLLM", "DescripcionLLM", "EscenaLLM", "EtiquetasLLM",
     "GuionLineasLLM", "GuionLLM", "GuionNarracionLLM", "HiloLLM", "IdeaLLM",
-    "IdeasLLM", "ImagenLibrePromptLLM", "LineaGuionLLM", "MusicaPromptLLM",
+    "AnimadaMovimientoLLM", "IdeasLLM", "ImagenLibrePromptLLM", "LineaGuionLLM", "MusicaPromptLLM",
     "AlbumPlanLLM", "PistaAlbumLLM",
     "PersonajeLLM", "PlanoLLM", "ResumenEpisodioLLM", "StoryboardLLM",
     "TituloLLM", "TramoLLM",

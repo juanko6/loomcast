@@ -48,9 +48,16 @@ def _tamano(imagen) -> tuple[int, int]:
     return max(8, w // 8 * 8), max(8, h // 8 * 8)
 
 
+SISTEMA = {
+    "editar": "imagen_editar.md",
+    # Respeta el tema del usuario y solo añade lo que ayuda a animarlo:
+    # composición estable, aire alrededor, nada cortado por el borde.
+    "animada": "animada_imagen.md",
+}
+
+
 def _sistema(tipo: str) -> str:
-    nombre = "imagen_editar.md" if tipo == "editar" else "imagen_generar.md"
-    return (PROMPTS_DIR / nombre).read_text()
+    return (PROMPTS_DIR / SISTEMA.get(tipo, "imagen_generar.md")).read_text()
 
 
 def mejorar_prompt(imagen_id: int) -> str:

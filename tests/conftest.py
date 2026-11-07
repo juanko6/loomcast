@@ -116,6 +116,13 @@ def fake_rife(monkeypatch):
 
 
 @pytest.fixture
+def fake_escalador(monkeypatch):
+    from tests.fakes import FakeEscalador
+
+    return _instalar(monkeypatch, "escalador", FakeEscalador())
+
+
+@pytest.fixture
 def fake_fondo(monkeypatch):
     from tests.fakes import FakeFondo
 
