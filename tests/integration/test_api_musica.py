@@ -134,3 +134,32 @@ def test_audio_flac_con_su_mime(client, pista, dirs_tmp):
     car.mkdir(parents=True)
     (car / "musica.flac").write_bytes(b"f")
     assert client.get(f"/api/musica/{pista}/audio").headers["content-type"] == "audio/flac"
+
+
+def test_lote_crea_una_pista_por_idea_y_encola_su_brief(client, dirs_tmp, jobs_encolados):
+    from backend.workers import queue
+    r = client.post("/api/musica/lote", json={
+        "ideas": ["jazz de cafetería con piano", "  ", "bossa nova con saxo"],
+        "duracion_s": 180})
+    ids = r.json()["ids"]
+    assert len(ids) == 2  # la idea vacía no cuenta
+    assert jobs_encolados == [("mejorar_prompt_musica", i) for i in ids]
+    assert jobs_encolados.params == [{"lote": True}] * 2
+    assert jobs_encolados.prioridades == [queue.PRIORIDAD_AUTOPILOTO] * 2
+    d = client.get(f"/api/musica/{ids[0]}").json()
+    assert d["duracion_s"] == 180 and d["idea"] == "jazz de cafetería con piano"
+
+
+def test_lote_sin_ideas_con_texto_es_400(client, dirs_tmp):
+    assert client.post("/api/musica/lote", json={"ideas": [" "]}).status_code == 400
+
+
+def test_lote_encadena_sintesis_sin_portada(client, pista):
+    from backend.workers import queue
+    lote = {"lote": True}
+    assert queue._encadenado("mejorar_prompt_musica", pista, lote) == "generar_musica"
+    assert queue._encadenado("generar_musica", pista, lote) is None
+    # Fuera de un lote, todo sigue igual: el brief no sintetiza solo y la pista
+    # estrena portada.
+    assert queue._encadenado("mejorar_prompt_musica", pista) is None
+    assert queue._encadenado("generar_musica", pista, {}) == "generar_portada_musica"

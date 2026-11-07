@@ -73,6 +73,23 @@ def crear(
         return {"id": m.id}
 
 
+def crear_lote(ideas: list[str], duracion_s: int) -> list[int]:
+    """Crea una pista instrumental por idea y la pone en marcha: brief del LLM y
+    luego síntesis, sin portada (ver `queue._encadenado`).
+
+    Va con la prioridad del autopiloto para que lo que se pida a mano mientras
+    tanto no espere detrás de cientos de pistas.
+    """
+    ids = []
+    for idea in ideas:
+        if idea.strip():
+            ids.append(crear("instrumental", idea, "", "", duracion_s)["id"])
+    for mid in ids:
+        queue.encolar("mejorar_prompt_musica", mid,
+                      prioridad=queue.PRIORIDAD_AUTOPILOTO, lote=True)
+    return ids
+
+
 def editar_campos(
     musica_id: int,
     tags: str | None,

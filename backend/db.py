@@ -94,6 +94,9 @@ def _migrar() -> None:
             "clip_s": "FLOAT DEFAULT 0",
             "personajes": "VARCHAR DEFAULT ''",
             "clip_motor": "VARCHAR DEFAULT ''",
+            # Las escenas de antes del modo motion se quedan en "", que es la
+            # verdad: se definían con un prompt de imagen y no con una ficha.
+            "ficha": "TEXT DEFAULT ''",
         }
         for col, tipo in nuevas.items():
             if col not in cols:

@@ -1,0 +1,24 @@
+{
+  "nombre": "explica",
+  "descripcion": "Un mecanismo contraintuitivo explicado sobre un esquema que se monta mientras se narra, con un titular por frase y réplicas de terminal o navegador cuando lo que se cuenta existe de verdad. Sin imágenes generadas: todo se dibuja por código.",
+  "formato_guion": "narracion",
+  "montaje": "motion",
+  "voz": {
+    "instruct": "Voz masculina en español, adulta y clara, de alguien que explica algo que acaba de entender y quiere que tú lo entiendas; ritmo ágil pero sin prisa, con una pausa limpia antes de cada giro del razonamiento, dicción nítida y entusiasmo contenido, nunca tono de anuncio.",
+    "language": "Spanish"
+  },
+  "estilo_visual": "schematic diagram drawn in code over near-black, pieces with a lit edge and a faint grid, terminal and browser windows redrawn as flat vector, one headline per sentence in bold grotesque with a single accent word, monospace for data and context chips, vertical composition",
+  "subtitulos": {
+    "max_palabras_por_bloque": 8,
+    "posicion": "arriba",
+    "tam": 40,
+    "fuente": "Montserrat Medium",
+    "color": "#C9C6BF",
+    "borde": "#0D0F14"
+  },
+  "ritmo": {
+    "duracion_objetivo_s": 50,
+    "duracion_escena_s": 4.5,
+    "atempo": 1.0
+  }
+}

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from ..schemas import MusicaCamposIn, MusicaGenerarIn, MusicaLanzarIn
+from ..schemas import MusicaCamposIn, MusicaGenerarIn, MusicaLanzarIn, MusicaLoteIn
 from ..services import musica as musica_service
 from ..services.pipeline import musica as musica_pipeline
 
@@ -38,6 +38,14 @@ def crear(body: MusicaGenerarIn):
         body.timesig,
         body.idioma,
     )
+
+
+@router.post("/lote")
+def crear_lote(body: MusicaLoteIn):
+    ids = musica_service.crear_lote(body.ideas, body.duracion_s)
+    if not ids:
+        raise HTTPException(400, "Ninguna idea tiene texto")
+    return {"ids": ids}
 
 
 @router.get("/{musica_id}")

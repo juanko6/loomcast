@@ -32,11 +32,15 @@
   } = $props();
 
   let modo = $state("kenburns");
+  // En motion no hay modo que elegir: las escenas son fichas de composición y
+  // el vídeo se dibuja por código. Lo impone la plantilla, así que el selector
+  // sobra —el backend ignoraría lo que se eligiera aquí—.
+  const esMotion = $derived(p.montaje === "motion");
   // Motores i2v de config.toml. Solo se piden una vez y solo importan cuando el
   // modo elegido anima con i2v.
   let motores = $state<MotorI2V[]>([]);
   let motor = $state("");
-  const conI2V = $derived(modo === "i2v" || modo === "mixto");
+  const conI2V = $derived(!esMotion && (modo === "i2v" || modo === "mixto"));
 
   onMount(async () => {
     // Si la lista no llega, el selector no aparece y se genera con el motor de
@@ -60,6 +64,12 @@
     </p>
   {/if}
 
+  {#if esMotion}
+    <p class="rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm text-dim">
+      Esta plantilla es de <strong class="text-fg">motion graphics</strong>: cada escena se dibuja
+      por código desde su ficha de composición, sin imágenes ni reescalado.
+    </p>
+  {:else}
   <fieldset class="space-y-2">
     <legend class="mb-2 text-xs font-medium tracking-wide text-dim">Modo de generación</legend>
     {#each MODOS_VIDEO as m (m.id)}
@@ -75,6 +85,7 @@
       </label>
     {/each}
   </fieldset>
+  {/if}
 
   {#if conI2V && motores.length > 1}
     <label class="block space-y-1">
@@ -96,7 +107,7 @@
     <Button
       disabled={busy || p.liberado}
       title={p.liberado ? "Su material se liberó: no hay imágenes con las que armarlo" : undefined}
-      onclick={() => ongenerar(modo, conI2V ? motor : "")}
+      onclick={() => ongenerar(esMotion ? "motion" : modo, conI2V ? motor : "")}
     >
       {p.video_disponible ? "Rehacer vídeo" : "Generar vídeo"}
     </Button>

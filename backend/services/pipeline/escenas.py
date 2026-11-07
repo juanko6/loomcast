@@ -13,6 +13,19 @@ diapositivas de producto en vez de algo que ocurre. El storyboard decide la
 secuencia de una vez y cada escena recibe su plano junto al anterior y al
 siguiente.
 
+Las plantillas de montaje **motion** van por otro camino (`_generar_motion`) y
+cambian dos cosas de raíz. La primera es el corte: la narración se parte en
+frases y es el storyboard el que decide cuántas van en cada toma, así que las
+escenas duran lo que dura su idea en vez de lo que diga una rejilla (ver
+`_motion_frases`). La segunda es lo que devuelve cada escena: no dos prompts en
+inglés para un generador de imágenes, sino su **composición** —las piezas que
+se dibujan, qué conecta con qué, qué se anima y la tarjeta que se lee encima—,
+y una escena puede heredar el dibujo de la anterior en vez de empezar de cero.
+Lo que el modelo escribe se revisa y se repara antes de guardarlo
+(`_motion_ficha`), porque aquí un fallo no es un prompt flojo: es una tarjeta
+que no se lee, una cifra que el guion no dice o una animación que señala a una
+pieza que no existe y deja el clip quieto.
+
 Si el proyecto tiene reparto (ver casting.py), al LLM se le pide que referencie
 a cada personaje con su marcador {CLAVE} en vez de describirlo, y aquí se
 sustituye por su ficha literal. Así el mismo personaje llega al generador con
@@ -33,9 +46,11 @@ from ...repositories import metadatos as metadatos_repo
 from ...repositories import personajes as personajes_repo
 from ...repositories import plantillas as plantillas_repo
 from ...repositories import proyectos as proyectos_repo
-from ...schemas import EscenaLLM, PlanoLLM, StoryboardLLM
+from ...schemas import (ComposicionLLM, EscenaLLM, PlanoLLM, StoryboardLLM,
+                        StoryboardMotionLLM)
 from ... import parada
 from .. import progreso
+from . import _motion_ficha, _motion_frases
 
 # Cierre de cada mensaje. Un servidor que no aplica el json_schema (mlx_lm)
 # deja al modelo libre, y si lo último que lee es un plano que empieza por
@@ -274,6 +289,174 @@ def _bloque_storyboard(sb: StoryboardLLM, i: int) -> str:
     )
 
 
+def _storyboard_motion(system: str, titulo: str, guion_texto: str, estilo: str,
+                       fs: list[dict]) -> StoryboardMotionLLM:
+    """El plan del vídeo entero: cómo se corta la narración y qué se ve.
+
+    A diferencia del storyboard de las demás plantillas, este decide también
+    **la duración** de cada escena: agrupa frases, y las frases ya traen sus
+    tiempos del audio (ver `_motion_frases`).
+    """
+    dura = fs[-1]["t_fin"] - fs[0]["t_inicio"] if fs else 0.0
+    user = (
+        f"Full video context:\n```markdown\n{titulo}\n{guion_texto}\n```\n\n"
+        f"Template visual style: {estilo}\n\n"
+        f"The narration, sentence by sentence — {len(fs)} sentences, "
+        f"{dura:.0f}s in all. Group them into shots, in order, covering every "
+        f"one:\n{_motion_frases.numeradas(fs)}"
+        f"{_solo_json('idea')}"
+    )
+    return llm.chat(system, user, StoryboardMotionLLM)
+
+
+def _planos_motion(sb: StoryboardMotionLLM, grupos: list[dict],
+                   guion_texto: str) -> tuple[list[dict], dict]:
+    """Los planos ya emparejados con las escenas que de verdad salieron.
+
+    El reparto de frases puede fundir dos planos o partir uno en dos tomas, así
+    que esta lista no es la del storyboard: es la de después.
+    """
+    crudos = [sb.planos[g["plano"]] for g in grupos]
+    planos, fallos = _motion_ficha.revisar_planos(
+        crudos, len(grupos), bool(re.search(r"\d", guion_texto)))
+    for i, (g, crudo) in enumerate(zip(grupos, crudos)):
+        # La primera toma no continúa nada: no hay nada en pantalla todavía.
+        planos[i]["continua"] = bool(i and (g.get("sigue") or crudo.continua))
+        planos[i]["muestra"] = (crudo.muestra or "").strip()
+    return planos, fallos
+
+
+def _ya_en_pantalla(previa: dict | None) -> str:
+    """El dibujo que la escena hereda, escrito para que lo lea el modelo."""
+    if not previa or not previa.get("piezas"):
+        return ""
+    lineas = []
+    for p in previa["piezas"]:
+        detalle = f", {p['ranuras']} ranuras, {p['llenas']} llenas" if p["ranuras"] else ""
+        lineas.append(f"- {p['id']} ({p['tipo']}{detalle}, {p['estado']}) «{p['nombre']}»")
+    for v in previa.get("vinculos", []):
+        lineas.append(f"- {v['de']} → {v['a']} ({v['coste']})")
+    return ("\n\nThis shot continues the previous one. Already on screen, and "
+            "staying there unless you change it:\n" + "\n".join(lineas) +
+            "\nDeclare only what is new or what changes.")
+
+
+def _composiciones_motion(pl: dict, titulo: str, guion_texto: str,
+                          sb: StoryboardMotionLLM, planos: list[dict],
+                          segmentos: list[dict],
+                          total: int) -> tuple[list[dict], dict]:
+    """Una composición por escena: el dibujo y la tarjeta, ya reparados.
+
+    Los planos se reparan **antes** de pedir nada (lo hace `_planos_motion`):
+    el bloque decide qué clase de frase se escribe, y arreglarlo después deja
+    frases enteras metidas en etiquetas de tres palabras (ver `_motion_ficha`).
+    El dibujo, en cambio, se repara escena a escena, porque el de cada una
+    depende de lo que dejara en pantalla la anterior.
+    """
+    system = pl["prompts"]["escena"]
+    fallos = {}
+    crudas, dibujos, previa = [], [], None
+    for i, seg in enumerate(segmentos):
+        parada.comprobar(f"quedaban {len(segmentos) - i} escenas")
+        progreso.lote(i + 1, total, "escena")
+        vecinos = []
+        for j, etiqueta in ((i - 1, "Previous shot"),
+                            (i, f"THIS SHOT ({i + 1} of {len(segmentos)})"),
+                            (i + 1, "Next shot")):
+            if 0 <= j < len(planos):
+                p = planos[j]
+                vecinos.append(f"{etiqueta}: {p['camara']} — {p['accion']}"
+                               + (f" — {p['muestra']}" if p["muestra"] else ""))
+        # Las frases de la toma, numeradas. Hay un titular por frase y se
+        # relevan con la voz, así que pedirlas una a una es lo único que hace
+        # que salgan tantos titulares como frases: con el segmento en prosa, el
+        # modelo escribe uno y se queda tan ancho.
+        frases = seg.get("frases") or [{"texto": seg["texto"]}]
+        numeradas = "\n".join(f"{k + 1}. {fr['texto']}"
+                              for k, fr in enumerate(frases))
+        # El último titular anterior va en el mensaje: sin él el modelo repite
+        # la frase del guion dos planos seguidos, porque el guion la repite.
+        tarjeta = ""
+        ultimo = next((tt.texto for tt in reversed(crudas[-1].titulares)
+                       if (tt.texto or "").strip()), "") if crudas else ""
+        if ultimo:
+            tarjeta = ("\n\nThe headline the viewer is reading right now, at the "
+                       f"end of the previous shot: «{ultimo}». Do not repeat it.")
+        user = (
+            f"Full video context:\n```markdown\n{titulo}\n{guion_texto}\n```\n\n"
+            f"This shot's voice-over, sentence by sentence — write exactly "
+            f"{len(frases)} titulares, one per sentence and in this order:"
+            f"\n{numeradas}\n\n"
+            f"Template visual style: {pl['estilo_visual']}\n\n"
+            f"What the whole video explains: {sb.idea}\n\nStoryboard:\n"
+            + "\n".join(vecinos)
+            + (_ya_en_pantalla(previa) if planos[i]["continua"] else "")
+            + tarjeta + _solo_json("titulares")
+        )
+        cruda = llm.chat(system, user, ComposicionLLM)
+        dibujo, fallo = _motion_ficha.revisar_dibujo(cruda, planos[i], previa)
+        for k, v in fallo.items():
+            fallos[k] = fallos.get(k, 0) + v
+        crudas.append(cruda)
+        dibujos.append(dibujo)
+        previa = dibujo
+
+    fichas, fallos_ficha = _motion_ficha.revisar_fichas(
+        crudas, planos, segmentos, guion_texto)
+    return [f | d for f, d in zip(fichas, dibujos)], fallos | fallos_ficha
+
+
+def _generar_motion(proyecto_id: int, pl: dict, titulo: str, guion_texto: str,
+                    palabras: list[dict]) -> str:
+    """Las escenas de una plantilla de motion: el corte y la composición.
+
+    Aquí la narración no se trocea con una regla de reloj. Se parte en frases
+    y es el storyboard el que dice cuántas van juntas en cada toma, así que las
+    escenas duran lo que dura su idea y la suma sigue cuadrando con el audio.
+    """
+    fs = _motion_frases.frases(palabras)
+    if not fs:
+        raise ValueError("No se pudieron sacar frases de las palabras")
+
+    # El storyboard cuenta como un paso más de la barra: es la llamada larga.
+    progreso.lote(0, len(fs) + 1, "escena")
+    sb = _storyboard_motion(pl["prompts"]["storyboard"], titulo, guion_texto,
+                            pl["estilo_visual"], fs)
+    grupos, fallos_frases = _motion_frases.repartir(fs, [p.frases for p in sb.planos])
+    segmentos = _motion_frases.segmentos(fs, grupos, palabras[-1]["end"])
+    planos, fallos_planos = _planos_motion(sb, grupos, guion_texto)
+    composiciones, fallos = _composiciones_motion(
+        pl, titulo, guion_texto, sb, planos, segmentos, len(segmentos) + 1)
+
+    escenas = [
+        seg | {
+            "orden": i,
+            # Lo que se lee en pantalla define la escena, así que va donde en
+            # las demás plantillas va el prompt visual: es lo que la UI lista y
+            # lo que se puede corregir a mano. Un titular por línea, en el
+            # orden en que se dicen; los tiempos se quedan en la ficha.
+            "prompt": "\n".join(tt["texto"] for tt in c["titulares"]),
+            "prompt_movimiento": "",
+            "ficha": json.dumps(c, ensure_ascii=False),
+            "personajes": "",
+            # Cada escena trae su dibujo: no hay semilla de mundo que repartir.
+            "seed": 0,
+        }
+        for i, (seg, c) in enumerate(zip(segmentos, composiciones))
+    ]
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, proyecto_id)
+        escenas_repo.reemplazar_todas(s, proyecto_id, escenas)
+        avanzar_estado(p, "ESCENAS")
+        s.commit()
+
+    reparados = sum(fallos.values()) + sum(fallos_planos.values()) \
+        + sum(fallos_frases.values())
+    dur = [e["t_fin"] - e["t_inicio"] for e in escenas]
+    return (f"{len(escenas)} escenas de {min(dur):.1f} a {max(dur):.1f}s"
+            + (f" ({reparados} correcciones)" if reparados else ""))
+
+
 def generar_escenas(proyecto_id: int) -> str:
     with get_session() as s:
         p = proyectos_repo.obtener(s, proyecto_id)
@@ -298,6 +481,9 @@ def generar_escenas(proyecto_id: int) -> str:
         titulo = json.loads(meta_row.contenido)["youtube"]["titulo"]
 
     pl = plantillas_repo.cargar(plantilla)
+    if pl.get("montaje") == "motion":
+        return _generar_motion(proyecto_id, pl, titulo, guion_texto, palabras)
+
     segmentos = _segmentar(palabras, pl["ritmo"]["duracion_escena_s"])
     if not segmentos:
         raise ValueError("No se pudieron segmentar las palabras")

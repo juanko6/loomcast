@@ -212,6 +212,136 @@ class EscenaLLM(BaseModel):
     prompt_movimiento: str = Field(min_length=20)
 
 
+class TitularLLM(BaseModel):
+    """El titular de una frase de la narración.
+
+    Hay uno por frase y se releva con la voz, así que es la capa que mantiene
+    la pantalla viva: una tarjeta sola, quieta durante los nueve segundos que
+    puede durar una escena, deja el vídeo congelado justo donde se está
+    explicando lo importante.
+    """
+    # 3 a 7 palabras, sacadas de la frase que se está diciendo.
+    texto: str = ""
+    # Una palabra de `texto`, copiada tal cual, que va en el acento.
+    enfasis: list[str] = Field(default_factory=list)
+
+
+class FilaLLM(BaseModel):
+    """Una fila del bloque LISTA: lo que se enumera, con su chapa."""
+
+    texto: str = ""
+    # Lo pequeño de la derecha: una licencia, un precio, un veredicto.
+    chapa: str = ""
+
+
+class FichaLLM(BaseModel):
+    """La ficha de composición de una escena, en las plantillas de motion.
+
+    Los campos son `str` sueltos y no `Literal` **a propósito**: lo que el
+    modelo se invente tiene que llegar al revisor (ver pipeline/_motion_ficha)
+    para poder contarlo y repararlo. Un esquema que lo rechace de entrada
+    convierte un fallo medible en una excepción, y además mlx_lm ignora el
+    json_schema, así que la mitad de las veces no lo rechazaría igualmente.
+    """
+    # NADA | ROTULO | CIFRA | PILDORA | CIRCULO | GRAFICA | LISTA | ORDINAL
+    bloque: str = ""
+    # arriba | centro
+    banda: str = ""
+    # Lo que se lee en el bloque, en español. Vacío cuando el bloque es NADA.
+    texto: str = ""
+    # La línea pequeña en monoespaciada (la unidad, el año, el detalle).
+    apoyo: str = ""
+    # Una o dos palabras de `texto`, copiadas tal cual, que van en el acento.
+    enfasis: list[str] = Field(default_factory=list)
+    # Un titular por frase de la escena, en el orden en que se dicen.
+    titulares: list[TitularLLM] = Field(default_factory=list)
+    # Solo en el bloque LISTA: las filas que se enumeran.
+    filas: list[FilaLLM] = Field(default_factory=list)
+
+
+class PlanoMotionLLM(BaseModel):
+    """Un plano del storyboard de motion: una toma, con las frases que cubre.
+
+    `frases` es **cuántas** frases de la narración caen en esta toma, no
+    cuáles. Es lo que deja que una escena dure dos segundos y la siguiente
+    nueve sin que los subtítulos se despeguen: la duración sale de los tiempos
+    que ya tiene el audio (ver pipeline/_motion_frases).
+    """
+    frases: int = 1
+    # general | entrada | lateral | cruce | salida
+    camara: str = "general"
+    # El bloque de anotación en mayúsculas, dos puntos, y qué señala la toma.
+    accion: str = Field(min_length=1)
+    # Qué se ve dibujado, en español y en prosa: lo lee la llamada que monta la
+    # composición de esa escena.
+    muestra: str = ""
+    # La píldora de contexto que se queda arriba durante la toma: dónde estamos
+    # en el recorrido del vídeo. La decide el storyboard y no la escena porque
+    # es una cuenta del vídeo entero, y una escena sola no sabe por cuál va.
+    chapa: str = ""
+    # Si hereda las piezas de la toma anterior en vez de empezar de cero.
+    continua: bool = False
+
+
+class StoryboardMotionLLM(BaseModel):
+    # De qué va el vídeo por dentro: el mecanismo que se va a dibujar.
+    idea: str = Field(min_length=1)
+    planos: list[PlanoMotionLLM] = Field(min_length=1)
+
+
+class PiezaLLM(BaseModel):
+    """Una cosa dibujada en la escena. La coloca el código, no el modelo."""
+
+    id: str = Field(min_length=1, max_length=24)
+    # chip | banco | caja | disco | nodo | terminal | navegador
+    tipo: str = "caja"
+    # Lo que se lee dentro de la pieza. Corto: es una etiqueta, no una frase.
+    # En `navegador` es la dirección que se ve en la barra.
+    nombre: str = ""
+    # Solo en `banco`: cuántas ranuras tiene y cuántas empiezan ocupadas.
+    ranuras: int = 0
+    llenas: int = 0
+    # Solo en `terminal` y `navegador`: lo que se lee dentro de la ventana,
+    # línea a línea. En un terminal son comandos y su salida, tal cual.
+    lineas: list[str] = Field(default_factory=list)
+    # normal | veloz | lento | caliente | lleno | vacio | fallando
+    estado: str = "normal"
+
+
+class VinculoLLM(BaseModel):
+    de: str = ""
+    a: str = ""
+    # corto | medio | largo. No es decoración: pone el hueco entre las dos
+    # piezas y lo que tarda un dato en cruzarlo.
+    coste: str = "medio"
+
+
+class AnimacionLLM(BaseModel):
+    # flujo | buscar | fallo | llenar | latido | espera | comparar | nada
+    tipo: str = "nada"
+    de: str = ""
+    a: str = ""
+    en: str = ""
+
+
+class ComposicionLLM(FichaLLM):
+    """Lo que se dibuja en una escena de motion, más su tarjeta.
+
+    Hereda de `FichaLLM` porque la tarjeta no cambia: lo que se añade es el
+    dibujo. Los tipos siguen siendo laxos por lo mismo que allí —lo que el
+    modelo se invente tiene que llegar al revisor para contarlo y repararlo—,
+    y las listas pueden venir vacías: una escena que continúa hereda las
+    piezas de la anterior.
+    """
+    # negro | rejilla
+    fondo: str = "negro"
+    piezas: list[PiezaLLM] = Field(default_factory=list)
+    vinculos: list[VinculoLLM] = Field(default_factory=list)
+    animacion: AnimacionLLM = Field(default_factory=AnimacionLLM)
+    # La pieza que enmarca la cámara y a la que se engancha la anotación.
+    foco: str = ""
+
+
 class ImagenLibrePromptLLM(BaseModel):
     # Prompt final en inglés, para la galería de imágenes (generar o editar).
     prompt: str = Field(min_length=20)

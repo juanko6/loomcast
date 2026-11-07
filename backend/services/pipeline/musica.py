@@ -110,7 +110,8 @@ def _sistema(tipo: str) -> str:
     return leer_prompt(nombre)
 
 
-def mejorar_prompt(musica_id: int) -> str:
+def mejorar_prompt(musica_id: int, lote: bool = False) -> str:
+    # `lote` no cambia nada aquí: lo lee la cola para encadenar la síntesis.
     with get_session() as s:
         m = musica_repo.obtener(s, musica_id)
         if m is None:
@@ -148,7 +149,8 @@ def mejorar_prompt(musica_id: int) -> str:
     return "Estilo, tempo y letra sugeridos"
 
 
-def generar(musica_id: int) -> str:
+def generar(musica_id: int, lote: bool = False) -> str:
+    # `lote` lo lee la cola: una pista de lote no encadena portada.
     with get_session() as s:
         m = musica_repo.obtener(s, musica_id)
         if m is None:

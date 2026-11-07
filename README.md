@@ -8,9 +8,9 @@ más una biblioteca con todo lo hecho:
 
 | | qué hace |
 |---|---|
-| **Vídeos** | El pipeline completo: tema → ideas → guion → metadatos → voz (Qwen3-TTS) → subtítulos (Whisper) → imágenes → clips → montaje, más la música de la historia. Formato corto 9:16 (30–60 s) para Shorts y TikTok, con tres modos de montaje (estático, Ken Burns e image-to-video). |
-| **Imágenes** | Generar desde texto, editar por instrucciones y quitar el fondo, con varios motores elegibles. |
-| **Música** | Pistas instrumentales y canciones con voz cantada y letra, con ACE-Step 1.5 XL Turbo. |
+| **Vídeos** | El pipeline completo: tema → ideas → guion → metadatos → voz (Qwen3-TTS) → subtítulos (Whisper) → imágenes → clips → montaje, más la música de la historia. Formato corto 9:16 (30–60 s) para Shorts y TikTok, con tres modos de montaje (estático, Ken Burns e image-to-video) más el modo motion, que dibuja el vídeo por código. |
+| **Imágenes** | Generar desde texto, editar por instrucciones, quitar el fondo y animar una imagen en bucle (10–15 s, hasta 4K), con varios motores elegibles. |
+| **Música** | Pistas instrumentales y canciones con voz cantada y letra, con ACE-Step 1.5 XL Turbo, y álbumes enteros con el mismo sonido. |
 | **Biblioteca** | Todo lo creado en una sola vista. |
 
 Las tres áreas comparten el mismo esqueleto (cola de jobs, cliente de ComfyUI,
@@ -610,9 +610,14 @@ lista el directorio: una carpeta nueva aparece sola, sin tocar código.
 | **drama** | storytime de chisme: un conflicto cotidiano que escala | joven y cómplice | 50 s, escenas de 4 s, atempo 1.0 |
 | **historia** | un hecho real contado como relato: situación, tensión y desenlace con consecuencia | grave y pausada | 55 s, escenas de 5 s, atempo 1.0 |
 | **serie** | un episodio de una historia que continúa: mismo reparto, algo que pasa hoy y un hilo abierto para el siguiente | cercana y narrativa | 50 s, escenas de 4 s, atempo 1.0 |
+| **explica** | un proceso o un sistema dibujado por escenas, con anotaciones que señalan | clara y didáctica, de quien acaba de entenderlo | 50 s, escenas de 4,5 s, atempo 1.0 |
 
 `serie` es la única con `formato_guion: "lineas"` (ver «Series»): su guion es
 narración más frases de los personajes, cada uno con su voz.
+
+`explica` es la única con `montaje: "motion"`: sus escenas no son prompts de
+imagen sino **fichas de composición**, y el vídeo se dibuja por código en vez de
+generarse con ComfyUI (ver «Motion graphics» y `docs/estilo-motion.md`).
 
 `historia` es la que más se apoya en el resto del pipeline, y por eso vale como
 ejemplo de hasta dónde llega una plantilla:
@@ -643,7 +648,7 @@ etapas de texto la usan.
 ## Flujo de creación (UI)
 
 Tema → ideas → seleccionar/aprobar → y ya en el proyecto, los pasos del
-stepper: **1** guion (editar/regenerar) → **2** voz (elegir del banco o crear nueva → generar narración) → **3** metadatos → **4** escenas (reparto → generar prompts → editarlos → aceptar y generar imágenes) → **música** (opcional, se entra a mano) → **5** armar video final.
+stepper: **1** guion (editar/regenerar) → **2** voz (elegir del banco o crear nueva → generar narración) → **3** metadatos → **4** escenas (reparto → generar prompts → editarlos → aceptar y generar imágenes) → **música** (opcional, se entra a mano) → **5** armar vídeo final → **6** publicación (apuntar que ya está subido y tirar lo que sobra).
 
 Puntos de revisión humana: selección de ideas, guion, elección de voz, reparto, y **prompts de escena antes de gastar GPU en las imágenes**.
 
@@ -868,6 +873,45 @@ Dos choques que había que resolver, y cómo quedaron:
 A diferencia del banco de voces, aquí no se encola nada: promover y traer son
 copiar un PNG y escribir una fila, sin GPU ni LLM, así que van en el hilo HTTP
 y la UI ve el resultado al instante.
+
+### Publicación y liberar espacio
+
+El último paso del stepper es **Publicación**, y es donde el proyecto se queda:
+con el vídeo montado es el paso sugerido, y marcarlo no te echa de ahí. Que el
+vídeo esté subido es lo único de un proyecto que no se puede deducir mirando su
+carpeta, así que se apunta: **fecha, enlace y una nota**. La fecha la teclea
+quien lo marca, porque subir y apuntarlo no pasan el mismo día, y lo que no sea
+una fecha se cambia por hoy en vez de guardarse. El enlace se pega entero o solo
+con el id de YouTube, y se abre igual. La marca se puede corregir (volver a
+marcar) o quitar, si se subió por error o se va a rehacer el montaje; quitarla no
+toca nada del disco. La lista de vídeos y la biblioteca llevan el sello de
+«subido», que es la pregunta que uno se hace delante de veinte proyectos.
+
+Dentro del paso están los **textos para pegar en cada red**: los mismos
+metadatos del paso 3, pero en la forma que pide cada caja. Las etiquetas salen
+del LLM como lista y ninguna red acepta una lista, así que se dan separadas por
+comas (para la caja de etiquetas de YouTube) y como hashtags (para meterlas en
+el título o en la descripción, sin espacios ni puntuación, que es donde YouTube
+corta el hashtag). Escribirlos y pegarlos son dos momentos del mismo texto, de
+ahí que el bloque sea el mismo en los dos pasos.
+
+**Liberar** deja en la carpeta del proyecto solo el `final.mp4`. Con el vídeo
+arriba, la narración, las imágenes, los clips y los montajes anteriores dejan de
+ser material: son los pasos para llegar al vídeo, y lo que de verdad cuenta la
+historia —el guion, los metadatos, el reparto, el enlace— no vive en disco sino
+en la base. La lista es de **lo que se queda** y no de lo que se va, así que un
+archivo nuevo del pipeline se tira solo sin tener que acordarse de apuntarlo. No
+se libera un proyecto **sin publicar** (mientras el vídeo no esté subido todo eso
+sigue vivo: rehacer el montaje lo necesita, y para borrar están los botones de
+siempre) ni uno con **trabajo en curso**. El paso dice cuánto ocupa el proyecto y
+cuánto de eso se puede tirar.
+
+Un proyecto liberado **no es un proyecto a medias**, aunque sus archivos ya no
+estén: el stepper lo enseña hecho y abierto en vez de pedir la voz y las imágenes
+que se tiraron a propósito, la ficha dice que solo queda el vídeo, y lo único que
+queda apagado es armar, que es lo único que de verdad no se puede hacer. Y que
+está liberado **se mira en el disco**, no en una marca guardada: volver a generar
+las imágenes lo deshace sin que nadie tenga que acordarse de quitar nada.
 
 ## Series (episodios con continuidad)
 
@@ -1201,20 +1245,26 @@ ficha no hay de dónde escribirle la voz.
 - ✅ **Cola con reintentos y parada** — los fallos transitorios se reintentan solos con espera creciente, y la generación se puede detener (lo que corre, la cola entera o las dos) desde la cabecera y desde las tres secciones
 - ✅ **Plantilla `historia`** — un hecho real contado como relato: guion narrativo, voz grave y pausada, reparto y estilo de época sin personajes reconocibles. Tercer nicho junto a `curiosidades` y `drama`, y con ella se cierra la Fase 5
 - ✅ **Reparto propio** — personajes guardados aparte, con su ficha y su cara, que se traen a cualquier vídeo nuevo; la cara se copia al proyecto y editarla ahí no toca al original. Primera pieza de la Fase 6
-- ✅ **Voz por personaje** — la narración se sintetiza por tramos y cada personaje dice sus líneas con su voz del banco, que viaja con él en el reparto propio; el formato de guion con líneas atribuidas se activa por plantilla y hoy no lo usa ninguna (es para las series). Segunda pieza de la Fase 6
+- ✅ **Voz por personaje** — la narración se sintetiza por tramos y cada personaje dice sus líneas con su voz del banco, que viaja con él en el reparto propio; el formato de guion con líneas atribuidas se activa por plantilla y hoy solo lo usa `serie`. Segunda pieza de la Fase 6
 - ✅ **Series** — episodios con continuidad: reparto fijo que viaja a cada capítulo, resumen del episodio anterior como contexto del guion siguiente, plantilla `serie` con guion de líneas atribuidas y marca «SERIE · EP n» en el vídeo. Cierra la Fase 8
 - ✅ **Autopiloto y lotes** — un proyecto va solo de donde esté hasta su `final.mp4`, parando en las tres revisiones de siempre (configurables, y desactivables para producción sin manos), y varias ideas de un tema se producen una detrás de otra; lo que se pide a mano adelanta en la cola, parar apaga las tiradas enteras y un vídeo que falla no tira los demás. Cierra la Fase 9
-- ⬜ Pendiente — empaquetado
+- ✅ **Publicación y liberado** — el vídeo subido se apunta a mano (fecha, enlace y nota), se ve de un vistazo cuáles ya están arriba, los metadatos se copian en la forma que pide cada red y liberar deja en la carpeta solo el `final.mp4`. Primera pieza de la Fase 10
+- ✅ **Motion graphics** — un modo de montaje que dibuja el vídeo por código (Pillow, sin ComfyUI ni GPU) a partir de fichas de composición que escribe el LLM y que se reparan antes de dibujarse; primera plantilla, `explica`. Fase 11
+- ✅ **Imagen animada** — cuarto modo de Imágenes: una preview aprobada se anima 10–15 s con LTX-2.5 en un bucle que vuelve a sí mismo, en vertical u horizontal, y se escala a Full HD, 2K o 4K
+- ✅ **Álbumes y lotes de música** — varias pistas con la misma banda, la misma semilla y una intención distinta cada una, con tracklist editable antes de producir; y un lote que convierte una lista de ideas en pistas instrumentales sin pasar por la UI
+- ⬜ Pendiente — QA de consistencia de caras con ArcFace (cierra la Fase 6); export multiformato, thumbnail automático, variantes A/B de títulos y empaquetado con Tauri (Fase 10)
 
 ## Imágenes
 
-Tres modos, independientes del pipeline de vídeo:
+Cuatro modos, independientes del pipeline de vídeo:
 
 - **Generar** desde texto. El LLM puede pasar tu idea en español a un prompt en
   inglés; se generan varias previsualizaciones y eliges cuál llega a final.
 - **Editar** por instrucciones sobre una imagen que subas ("quítale las gafas").
 - **Quitar fondo**, con rembg (u2net vía onnxruntime). No pasa por ComfyUI: es
   una segmentación ligera que corre en CPU y no necesita el pipeline de difusión.
+- **Animada**: una imagen que se mueve y vuelve a sí misma, en bucle (ver
+  «Imagen animada» más abajo).
 
 Los motores se declaran en `config.toml [imagen.motores.*]`, cada uno apuntando a
 un workflow de ComfyUI en formato API según los modos que sepa hacer:
@@ -1239,10 +1289,60 @@ workflow tarda diez veces más.
 puede cambiar por imagen. Añadir un motor nuevo es declarar su bloque y poner su
 workflow, sin tocar código.
 
+### Imagen animada
+
+Hasta elegir la preview es la galería de siempre: se generan previews con
+Z-Image y se aprueba una (sin pasar por ESRGAN). A partir de ahí, tres pasos que
+lanza el usuario:
+
+1. **Movimiento** (opcional): el LLM pule el prompt de movimiento que escribiste
+   y recomienda la duración.
+2. **Animar**: LTX-2.5 mueve la imagen entre 10 y 15 s con **la misma imagen
+   como guía en el primer cuadro y en el último**, así que el mp4 empalma consigo
+   mismo y se puede repetir sin corte. Se anima a resolución baja (lado largo
+   864, o 854x480 en horizontal) y a 8 fps; RIFE lo lleva a 24 y se quita el
+   último cuadro, que es copia del primero.
+3. **Escalar** a Full HD, 2K o 4K: Real-ESRGAN x4 cuadro a cuadro y lanczos al
+   tamaño final.
+
+Dos detalles que se ven en el resultado:
+
+- **El fundido de cierre.** La guía devuelve la pose donde empezó, pero el VAE
+  no devuelve la textura igual (otro brillo, 6–8 veces el paso entre cuadros), y
+  al dar la vuelta se veía un parpadeo. Los últimos 12 cuadros
+  (`[animada].fundido`, medio segundo) se funden hacia el primero.
+- **La medida de YouTube.** Las previews van en múltiplos de 64 y no llegan a
+  16:9 justo (1344x768 es 1,75). Una imagen a menos de un 4 % de 16:9 o 9:16 se
+  trata como tal y se recorta esa diferencia, así que sale a 1920x1080,
+  2560x1440 o 3840x2160 (o sus verticales) sin bandas. En otras formas manda el
+  lado largo.
+
+**Por qué 8 fps y no 12.** Medido en el M3 Max con `scripts/medir_animada.py`: a
+12 fps, 15 s pedirían 177 cuadros y ya 161 mandaban 3,8 GB a swap, y además el
+movimiento se frenaba en el último segundo. A 8 fps, 15 s caben en 121 cuadros
+sin swap y el movimiento llega vivo al final.
+
+Tiempos reales de punta a punta por la API, con ComfyUI `--gpu-only` y sin el
+LLM cargado:
+
+| caso | animar | escalar |
+|---|---|---|
+| personaje, vertical, 10 s | 265 s | 4K en 725 s |
+| el mismo en horizontal, 10 s | 268 s | Full HD en 647 s |
+| escena sin personaje, 15 s | 391 s | — |
+
+Lo caro del escalado es el x4 de ESRGAN (~4 s por cuadro dentro de ComfyUI), y
+cuesta lo mismo para las tres escalas. `[animada].escalador = "ncnn"` usa
+`realesrgan-ncnn-vulkan` de una pasada, todavía sin medir aquí. Todo lo demás se
+ajusta en `[animada]` de `config.toml`, y el workflow es
+`workflows/loop_ltx25_api.json` (necesita el parche del GGUF de LTX-2.5, ver
+«Modo i2v»).
+
 ## Música (ACE-Step 1.5 XL Turbo)
 
 Sección independiente del pipeline de vídeo, con dos modos: `instrumental` (fondo
-o jingle) y `cancion` (voz cantada + letra). El modelo es **ACE-Step 1.5 XL
+o jingle) y `cancion` (voz cantada + letra), más los **álbumes** y los **lotes**
+de pistas instrumentales (ver abajo). El modelo es **ACE-Step 1.5 XL
 Turbo**, con soporte nativo en ComfyUI (sin custom nodes). Descarga a
 `ComfyUI/models/` desde `Comfy-Org/ace_step_1.5_ComfyUI_files`:
 `acestep_v1.5_xl_turbo_bf16` (diffusion_models), `qwen_0.6b_ace15` y
@@ -1457,6 +1557,60 @@ lo desactiva.
 Esto **no** arregla una mezcla embarullada: no separa instrumentos ni reequilibra
 nada. Eso viene del modelo y se ataca desde el prompt y el guion de secciones.
 
+### Álbumes
+
+Un álbum es **la misma banda contando cosas distintas**: entre 2 y 20 pistas
+instrumentales con la misma personalidad. Nace de una idea o de una pista suelta
+que gustó (instrumental y con descripción), y en ese caso hereda su semilla.
+
+El LLM trabaja en dos pasos seguidos, para no cargar el llama-server dos veces:
+
+1. **Planificar**: fija el ADN del disco —género, una banda cerrada y una
+   **firma de producción** que se pega literal al final de cada descripción— y
+   el tracklist, con la intención, el papel, el instrumento que lleva la
+   melodía, la forma, el tempo y la tonalidad de cada pista.
+2. **Escribir**: el brief de cada pista con el prompt de instrumental de
+   siempre más la intención de esa pista y las reglas del álbum.
+
+**Todas las pistas usan la misma semilla**: la variación entre ellas sale de lo
+que cuentan, nunca del azar. Y antes de gastar GPU se revisa: el tracklist se
+edita (intención, tempo, tono, orden), una pista se puede reescribir o quitar, y
+el álbum entero se puede replanificar. **Producir** encola la síntesis de las
+pistas que no tienen audio y, detrás de la última, **una sola portada** para el
+disco. Las pistas son pistas normales de la biblioteca: se oyen, se descargan y
+sirven de banda sonora como cualquier otra.
+
+Las reglas son las que se aprendieron escuchando pistas que salían en bucle:
+
+- **La duración no la elige nadie**: sale del guion de secciones medido en
+  compases y del tempo (`services/musica_compases.py`). Los compases se quitan
+  antes de mandar el guion a ACE-Step.
+- **Contra las vueltas eternas**: secciones de 10–25 s, nunca tres seguidas de
+  la misma longitud, el lead hace algo nuevo en cada una y el final se compone.
+  Un guion que no pasa se reescribe diciéndole al LLM qué falló.
+- **La melodía la llevan instrumentos melódicos.** Bajo y batería tienen
+  momentos puntuales, nunca el lead: con el contrabajo llevando la melodía, la
+  pista salía repetida en un 90 %.
+- Un álbum nuevo no repite títulos de discos ni de pistas que ya existan.
+
+### Lotes de pistas
+
+`POST /api/musica/lote` con una lista de ideas y una duración crea una pista
+instrumental por idea y las pone en marcha (el brief del LLM y luego la
+síntesis), **sin portada**. Va con la prioridad del autopiloto, así que lo que
+se pida a mano mientras tanto adelanta a las cientos de pistas del lote. No
+tiene pantalla: es para producir en serie desde un script.
+
+El que lo usa hoy es `scripts/referencias_youtube.py`, que busca con la YouTube
+Data API v3 (`YOUTUBE_API_KEY`) los canales de mezclas largas que mejor
+funcionan, saca con el LLM el estilo que declaran en sus descripciones y lanza
+el lote con esos briefs. Después, `scripts/agrupar_pistas.py` reparte las pistas
+en carpetas de 20 de la misma familia de género (una mezcla de una hora),
+separando las que más se parecen, y `scripts/metadatos_carpetas.py` escribe en
+cada carpeta su `metadatos.md` para YouTube, con los capítulos sacados de la
+duración real de cada audio. Todo eso vive en `referencias/youtube/`, que está
+fuera de git: es material de consulta personal y no se publica.
+
 ### El parche de `torch.multinomial` es obligatorio
 
 ```bash
@@ -1561,3 +1715,83 @@ no la usa: el ffmpeg que escala el clip ya pasa `-an` y la banda sonora sale de
 la voz y de `[musica]`.
 
 Por cada escena, Loomcast sube la imagen, ejecuta el workflow, interpola el clip con **RIFE** (`config.toml [i2v].fps_origen`→`fps_final`) y lo ajusta a la duración del segmento de voz. Luego el armado con movimiento superpone subtítulos y voz. RIFE usa `rife-ncnn-vulkan` (Fase 0) por GPU; ajusta su ruta en `config.toml [rife]`.
+
+## Motion graphics (modo `motion`)
+
+Un vídeo donde no hay imágenes generadas: cada escena **se dibuja por código**
+—un esquema de piezas conectadas, animado— y encima van anotaciones que
+señalan lo que la voz está contando. Nació de mirar canales de divulgación con
+motion graphics y preguntarse qué hace falta para llegar ahí; el recorrido
+entero, con lo que se probó y lo que se descartó, está en
+`docs/estilo-motion.md`.
+
+**No es una categoría aparte, es un modo de montaje más.** Lo impone la
+plantilla con `"montaje": "motion"` en su `plantilla.json`, y de ahí sale todo:
+el paso de vídeo esconde el selector de modo, el autopiloto se salta las
+imágenes y el reescalado, y la etapa de escenas escribe fichas en vez de
+prompts. Comparte el resto del ciclo entero —idea, guion, voz, subtítulos,
+música, armado, publicación— y produce el mismo mp4 vertical.
+
+**La escena es una composición**, no un prompt: lo que se dibuja y lo que pasa.
+
+```json
+{"bloque": "CIRCULO", "banda": "abajo", "camara": "entrada", "fondo": "negro",
+ "texto": "aquí se busca primero", "apoyo": "4 bloques", "enfasis": [],
+ "piezas": [{"id": "cpu", "tipo": "chip", "nombre": "Procesador"},
+            {"id": "l1", "tipo": "banco", "nombre": "Caché L1",
+             "ranuras": 4, "llenas": 2, "estado": "veloz"}],
+ "vinculos": [{"de": "cpu", "a": "l1", "coste": "corto"}],
+ "animacion": {"tipo": "buscar", "en": "l1"}, "foco": "l1"}
+```
+
+Cinco tipos de pieza (`chip`, `banco`, `caja`, `disco`, `nodo`), siete estados
+(`veloz`, `lento`, `caliente`, `fallando`…), ocho animaciones (`flujo`,
+`buscar`, `fallo`, `llenar`, `latido`, `espera`, `comparar`, `nada`) y seis
+bloques de anotación (`ROTULO`, `TITULAR`, `CIFRA`, `PILDORA`, `CIRCULO`,
+`GRAFICA`). Lo que se lee en pantalla viaja en `escena.prompt`, donde las demás
+plantillas llevan el prompt visual, así que corregir una tarjeta en el paso de
+escenas cambia el vídeo.
+
+**Un estado no es una metáfora, es el dibujo.** Que la RAM sea lenta no se
+escribe en la tarjeta: es un vínculo `largo`, y el dato tarda de verdad dos
+segundos en cruzarlo. Que la caché se agobie es `caliente`, y respira en
+naranja. Es lo que se puede dibujar sin ilustrador, y en movimiento se entiende
+mejor que el chiste.
+
+**La colocación la calcula el código.** El LLM dice qué piezas hay y qué va
+conectado con qué; de ahí salen las filas, y el hueco entre dos filas lo pone
+el coste del vínculo. Si las coordenadas las pusiera el modelo, la mitad de los
+vídeos saldrían con las cajas pisándose.
+
+**Cada escena trae su dibujo, y puede continuar el de la anterior.** No hay
+decorado compartido: el fondo es negro. Cuando una escena continúa, hereda las
+piezas de la anterior y solo declara lo que cambia o lo que aparece, así que el
+esquema se va montando mientras se narra. Y como en la base queda la
+composición ya resuelta, rehacer un clip suelto no depende de los demás.
+
+**Las escenas duran lo que dura su idea.** La narración no se trocea con una
+regla de reloj: se parte en frases y el storyboard decide cuántas van en cada
+toma, así que una escena dura tres segundos y la siguiente diez. Los cortes
+siguen cayendo en los tiempos del audio, de modo que los subtítulos no se
+despegan.
+
+**Se dibuja con Pillow**, que ya estaba instalado: ni Node, ni navegador, ni
+GPU. Se pinta a 2x y se baja con `reduce(2)` para el antialias, y los
+fotogramas se le pasan a ffmpeg crudos por stdin en vez de escribir miles de
+PNG. Medido en el M3 Max: 2.926 cuadros a 60 fps (48,8 s de vídeo) en **73,8 s**,
+y el vídeo entero de punta a punta —fichas, dibujo y armado— en 142 s.
+
+**Nada de lo que escribe el LLM se da por bueno.** Hay tres revisiones. El
+storyboard se repara *antes* de pedir ningún texto, porque el bloque decide qué
+clase de texto se escribe y arreglarlo después mete frases enteras dentro de
+etiquetas de tres palabras (bloque repetido, cámara inválida, `CIFRA` en un
+guion sin números). El dibujo se repara escena a escena: tipos que no existen,
+vínculos a piezas que no están, una animación que señala a algo que no se ha
+dibujado —y que dejaría el clip quieto sin que nadie sepa por qué—, un esquema
+sin nada que se mueva, o el abanico de tres salidas con costes distintos que el
+modelo insiste en escribir y que se endereza en cadena, porque dibujado en
+abanico pierde justo la distancia que explicaba el vídeo. Y al final la
+tarjeta: larga, banda pisada, énfasis que no está en el texto. Lo más
+importante de todo: **una cifra cuyo número no esté en el guion no se
+publica**, se degrada a titular. Ese es el riesgo real de este formato y se
+corta por construcción.

@@ -18,11 +18,12 @@ from . import _subtitulos_render as subs
 from ._ffmpeg import archivar_final, args_video, duracion, sin_restos
 
 
-def _rasterizar_transparente(texto, fuente, color, borde, destino):
+def _rasterizar_transparente(texto, fuente, color, borde, destino,
+                             posicion="abajo", tam=subs.TAM_FUENTE):
     from PIL import Image
 
     img = Image.new("RGBA", (subs.ANCHO, subs.ALTO), (0, 0, 0, 0))
-    subs.dibujar_subtitulo(img, texto, fuente, color, borde)
+    subs.dibujar_subtitulo(img, texto, fuente, color, borde, posicion, tam)
     img.save(destino)
 
 
@@ -71,8 +72,13 @@ def armar_video(proyecto_id: int) -> str:
     bloques = subs.srt_a_bloques(base / "subtitulos.srt")
     subs_dir = base / "subs"
     subs_dir.mkdir(exist_ok=True)
+    # Dónde y de qué tamaño los quiere la plantilla. En motion van arriba y
+    # pequeños, porque abajo vive el titular (ver `_motion_bloques`).
+    posicion = sub_cfg.get("posicion", "abajo")
+    tam = int(sub_cfg.get("tam", subs.TAM_FUENTE))
     for i, b in enumerate(bloques):
-        _rasterizar_transparente(b["texto"], fuente, color, borde, subs_dir / f"{i:03d}.png")
+        _rasterizar_transparente(b["texto"], fuente, color, borde,
+                                 subs_dir / f"{i:03d}.png", posicion, tam)
 
     # Marca de episodio: vacía si el proyecto no es de una serie, y entonces no
     # se añade ni la entrada ni el overlay (el montaje de un vídeo suelto no

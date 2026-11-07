@@ -36,3 +36,11 @@ class Plantilla(BaseModel):
     formato_guion: str = Field(
         default="frases", pattern="^(frases|narracion|lineas)$"
     )
+    # Con qué se llena `clips/`. "imagen": el camino de siempre — una imagen
+    # generada por escena, reescalada y animada (estático, Ken Burns o i2v).
+    # "motion": nada de imágenes; cada escena es una composición dibujada por
+    # código sobre una simulación (ver pipeline/motion.py). No son
+    # intercambiables, porque lo que el LLM escribe por escena es distinto: un
+    # prompt visual en un caso y una ficha de composición en el otro. Por eso
+    # lo declara la plantilla y no se elige al generar el vídeo.
+    montaje: str = Field(default="imagen", pattern="^(imagen|motion)$")

@@ -61,6 +61,7 @@ from ..repositories import ideas as ideas_repo
 from ..repositories import jobs as jobs_repo
 from ..repositories import metadatos as metadatos_repo
 from ..repositories import musica as musica_repo
+from ..repositories import plantillas as plantillas_repo
 from ..repositories import proyectos as proyectos_repo
 from ..repositories import temas as temas_repo
 from ..workers import queue
@@ -154,6 +155,19 @@ class SinIdeas(ValueError):
 
 # --- qué le falta al proyecto -----------------------------------------------
 
+def _modo_real(p, modo_video: str) -> str:
+    """El modo de montaje con el que de verdad se va a armar ese proyecto.
+
+    El modo motion no se elige al lanzar: lo impone la plantilla, porque sus
+    escenas son fichas de composición y no prompts de imagen. Así un lote
+    lanzado con el modo de siempre produce igual los vídeos de una plantilla
+    motion, en vez de quedarse pidiendo imágenes que nadie va a generar.
+    """
+    if plantillas_repo.cargar(p.plantilla).get("montaje") == "motion":
+        return "motion"
+    return modo_video
+
+
 def _que_falta(s, p, modo_video: str) -> str | None:
     """La etapa que toca ahora en ese proyecto, o None si ya está montado.
 
@@ -168,8 +182,13 @@ def _que_falta(s, p, modo_video: str) -> str | None:
 
     escenas = escenas_repo.por_proyecto(s, p.id)
     if escenas:
-        if all(ruta_imagen(p.slug, e.orden).exists() for e in escenas):
-            return _falta_musica(s, p) or queue.MODOS_VIDEO[modo_video]
+        modo = _modo_real(p, modo_video)
+        # Una escena motion no tiene imagen que esperar: su clip se dibuja desde
+        # la ficha de composición, así que de las escenas se pasa a los clips.
+        if modo == "motion" or all(
+            ruta_imagen(p.slug, e.orden).exists() for e in escenas
+        ):
+            return _falta_musica(s, p) or queue.MODOS_VIDEO[modo]
         return "generar_imagenes"
 
     # Sin escenas todavía. Las escenas se segmentan sobre `palabras.json`, que

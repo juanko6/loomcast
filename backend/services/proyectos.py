@@ -233,6 +233,14 @@ def detalle(pid: int) -> dict:
             for x in personajes_repo.por_proyecto(s, pid)
         ]
         todas_imagenes = bool(escenas) and all(e["imagen"] for e in escenas)
+        # De qué está hecho el vídeo: "imagen" (un prompt y un PNG por escena) o
+        # "motion" (una ficha de composición que se dibuja por código). Lo impone
+        # la plantilla, y la UI lo necesita para no ofrecer pasos que en motion
+        # no existen —imágenes, reescalado, modo por escena—.
+        try:
+            montaje = plantillas_repo.cargar(p.plantilla).get("montaje", "imagen")
+        except Exception:
+            montaje = "imagen"
         voz_mp3 = base_dir / "voz.mp3"
         # Normalizado al leerlo, no solo al guardarlo: los guiones escritos
         # antes llevan el nombre del personaje dentro del texto y la etapa de
@@ -252,7 +260,8 @@ def detalle(pid: int) -> dict:
                 voz_instruct = ""
         return {
             "id": p.id, "slug": p.slug, "estado": p.estado,
-            "plantilla": p.plantilla, "voz": p.voz, "voz_instruct": voz_instruct,
+            "plantilla": p.plantilla, "montaje": montaje,
+            "voz": p.voz, "voz_instruct": voz_instruct,
             # None = vídeo suelto. Con serie, la UI dice de qué episodio se
             # trata y abre el paso de cerrarlo.
             "serie": _serie_dict(s, p),
@@ -814,6 +823,20 @@ class ModoVideoInvalido(ValueError):
 
 def generar_video(pid: int, modo: str, motor: str = "") -> int:
     if modo not in queue.MODOS_VIDEO:
+        raise ModoVideoInvalido(modo)
+    # El modo motion no se elige, lo impone la plantilla (igual que en
+    # `autopiloto._modo_real`): sus escenas son fichas de composición, así que
+    # ningún otro modo tendría con qué trabajar, y al revés tampoco — pedir
+    # motion a una plantilla de imágenes es pedir clips sin ficha.
+    with get_session() as s:
+        p = proyectos_repo.obtener(s, pid)
+        if p is None:
+            raise ProyectoNoExiste(pid)
+        plantilla = p.plantilla
+    es_motion = plantillas_repo.cargar(plantilla).get("montaje") == "motion"
+    if es_motion:
+        modo = "motion"
+    elif modo == "motion":
         raise ModoVideoInvalido(modo)
     # El motor solo llega a los modos que animan con i2v; a los demás les
     # sobraría como kwarg y el handler lo rechazaría.

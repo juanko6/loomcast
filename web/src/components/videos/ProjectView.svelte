@@ -42,14 +42,19 @@
   // El paso activo lo elige el usuario; por defecto, el primero sin completar.
   let elegido = $state<string | null>(null);
 
+  // En motion no hay imágenes: la escena está lista en cuanto tiene su ficha de
+  // composición, y de ahí se pasa directo al vídeo.
+  const esMotion = $derived(p.montaje === "motion");
+  const escenasListas = $derived(esMotion ? p.escenas.length > 0 : p.imagenes_completas);
+
   const pasos = $derived<Paso[]>(conLiberado([
     { id: "guion", label: "Guion", hecho: !!p.guion, bloqueado: false },
     { id: "voz", label: "Voz", hecho: p.voz_disponible, bloqueado: !p.guion },
     { id: "metadatos", label: "Metadatos", hecho: !!p.metadatos, bloqueado: !p.voz_disponible },
     {
       id: "escenas",
-      label: "Escenas e imágenes",
-      hecho: p.imagenes_completas,
+      label: esMotion ? "Escenas" : "Escenas e imágenes",
+      hecho: escenasListas,
       bloqueado: !p.subtitulos,
     },
     {
@@ -60,7 +65,7 @@
       // la duración sale de la narración si ya está hecha.
       bloqueado: !p.guion,
     },
-    { id: "video", label: "Vídeo final", hecho: p.video_disponible, bloqueado: !p.imagenes_completas },
+    { id: "video", label: "Vídeo final", hecho: p.video_disponible, bloqueado: !escenasListas },
     {
       id: "publicacion",
       label: "Publicación",

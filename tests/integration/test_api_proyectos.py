@@ -414,6 +414,21 @@ def test_generar_video_modo_invalido_400(client, proy, jobs_encolados):
     assert jobs_encolados == []
 
 
+def test_una_plantilla_de_motion_impone_su_modo(client, session, dirs_tmp, jobs_encolados):
+    # El modo no se elige en motion: las escenas son fichas de composición y
+    # cualquier otro modo se quedaría buscando imágenes que no existen.
+    p = f.proyecto(session, slug="motion", plantilla="explica")
+    assert client.post(f"/api/proyectos/{p.id}/video",
+                       json={"modo": "kenburns"}).status_code == 200
+    assert jobs_encolados == [("generar_clips_motion", p.id)]
+
+
+def test_pedir_motion_a_una_plantilla_de_imagenes_es_400(client, proy, jobs_encolados):
+    assert client.post(f"/api/proyectos/{proy.id}/video",
+                       json={"modo": "motion"}).status_code == 400
+    assert jobs_encolados == []
+
+
 # --- versiones y borrado de video -------------------------------------------
 
 def test_listar_ver_y_borrar_versiones(client, proy, dirs_tmp):
