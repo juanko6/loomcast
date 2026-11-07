@@ -65,7 +65,7 @@ def _bytes(destino: Path, contenido: bytes) -> None:
 class FakeComfy:
     PUBLICOS = (
         "generar_imagen", "editar_imagen", "upscale_imagen",
-        "generar_video_i2v", "generar_musica", "liberar_memoria",
+        "generar_video_i2v", "generar_video_loop", "generar_musica", "liberar_memoria",
     )
 
     def __init__(self):
@@ -96,6 +96,11 @@ class FakeComfy:
         self._reg("generar_video_i2v", imagen=imagen, prompt=prompt, seed=seed,
                   motor=motor,
                   destino=destino)
+        _bytes(Path(destino), b"fake-mp4")
+
+    def generar_video_loop(self, imagen, prompt, seed, frames, fps, width, height, destino):
+        self._reg("generar_video_loop", imagen=imagen, prompt=prompt, seed=seed,
+                  frames=frames, fps=fps, width=width, height=height, destino=destino)
         _bytes(Path(destino), b"fake-mp4")
 
     def generar_musica(self, tags, lyrics, seed, duracion_s, bpm, keyscale, timesig,
@@ -150,6 +155,25 @@ class FakeRife:
                               "fps_origen": fps_origen, "fps_final": fps_final,
                               "frames": frames})
         _bytes(Path(salida), b"fake-mp4")
+
+
+class FakeEscalador:
+    """Escala "x4" copiando cada cuadro a 4 veces su tamaño."""
+
+    PUBLICOS = ("escalar_cuadros",)
+
+    def __init__(self):
+        self.llamadas: list[tuple[Path, Path]] = []
+
+    def escalar_cuadros(self, entrada, salida, que_hacer=None):
+        self.llamadas.append((entrada, salida))
+        cuadros = sorted(Path(entrada).glob("*.png"))
+        Path(salida).mkdir(parents=True, exist_ok=True)
+        for i, c in enumerate(cuadros):
+            if que_hacer:
+                que_hacer(i, len(cuadros))
+            with Image.open(c) as im:
+                im.resize((im.width * 4, im.height * 4)).save(Path(salida) / c.name)
 
 
 class FakeFondo:

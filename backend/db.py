@@ -157,6 +157,19 @@ def _migrar() -> None:
                 text("ALTER TABLE imagenes_libres ADD COLUMN motor VARCHAR DEFAULT ''")
             )
             c.commit()
+        # El tipo `animada`. Las entradas de antes no tienen vídeo, así que se
+        # quedan con el prompt de movimiento vacío, la duración por defecto y
+        # sin semilla ni escala, que es la verdad.
+        nuevas = {
+            "prompt_movimiento": "TEXT DEFAULT ''",
+            "duracion_s": "INTEGER DEFAULT 12",
+            "seed_video": "INTEGER",
+            "escala": "VARCHAR",
+        }
+        for col, tipo in nuevas.items():
+            if col not in cols:
+                c.execute(text(f"ALTER TABLE imagenes_libres ADD COLUMN {col} {tipo}"))
+        c.commit()
 
         cols = [r[1] for r in c.execute(text("PRAGMA table_info(jobs)"))]
         nuevas = {

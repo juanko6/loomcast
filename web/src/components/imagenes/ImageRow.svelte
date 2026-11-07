@@ -3,6 +3,7 @@
   import Thumbnail from "../primitives/Thumbnail.svelte";
   import IconButton from "../primitives/IconButton.svelte";
   import { media } from "@/lib/api";
+  import { ESTADOS_APROBADA } from "@/lib/galeria";
   import type { GaleriaResumen } from "@/lib/types";
 
   let {
@@ -21,11 +22,13 @@
     generar: "Generar",
     editar: "Editar",
     quitarfondo: "Fondo",
+    animada: "Animada",
   };
 
-  // Miniatura: la final si ya está; si no, el origen (editar/fondo); si no, nada.
+  // Miniatura: la final si ya está (en una animada, la preview aprobada, que
+  // sigue ahí en los pasos del movimiento); si no, el origen (editar/fondo).
   const thumb = $derived(
-    item.estado === "final"
+    item.estado === "final" || (item.tipo === "animada" && ESTADOS_APROBADA.includes(item.estado))
       ? media(`/galeria/${item.id}/final`)
       : item.tipo === "editar" || item.tipo === "quitarfondo"
         ? media(`/galeria/${item.id}/fuente`)

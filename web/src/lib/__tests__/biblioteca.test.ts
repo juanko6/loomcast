@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../proyectos", () => ({ listarProyectos: vi.fn() }));
-vi.mock("../galeria", () => ({ listarGaleria: vi.fn() }));
+vi.mock("../galeria", async (o) => ({ ...(await o<typeof import("../galeria")>()), listarGaleria: vi.fn() }));
 vi.mock("../musica", () => ({ listarMusica: vi.fn() }));
 
 import { FILTROS, cargarBiblioteca } from "../biblioteca";
@@ -67,6 +67,21 @@ describe("cargarBiblioteca", () => {
       expect([a.thumb, a.src]).toEqual(["/api/galeria/1/final", "/api/galeria/1/final"]);
       expect([b.thumb, b.src]).toEqual(["/api/galeria/2/fuente", null]);
       expect(c.titulo).toBe("(imagen)");
+      expect([a.video, b.video]).toEqual([null, null]);
+    });
+
+    it("una animada con bucle lo lleva como portada y como lo que se abre", async () => {
+      datos({ imagenes: [
+        { id: 1, idea: "gato", tipo: "animada", estado: "escalada" },
+        { id: 2, idea: "faro", tipo: "animada", estado: "movimiento" },
+        { id: 3, idea: "zorro", tipo: "animada", estado: "previews" }] });
+      const [a, b, c] = await cargarBiblioteca();
+      expect(a.subtipo).toBe("Animada");
+      expect([a.video, a.src, a.thumb]).toEqual(
+        ["/api/galeria/1/video", "/api/galeria/1/video", "/api/galeria/1/final"]);
+      // Aprobada pero sin animar: la imagen aprobada, todavía sin vídeo.
+      expect([b.video, b.src, b.thumb]).toEqual([null, "/api/galeria/2/final", "/api/galeria/2/final"]);
+      expect([c.video, c.src]).toEqual([null, null]);
     });
   });
 

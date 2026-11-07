@@ -50,6 +50,7 @@ from ..services.pipeline import (
     escena_individual,
     escenas,
     i2v,
+    imagen_animada,
     imagen_libre,
     imagenes,
     musica,
@@ -84,6 +85,9 @@ HANDLERS = {
     "generar_previews_imagen": imagen_libre.generar_previews,
     "generar_final_imagen": imagen_libre.generar_final,
     "quitar_fondo": quitar_fondo.quitar_fondo,
+    "mejorar_movimiento_animada": imagen_animada.mejorar_movimiento,
+    "animar_imagen": imagen_animada.animar,
+    "escalar_animada": imagen_animada.escalar,
     "mejorar_prompt_musica": musica.mejorar_prompt,
     "generar_musica": musica.generar,
     "generar_musica_proyecto": musica_proyecto.generar_musica_proyecto,
@@ -108,6 +112,7 @@ JOBS_LLM = {
     "generar_casting",
     "generar_escenas",
     "mejorar_prompt_imagen",
+    "mejorar_movimiento_animada",
     "mejorar_prompt_musica",
     "generar_musica_proyecto",
     "generar_hilo",
@@ -155,6 +160,11 @@ MEMORIA_JOB: dict[str, float] = {
     # Dentro de ComfyUI: los motores i2v. El mixto puede llevar escenas i2v.
     "generar_i2v": I2V_MEMORIA_GB,
     "generar_clips_mixto": I2V_MEMORIA_GB,
+    # La imagen animada carga el mismo LTX-2.5. El escalado puede no cargar
+    # nada (realesrgan-ncnn va por fuera de ComfyUI), pero corre detrás de
+    # animar y quiere a LTX fuera antes de llenar la memoria de cuadros 4K.
+    "animar_imagen": I2V_MEMORIA_GB,
+    "escalar_animada": I2V_MEMORIA_GB,
 }
 
 # Etapas que se disparan solas al terminar la anterior:
@@ -265,7 +275,8 @@ _REF_POR_MODELO = {
     Voz: ["crear_voz", "clonar_voz"],
     Musica: ["mejorar_prompt_musica", "generar_musica", "generar_portada_musica"],
     ImagenLibre: ["mejorar_prompt_imagen", "generar_previews_imagen",
-                  "generar_final_imagen", "quitar_fondo"],
+                  "generar_final_imagen", "quitar_fondo",
+                  "mejorar_movimiento_animada", "animar_imagen", "escalar_animada"],
 }
 REF_MODELO = {tipo: modelo for modelo, tipos in _REF_POR_MODELO.items() for tipo in tipos}
 

@@ -117,6 +117,31 @@ def test_migrar_deja_clonando_las_tiradas_de_antes_de_la_expresiva(engine):
         assert c.execute(text("SELECT narracion FROM autopilotos")).scalar() == "clon"
 
 
+def test_migrar_anade_las_columnas_de_la_animada_a_la_galeria_vieja(engine):
+    """Una imagen de antes de la animada queda sin movimiento ni vídeo."""
+    with engine.begin() as c:
+        c.execute(text("DROP TABLE imagenes_libres"))
+        c.execute(text(
+            "CREATE TABLE imagenes_libres (id INTEGER PRIMARY KEY, tipo VARCHAR, "
+            "idea TEXT, prompt TEXT, width INTEGER, height INTEGER, estado VARCHAR, "
+            "seeds TEXT, seed_elegido INTEGER, created_at DATETIME)"
+        ))
+        c.execute(text(
+            "INSERT INTO imagenes_libres (tipo, idea, width, height, estado, seeds) "
+            "VALUES ('generar', 'un faro', 768, 1344, 'final', '[]')"
+        ))
+
+    db_mod._migrar()
+
+    with engine.connect() as c:
+        cols = [r[1] for r in c.execute(text("PRAGMA table_info(imagenes_libres)"))]
+        assert {"motor", "prompt_movimiento", "duracion_s", "seed_video", "escala"} <= set(cols)
+        fila = c.execute(text(
+            "SELECT idea, prompt_movimiento, duracion_s, seed_video, escala FROM imagenes_libres"
+        )).one()
+        assert fila == ("un faro", "", 12, None, None)
+
+
 def test_migrar_es_idempotente(engine):
     db_mod._migrar()
     db_mod._migrar()

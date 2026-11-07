@@ -173,6 +173,132 @@ def test_final_sin_indice_422(client, img):
     assert client.post(f"/api/galeria/{img}/final", json={}).status_code == 422
 
 
+# --- animada -----------------------------------------------------------------
+
+def _animada(client, dirs_tmp, estado="final"):
+    """Una animada con la preview 1 ya aprobada (o en el estado pedido)."""
+    from backend.db import get_session
+
+    iid = client.post("/api/galeria/animada", json={"idea": "un gato groovy"}).json()["id"]
+    carpeta = imagen_libre.carpeta(iid)
+    carpeta.mkdir(parents=True, exist_ok=True)
+    for i in range(4):
+        Image.new("RGB", (8, 8), (i * 40, 0, 0)).save(imagen_libre.ruta_preview(iid, i))
+    with get_session() as s:
+        img = galeria_repo.obtener(s, iid)
+        img.estado, img.seeds = "previews", "[1, 2, 3, 4]"
+        s.commit()
+    if estado != "previews":
+        assert client.post(f"/api/galeria/{iid}/final", json={"indice": 1}).json() == {"job_id": None}
+        with get_session() as s:
+            galeria_repo.obtener(s, iid).estado = estado
+            s.commit()
+    return iid
+
+
+def test_crear_animada_usa_el_motor_de_generar(client, dirs_tmp, jobs_encolados):
+    r = client.post("/api/galeria/animada", json={"idea": "  un faro  ", "width": 700, "height": 1300})
+    d = client.get(f"/api/galeria/{r.json()['id']}").json()
+    assert (d["tipo"], d["idea"], d["motor"], d["estado"]) == ("animada", "un faro", "zimage", "nueva")
+    assert (d["width"], d["height"]) == (704, 1280)
+    assert (d["prompt_movimiento"], d["duracion_s"], d["videos"]) == ("", 12, [])
+    assert jobs_encolados == []
+
+
+def test_crear_animada_sin_idea_400(client):
+    assert client.post("/api/galeria/animada", json={"idea": " "}).status_code == 400
+
+
+def test_aprobar_preview_de_animada_no_encola_esrgan(client, dirs_tmp, jobs_encolados):
+    iid = _animada(client, dirs_tmp)
+    assert jobs_encolados == []
+    d = client.get(f"/api/galeria/{iid}").json()
+    assert (d["estado"], d["seed_elegido"]) == ("final", 1)
+    assert imagen_libre.ruta_final(iid).read_bytes() == imagen_libre.ruta_preview(iid, 1).read_bytes()
+
+
+def test_aprobar_preview_inexistente_de_animada_400(client, dirs_tmp):
+    iid = _animada(client, dirs_tmp, estado="previews")
+    assert client.post(f"/api/galeria/{iid}/final", json={"indice": 7}).status_code == 400
+
+
+def test_movimiento_se_guarda_acotado_y_encola_mejorar_animar_y_escalar(client, dirs_tmp, jobs_encolados):
+    iid = _animada(client, dirs_tmp)
+    r = client.put(f"/api/galeria/{iid}/movimiento", json={"prompt": " se balancea ", "duracion_s": 14})
+    assert r.status_code == 200
+    d = client.get(f"/api/galeria/{iid}").json()
+    assert (d["prompt_movimiento"], d["duracion_s"], d["estado"]) == ("se balancea", 14, "movimiento")
+
+    assert client.post(f"/api/galeria/{iid}/movimiento/mejorar").status_code == 200
+    assert client.post(f"/api/galeria/{iid}/animar").status_code == 200
+    # Sin vídeo no hay nada que escalar.
+    assert client.post(f"/api/galeria/{iid}/escalar", json={"escala": "4k"}).status_code == 409
+    from backend.services.pipeline import imagen_animada
+
+    imagen_animada.ruta_video(iid).write_bytes(b"mp4")
+    assert client.post(f"/api/galeria/{iid}/escalar", json={"escala": "4k"}).status_code == 200
+    assert jobs_encolados == [("mejorar_movimiento_animada", iid), ("animar_imagen", iid),
+                              ("escalar_animada", iid)]
+    assert jobs_encolados.params[2] == {"escala": "4k"}
+
+
+@pytest.mark.parametrize("dur", [9, 16])
+def test_movimiento_con_duracion_fuera_de_rango_422(client, dirs_tmp, dur):
+    iid = _animada(client, dirs_tmp)
+    r = client.put(f"/api/galeria/{iid}/movimiento", json={"prompt": "x", "duracion_s": dur})
+    assert r.status_code == 422
+
+
+def test_cambiar_el_movimiento_no_esconde_el_video_que_ya_hay(client, dirs_tmp):
+    iid = _animada(client, dirs_tmp, estado="escalada")
+    client.put(f"/api/galeria/{iid}/movimiento", json={"prompt": "otro", "duracion_s": 10})
+    assert client.get(f"/api/galeria/{iid}").json()["estado"] == "escalada"
+
+
+def test_pasos_de_animada_antes_de_aprobar_o_en_otro_tipo_409(client, dirs_tmp, img, jobs_encolados):
+    sin_aprobar = _animada(client, dirs_tmp, estado="previews")
+    for iid in (sin_aprobar, img):
+        assert client.put(f"/api/galeria/{iid}/movimiento",
+                          json={"prompt": "x", "duracion_s": 12}).status_code == 409
+        assert client.post(f"/api/galeria/{iid}/animar").status_code == 409
+    assert jobs_encolados == []
+
+
+def test_mejorar_o_animar_sin_movimiento_409(client, dirs_tmp, jobs_encolados):
+    iid = _animada(client, dirs_tmp)
+    assert client.post(f"/api/galeria/{iid}/movimiento/mejorar").status_code == 409
+    assert client.post(f"/api/galeria/{iid}/animar").status_code == 409
+    assert jobs_encolados == []
+
+
+def test_movimiento_vacio_400_y_escala_rara_422(client, dirs_tmp):
+    iid = _animada(client, dirs_tmp)
+    assert client.put(f"/api/galeria/{iid}/movimiento", json={"prompt": "  "}).status_code == 400
+    assert client.post(f"/api/galeria/{iid}/escalar", json={"escala": "8k"}).status_code == 422
+
+
+@pytest.mark.parametrize("ruta,metodo,cuerpo", [
+    ("movimiento", "put", {"prompt": "x"}), ("movimiento/mejorar", "post", None),
+    ("animar", "post", None), ("escalar", "post", {"escala": "2k"})])
+def test_pasos_de_animada_inexistente_404(client, ruta, metodo, cuerpo):
+    assert getattr(client, metodo)(f"/api/galeria/99/{ruta}", json=cuerpo).status_code == 404
+
+
+def test_video_y_versiones_escaladas(client, dirs_tmp):
+    from backend.services.pipeline import imagen_animada
+
+    iid = _animada(client, dirs_tmp, estado="escalada")
+    assert client.get(f"/api/galeria/{iid}/video").status_code == 404
+    imagen_animada.ruta_video(iid).write_bytes(b"base")
+    imagen_animada.ruta_video(iid, "4k").write_bytes(b"cuatro")
+    r = client.get(f"/api/galeria/{iid}/video")
+    assert r.status_code == 200 and r.headers["content-type"] == "video/mp4" and r.content == b"base"
+    assert client.get(f"/api/galeria/{iid}/video?escala=4k").content == b"cuatro"
+    assert client.get(f"/api/galeria/{iid}/video?escala=2k").status_code == 404
+    assert client.get(f"/api/galeria/{iid}/video?escala=8k").status_code == 400
+    assert client.get(f"/api/galeria/{iid}").json()["videos"] == ["base", "4k"]
+
+
 # --- borrar y archivos ------------------------------------------------------
 
 def test_borrar_quita_fila_y_carpeta(client, session, img, dirs_tmp):

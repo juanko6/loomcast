@@ -2,7 +2,7 @@
 // agrega las listas de proyectos, galería y música en un tipo común.
 import { media } from "./api";
 import { listarProyectos } from "./proyectos";
-import { listarGaleria } from "./galeria";
+import { ESTADOS_APROBADA, ESTADOS_CON_VIDEO, listarGaleria, rutaVideo } from "./galeria";
 import { listarMusica } from "./musica";
 import type { StudioMode } from "./types";
 
@@ -19,6 +19,8 @@ export interface LibItem {
   thumb: string | null;
   // Recurso reproducible/descargable cuando existe.
   src: string | null;
+  // Bucle mudo que hace de portada (imágenes animadas); null en el resto.
+  video: string | null;
   // Modo del estudio al que salta al abrirlo.
   destino: StudioMode;
   // Fecha en la que se subió, o "" si no se ha subido (o no es un vídeo: solo
@@ -31,6 +33,7 @@ const TIPO_IMAGEN: Record<string, string> = {
   generar: "Generar",
   editar: "Editar",
   quitarfondo: "Quitar fondo",
+  animada: "Animada",
 };
 
 const TIPO_MUSICA: Record<string, string> = {
@@ -55,23 +58,30 @@ export async function cargarBiblioteca(): Promise<LibItem[]> {
       // La escena 0 sirve de portada; si aún no existe, la <img> se oculta.
       thumb: media(`/proyectos/${p.id}/imagenes/0`),
       src: p.estado === "FINAL" ? media(`/proyectos/${p.id}/video`) : null,
+      video: null,
       destino: "videos",
       publicado_en: p.publicado_en,
     })),
-    ...imagenes.map((g): LibItem => ({
-      kind: "imagen",
-      id: g.id,
-      titulo: g.idea || "(imagen)",
-      estado: g.estado,
-      subtipo: TIPO_IMAGEN[g.tipo] ?? g.tipo,
-      thumb:
-        g.estado === "final"
-          ? media(`/galeria/${g.id}/final`)
-          : media(`/galeria/${g.id}/fuente`),
-      src: g.estado === "final" ? media(`/galeria/${g.id}/final`) : null,
-      destino: "imagenes",
-      publicado_en: "",
-    })),
+    ...imagenes.map((g): LibItem => {
+      const aprobada =
+        g.estado === "final" || (g.tipo === "animada" && ESTADOS_APROBADA.includes(g.estado));
+      const video =
+        g.tipo === "animada" && ESTADOS_CON_VIDEO.includes(g.estado)
+          ? media(rutaVideo(g.id))
+          : null;
+      return {
+        kind: "imagen",
+        id: g.id,
+        titulo: g.idea || "(imagen)",
+        estado: g.estado,
+        subtipo: TIPO_IMAGEN[g.tipo] ?? g.tipo,
+        thumb: aprobada ? media(`/galeria/${g.id}/final`) : media(`/galeria/${g.id}/fuente`),
+        src: video ?? (aprobada ? media(`/galeria/${g.id}/final`) : null),
+        video,
+        destino: "imagenes",
+        publicado_en: "",
+      };
+    }),
     ...musica.map((m): LibItem => ({
       kind: "musica",
       id: m.id,
@@ -80,6 +90,7 @@ export async function cargarBiblioteca(): Promise<LibItem[]> {
       subtipo: TIPO_MUSICA[m.tipo] ?? m.tipo,
       thumb: null,
       src: m.estado === "generada" ? media(`/musica/${m.id}/audio`) : null,
+      video: null,
       destino: "musica",
       publicado_en: "",
     })),

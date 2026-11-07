@@ -16,7 +16,7 @@ import LibraryStudio from "../biblioteca/LibraryStudio.svelte";
 
 const item = (extra: Partial<LibItem> = {}): LibItem => ({
   kind: "video", id: 1, titulo: "Mi vídeo", estado: "FINAL", subtipo: null,
-  thumb: "/api/proyectos/1/imagenes/0", src: "/api/proyectos/1/video", destino: "videos", ...extra,
+  thumb: "/api/proyectos/1/imagenes/0", src: "/api/proyectos/1/video", video: null, destino: "videos", ...extra,
 });
 
 beforeEach(() => {
@@ -47,6 +47,20 @@ describe("LibraryCard", () => {
     render(LibraryCard, { item: item({ kind: "imagen", src: "/api/galeria/2/final" }), onopen: vi.fn(), onview });
     await userEvent.click(screen.getAllByRole("button", { name: /Abrir/ })[0]); // la portada
     expect(onview.mock.calls[0][0]).toContain('<img src="/api/galeria/2/final"');
+  });
+
+  it("una animada pone su bucle de portada y se abre en el visor en bucle", async () => {
+    const onview = vi.fn();
+    const v = "/api/galeria/2/video";
+    const { container } = render(LibraryCard, {
+      item: item({ kind: "imagen", src: v, video: v, thumb: "/api/galeria/2/final" }), onopen: vi.fn(), onview,
+    });
+    const portada = container.querySelector("video")!;
+    expect(portada.getAttribute("src")).toBe(v);
+    expect(portada.loop && portada.muted && portada.autoplay).toBe(true);
+    expect(container.querySelector("img")).toBeNull();
+    await userEvent.click(screen.getAllByRole("button", { name: /Abrir/ })[0]);
+    expect(onview.mock.calls[0][0]).toContain(`<video src="${v}" controls autoplay loop muted playsinline>`);
   });
 
   it("sin archivo, la portada abre el elemento en su estudio", async () => {

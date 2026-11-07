@@ -45,5 +45,22 @@ def set_seed_elegido(s: Session, img: ImagenLibre, indice: int) -> None:
     img.estado = "final"
 
 
+def guardar_movimiento(s: Session, img: ImagenLibre, prompt: str, duracion_s: int) -> None:
+    img.prompt_movimiento = prompt
+    img.duracion_s = duracion_s
+    img.estado = "movimiento"
+
+
+def guardar_video(s: Session, img: ImagenLibre, seed: int) -> None:
+    img.seed_video = seed
+    img.escala = None
+    img.estado = "animada"
+
+
+def guardar_escala(s: Session, img: ImagenLibre, escala: str) -> None:
+    img.escala = escala
+    img.estado = "escalada"
+
+
 def borrar(s: Session, img: ImagenLibre) -> None:
     s.delete(img)
