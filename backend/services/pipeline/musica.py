@@ -29,6 +29,7 @@ from . import _masterizar
 from ...db import get_session
 from ...repositories import musica as musica_repo
 from ...schemas import MusicaPromptLLM
+from ..musica_compases import quitar_compases
 from ..musica_combos import (
     normalizar_bpm,
     normalizar_idioma,
@@ -159,7 +160,9 @@ def generar(musica_id: int) -> str:
         # En canción son la letra cantada; en instrumental, el guion de secciones
         # (solo marcadores [Intro - ...], sin palabras). Los dos van al mismo
         # campo del nodo, que es de donde ACE-Step saca la estructura.
-        lyrics = m.lyrics
+        # El recuento de compases de cada marcador ("[Theme A - 16 bars - ...]")
+        # es para calcular la duración, no para el modelo: se quita aquí.
+        lyrics = quitar_compases(m.lyrics or "")
         duracion_s = m.duracion_s
         bpm, keyscale, timesig, idioma = m.bpm, m.keyscale, m.timesig, m.idioma
         seed = m.seed if m.seed is not None else random.randint(0, 2**31 - 1)

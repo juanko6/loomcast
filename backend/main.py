@@ -9,6 +9,7 @@ from starlette.responses import Response
 
 from .db import init_db
 from .routers import (
+    albumes,
     galeria,
     ideas,
     jobs,
@@ -74,6 +75,7 @@ app.include_router(jobs.router)
 app.include_router(lotes.router)
 app.include_router(galeria.router)
 app.include_router(musica.router)
+app.include_router(albumes.router)
 
 
 @app.get("/")

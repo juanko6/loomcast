@@ -23,6 +23,10 @@ export interface MusicaDetalle extends Musical {
   tiene_audio: boolean;
   tiene_portada: boolean;
   ocupado: boolean;
+  // Solo en las pistas de un álbum.
+  album_id?: number | null;
+  titulo?: string;
+  intencion?: string;
 }
 
 // Valores permitidos por TextEncodeAceStepAudio1.5 (ver

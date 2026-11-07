@@ -8,7 +8,19 @@
   let {
     detail,
     busy = false,
-  }: { detail: MusicaDetalle | null; busy?: boolean } = $props();
+    oncreatealbum,
+  }: {
+    detail: MusicaDetalle | null;
+    busy?: boolean;
+    oncreatealbum?: (numPistas: number) => void;
+  } = $props();
+
+  // Un álbum sale de una pista instrumental suelta que ya suena: su estilo,
+  // su banda y su semilla son el ADN del disco.
+  let numPistas = $state(12);
+  const puedeAlbum = $derived(
+    !!oncreatealbum && detail?.tipo === "instrumental" && detail.tiene_audio && detail.album_id == null,
+  );
 
   const tipoLabel = $derived(detail?.tipo === "cancion" ? "Canción" : "Instrumental");
   const sonando = $derived($currentTrack?.id === detail?.id && $isPlaying);
@@ -83,6 +95,32 @@
           </a>
         </div>
 
+        {#if puedeAlbum}
+          <div class="space-y-2 rounded-lg border border-line-soft bg-surface-2 p-3">
+            <p class="text-xs font-medium text-text">¿Te gusta? Haz un álbum con su sonido</p>
+            <p class="text-xs leading-relaxed text-muted">
+              Misma banda y producción, y una intención distinta en cada pista.
+            </p>
+            <div class="flex items-center gap-2">
+              <input class="control w-20" type="number" min="2" max="20" bind:value={numPistas} />
+              <span class="text-xs text-muted">pistas</span>
+              <button
+                type="button"
+                onclick={() => oncreatealbum?.(numPistas)}
+                class="ml-auto rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent hover:bg-accent-hover"
+              >
+                Crear álbum
+              </button>
+            </div>
+          </div>
+        {/if}
+
+        {#if detail.intencion}
+          <div class="space-y-1.5">
+            <p class="text-xs font-medium tracking-wide text-muted">Intención</p>
+            <p class="whitespace-pre-line text-sm leading-relaxed text-dim">{detail.intencion}</p>
+          </div>
+        {/if}
         {#if detail.tags}
           <div class="space-y-1.5">
             <p class="text-xs font-medium tracking-wide text-muted">Estilo</p>

@@ -31,6 +31,7 @@ from ..config import (
 )
 from ..db import get_session
 from ..models import (
+    Album,
     ImagenLibre,
     MiembroReparto,
     Musica,
@@ -42,6 +43,7 @@ from ..models import (
 from ..repositories import jobs as jobs_repo
 from ..services import apuntes, llm_runtime, progreso
 from ..services.pipeline import (
+    album,
     armado,
     armado_estatico,
     casting,
@@ -93,6 +95,10 @@ HANDLERS = {
     "generar_musica_proyecto": musica_proyecto.generar_musica_proyecto,
     "sintetizar_musica_proyecto": musica_proyecto.sintetizar_musica_proyecto,
     "generar_portada_musica": musica.generar_portada,
+    "planificar_album": album.planificar_album,
+    "escribir_album": album.escribir_album,
+    "escribir_pista_album": album.escribir_pista_album,
+    "generar_portada_album": album.generar_portada_album,
     "regenerar_clip": escena_individual.regenerar_clip,
     "generar_clips_mixto": escena_individual.generar_clips_mixto,
     "generar_upscale": upscale.generar_upscale,
@@ -115,6 +121,9 @@ JOBS_LLM = {
     "mejorar_movimiento_animada",
     "mejorar_prompt_musica",
     "generar_musica_proyecto",
+    "planificar_album",
+    "escribir_album",
+    "escribir_pista_album",
     "generar_hilo",
     "generar_resumen_episodio",
 }
@@ -150,6 +159,7 @@ MEMORIA_JOB: dict[str, float] = {
     # Dentro de ComfyUI: los motores de imagen. La portada de la pista está
     # aquí porque es justo la que llega encadenada detrás de la música.
     "generar_portada_musica": IMAGEN_MEMORIA_GB,
+    "generar_portada_album": IMAGEN_MEMORIA_GB,
     "generar_imagenes": IMAGEN_MEMORIA_GB,
     "regenerar_imagen": IMAGEN_MEMORIA_GB,
     "generar_previews_imagen": IMAGEN_MEMORIA_GB,
@@ -189,6 +199,9 @@ CADENA = {
     # así solo la tienen las pistas que existen de verdad, y cada regeneración
     # estrena portada.
     "generar_musica": "generar_portada_musica",
+    # Álbum: el plan y los briefs van seguidos, los dos con el LLM cargado. La
+    # síntesis no se encadena: antes el usuario revisa el álbum y lo lanza.
+    "planificar_album": "escribir_album",
     "generar_clips_mixto": "armar_video",
 }
 
@@ -218,7 +231,18 @@ def _encadenado(tipo: str, ref_id: int) -> str | None:
     verdad cerrada. Encadenarlo aquí no valdría: la cadena se come el
     `tras_etapa` del guion, o sea la propia parada de revisión.
     """
+    # Una pista de álbum no estrena portada: la del disco se hace una vez al
+    # final (cargar el motor de imagen entre pista y pista es pagar la carga de
+    # ACE-Step otra vez en cada vuelta).
+    if tipo == "generar_musica" and _es_de_album(ref_id):
+        return None
     return CADENA.get(tipo)
+
+
+def _es_de_album(musica_id: int) -> bool:
+    with get_session() as s:
+        m = s.get(Musica, musica_id)
+        return m is not None and m.album_id is not None
 
 
 # Intentos y espera de los reintentos ([cola] de config.toml). Se copian a
@@ -273,7 +297,9 @@ _REF_POR_MODELO = {
     Serie: ["generar_hilo"],
     MiembroReparto: ["generar_retrato_reparto"],
     Voz: ["crear_voz", "clonar_voz"],
-    Musica: ["mejorar_prompt_musica", "generar_musica", "generar_portada_musica"],
+    Musica: ["mejorar_prompt_musica", "generar_musica", "generar_portada_musica",
+             "escribir_pista_album"],
+    Album: ["planificar_album", "escribir_album", "generar_portada_album"],
     ImagenLibre: ["mejorar_prompt_imagen", "generar_previews_imagen",
                   "generar_final_imagen", "quitar_fondo",
                   "mejorar_movimiento_animada", "animar_imagen", "escalar_animada"],
