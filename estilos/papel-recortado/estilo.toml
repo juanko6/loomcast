@@ -1,0 +1,7 @@
+nombre = "Papel recortado / collage"
+descripcion = "Capas de papel con sombra, textura de impresión y paleta corta."
+orden = 16
+motor = ""
+cabecera = """layered paper cut-out illustration, handmade paper textures, soft drop shadows between layers"""
+cola = """limited calm palette, tactile craft collage, gentle diffuse light"""
+guia_escena = """A calm, simple scene made of few big shapes: layered hills and a moon, a figure reading under a tree, waves and a small boat, a window with plants. Few elements, clear layers from front to back, plenty of quiet empty space."""

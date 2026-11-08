@@ -168,6 +168,11 @@ def _migrar() -> None:
             "duracion_s": "INTEGER DEFAULT 12",
             "seed_video": "INTEGER",
             "escala": "VARCHAR",
+            # Estilos: las entradas de antes no tienen ni detalles ni estilo
+            # (eran todas «libre») y generaban 4 previews.
+            "detalles": "TEXT DEFAULT ''",
+            "estilo": "VARCHAR DEFAULT ''",
+            "n_previews": "INTEGER DEFAULT 4",
         }
         for col, tipo in nuevas.items():
             if col not in cols:

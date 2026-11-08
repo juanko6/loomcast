@@ -1,0 +1,8 @@
+nombre = "Ilustración editorial limpia"
+descripcion = "Casi vectorial, paleta beige suave, luz difusa y mucho orden."
+orden = 6
+motor = ""
+cabecera = """clean modern editorial illustration, smooth simple shapes with minimal shading,
+soft muted palette of warm beige, cream, brown and one accent color"""
+cola = """soft diffuse daylight, tidy minimalist composition, flat clean digital illustration"""
+guia_escena = """A friendly character standing or leaning casually in a neat, well-ordered place (a café counter, a shelf of records, a studio), seen straight on at eye level as a medium shot from the knees up so they fill about half the frame height, with a tidy row of objects that tell the theme. Bright and airy, with a bare wall beside them."""

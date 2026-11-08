@@ -11,15 +11,15 @@ vi.mock("@/lib/galeria", async (o) => {
     crearEditar: vi.fn(), crearQuitarFondo: vi.fn(), editarPrompt: vi.fn(), mejorarPrompt: vi.fn(),
     lanzarPreviews: vi.fn(), lanzarFinal: vi.fn(), borrarGaleria: vi.fn(),
     crearAnimada: vi.fn(), guardarMovimiento: vi.fn(), mejorarMovimiento: vi.fn(), animar: vi.fn(),
-    escalar: vi.fn(),
+    escalar: vi.fn(), listarEstilos: vi.fn(), cambiarEstilo: vi.fn(),
   };
 });
 vi.mock("@/lib/api", async (o) => ({ ...(await o<typeof import("@/lib/api")>()), api: vi.fn().mockResolvedValue([]) }));
 
 import * as g from "@/lib/galeria";
-import type { GaleriaDetalle, MotorImagen } from "@/lib/galeria";
+import type { EstiloImagen, GaleriaDetalle, MotorImagen } from "@/lib/galeria";
 import { currentTrack } from "@/lib/player";
-import { jobsDrenados, seleccionPendiente } from "@/lib/stores";
+import { jobs, jobsDrenados, seleccionPendiente } from "@/lib/stores";
 import ImageConfig from "../imagenes/ImageConfig.svelte";
 import ImageStudio from "../imagenes/ImageStudio.svelte";
 
@@ -28,11 +28,19 @@ const MOTORES: MotorImagen[] = [
   { id: "qwen", nombre: "Qwen-Image-Edit", modos: ["editar"], defecto_en: ["editar"] },
   { id: "flux2klein", nombre: "FLUX.2 Klein", modos: ["generar", "editar"], defecto_en: [] },
 ];
+const ESTILOS: EstiloImagen[] = [
+  { id: "tinta", nombre: "Tinta y serigrafía", descripcion: "Línea de tinta y grano", motor: "flux2klein", ejemplos: 2 },
+  { id: "plano", nombre: "Color plano", descripcion: "Un color de fondo", motor: "", ejemplos: 0 },
+];
+const NUEVA = { detalles: "", estilo: "", n_previews: 4 };
+const titulo = () => screen.getByLabelText(/^Título/);
 const fireInput = (el: HTMLInputElement, v: string) => fireEvent.input(el, { target: { value: v } });
 const archivo = () => new File(["x"], "foto.png", { type: "image/png" });
 
 beforeEach(() => {
   vi.mocked(g.listarMotores).mockResolvedValue(MOTORES);
+  vi.mocked(g.listarEstilos).mockResolvedValue(ESTILOS);
+  localStorage.clear();
   vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:previa"), revokeObjectURL: vi.fn() }));
 });
 
@@ -46,18 +54,18 @@ describe("ImageConfig", () => {
     return { ...r, p };
   };
 
-  it("generar: 'Crear' bloqueado sin idea, y manda tamaño y motor por defecto", async () => {
+  it("generar: 'Crear' bloqueado sin título, y manda tamaño, motor por defecto, libre y 4 previews", async () => {
     const { p } = await montar();
     const crear = screen.getByRole("button", { name: "Crear" });
     expect(crear).toBeDisabled();
-    await userEvent.type(screen.getByRole("textbox"), "  un faro  ");
+    await userEvent.type(titulo(), "  un faro  ");
     await userEvent.click(crear);
-    expect(p.oncreateGenerar).toHaveBeenCalledWith({ idea: "un faro", width: 768, height: 1344, motor: "zimage" });
+    expect(p.oncreateGenerar).toHaveBeenCalledWith({ ...NUEVA, idea: "un faro", width: 768, height: 1344, motor: "zimage" });
   });
 
   it("un tamaño predefinido distinto se envía tal cual", async () => {
     const { p } = await montar();
-    await userEvent.type(screen.getByRole("textbox"), "x");
+    await userEvent.type(titulo(), "x");
     await userEvent.selectOptions(screen.getByLabelText("Tamaño"), "1024x1024");
     await userEvent.click(screen.getByRole("button", { name: "Crear" }));
     expect(p.oncreateGenerar).toHaveBeenCalledWith(expect.objectContaining({ width: 1024, height: 1024 }));
@@ -65,7 +73,7 @@ describe("ImageConfig", () => {
 
   it("tamaño personalizado: aparecen ancho y alto, y se envían", async () => {
     const { p } = await montar();
-    await userEvent.type(screen.getByRole("textbox"), "x");
+    await userEvent.type(titulo(), "x");
     await userEvent.selectOptions(screen.getByLabelText("Tamaño"), "custom");
     const ancho = screen.getByLabelText("Ancho"), alto = screen.getByLabelText("Alto");
     await userEvent.clear(ancho); await userEvent.type(ancho, "640");
@@ -77,7 +85,7 @@ describe("ImageConfig", () => {
 
   it("personalizado con los campos vacíos cae a 1024×1024", async () => {
     const { p } = await montar();
-    await userEvent.type(screen.getByRole("textbox"), "x");
+    await userEvent.type(titulo(), "x");
     await userEvent.selectOptions(screen.getByLabelText("Tamaño"), "custom");
     await userEvent.clear(screen.getByLabelText("Ancho"));
     await userEvent.clear(screen.getByLabelText("Alto"));
@@ -108,7 +116,7 @@ describe("ImageConfig", () => {
   it("el motor elegido viaja en la creación", async () => {
     const { p } = await montar();
     await userEvent.selectOptions(screen.getByLabelText("Modelo"), "flux2klein");
-    await userEvent.type(screen.getByRole("textbox"), "x");
+    await userEvent.type(titulo(), "x");
     await userEvent.click(screen.getByRole("button", { name: "Crear" }));
     expect(p.oncreateGenerar).toHaveBeenCalledWith(expect.objectContaining({ motor: "flux2klein" }));
   });
@@ -119,7 +127,7 @@ describe("ImageConfig", () => {
     const crear = screen.getByRole("button", { name: "Subir imagen" });
     expect(crear).toBeDisabled();
 
-    await userEvent.type(screen.getByRole("textbox"), "  ponle gafas ");
+    await userEvent.type(screen.getByLabelText(/quieres aplicar/), "  ponle gafas ");
     expect(crear).toBeDisabled();          // falta la imagen
     const f = archivo();
     await userEvent.upload(container.querySelector('input[type="file"]')!, f);
@@ -155,23 +163,22 @@ describe("ImageConfig", () => {
 
   it("'busy' bloquea la creación", async () => {
     await montar(props(), { busy: true });
-    await userEvent.type(screen.getByRole("textbox"), "x");
+    await userEvent.type(titulo(), "x");
     expect(screen.getByRole("button", { name: "Crear" })).toBeDisabled();
   });
 
-  it("animada: idea y tamaño, sin selector de modelo, y lo manda a su creación", async () => {
+  it("animada: título y tamaño, sin selector de modelo, y lo manda a su creación", async () => {
     const { p } = await montar();
     await userEvent.click(screen.getByRole("tab", { name: "Animada" }));
-    expect(screen.getByText("¿Qué imagen quieres animar?")).toBeInTheDocument();
-    expect(screen.getByText(/vuelve al principio/)).toBeInTheDocument();
+    expect(screen.getByText(/10–15 s en bucle/)).toBeInTheDocument();
     expect(screen.queryByLabelText("Modelo")).toBeNull();
     const crear = screen.getByRole("button", { name: "Crear" });
     expect(crear).toBeDisabled();
     // Arranca en horizontal (YouTube).
     expect((screen.getByLabelText("Tamaño") as HTMLSelectElement).value).toBe("1344x768");
-    await userEvent.type(screen.getByRole("textbox"), " un gato groovy ");
+    await userEvent.type(titulo(), " un gato groovy ");
     await userEvent.click(crear);
-    expect(p.oncreateAnimada).toHaveBeenCalledWith({ idea: "un gato groovy", width: 1344, height: 768 });
+    expect(p.oncreateAnimada).toHaveBeenCalledWith({ ...NUEVA, idea: "un gato groovy", width: 1344, height: 768 });
     expect(p.oncreateGenerar).not.toHaveBeenCalled();
   });
 
@@ -188,18 +195,77 @@ describe("ImageConfig", () => {
 
   it("las etiquetas cambian según el modo", async () => {
     await montar();
-    expect(screen.getByText("¿Qué imagen quieres?")).toBeInTheDocument();
+    expect(screen.getByText("Título")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Editar" }));
     expect(screen.getByText("¿Qué cambios o efectos quieres aplicar?")).toBeInTheDocument();
+  });
+});
+
+describe("ImageConfig: estilo, detalles y previews", () => {
+  const props = () => ({
+    oncreateGenerar: vi.fn(), oncreateEditar: vi.fn(), oncreateFondo: vi.fn(), oncreateAnimada: vi.fn(),
+  });
+  const montar = async () => {
+    const p = props();
+    render(ImageConfig, { ...p, estilos: ESTILOS });
+    await waitFor(() => expect(g.listarMotores).toHaveBeenCalled());
+    return p;
+  };
+
+  it("arranca en libre y la galería enseña Libre, cada estilo y sus ejemplos", async () => {
+    await montar();
+    expect(screen.getByText("El LLM elige el estilo.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Cambiar/ }));
+    const dialogo = screen.getByRole("dialog", { name: "Elegir estilo" });
+    const tarjetas = within(dialogo).getAllByRole("button", { pressed: false }).concat(
+      within(dialogo).getAllByRole("button", { pressed: true }));
+    expect(tarjetas).toHaveLength(3);
+    expect(within(dialogo).getByAltText("Tinta y serigrafía, ejemplo 2")).toHaveAttribute(
+      "src", "/api/galeria/estilos/tinta/ejemplo/1");
+    expect(within(dialogo).getByText("Sin ejemplos todavía")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("con estilo: se ve en el formulario, se esconde el modelo y viaja con detalles y previews", async () => {
+    const p = await montar();
+    expect(screen.getByLabelText("Modelo")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Cambiar/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Tinta y serigrafía/ }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText("Línea de tinta y grano")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Modelo")).toBeNull();   // el motor es el del estilo
+    await userEvent.type(titulo(), "Morning Bossa");
+    await userEvent.type(screen.getByLabelText(/^Detalles/), " un gato ");
+    await userEvent.selectOptions(screen.getByLabelText("Previews"), "6");
+    await userEvent.click(screen.getByRole("button", { name: "Crear" }));
+    expect(p.oncreateGenerar).toHaveBeenCalledWith({
+      idea: "Morning Bossa", detalles: "un gato", estilo: "tinta", n_previews: 6,
+      width: 768, height: 1344, motor: "",
+    });
+  });
+
+  it("recuerda el estilo y las previews, y olvida un estilo que ya no existe", async () => {
+    localStorage.setItem("loomcast.galeria.estilo", "tinta");
+    localStorage.setItem("loomcast.galeria.nPreviews", "7");
+    const { unmount } = render(ImageConfig, { ...props(), estilos: ESTILOS });
+    expect(screen.getByText("Tinta y serigrafía")).toBeInTheDocument();
+    expect((screen.getByLabelText("Previews") as HTMLSelectElement).value).toBe("7");
+    unmount();
+    localStorage.setItem("loomcast.galeria.nPreviews", "99");
+    render(ImageConfig, { ...props(), estilos: [ESTILOS[1]] });
+    expect(screen.getByText("El LLM elige el estilo.")).toBeInTheDocument();
+    expect((screen.getByLabelText("Previews") as HTMLSelectElement).value).toBe("4");
   });
 });
 
 describe("ImageStudio", () => {
   const detalle = (extra: Partial<GaleriaDetalle> = {}): GaleriaDetalle => ({
     id: 2, tipo: "generar", motor: "zimage", motor_nombre: "Z-Image", idea: "zorro", prompt: "a fox",
+    detalles: "", estilo: "", n_previews: 4,
     width: 768, height: 1344, estado: "nueva", seeds: [], seed_elegido: null,
     prompt_movimiento: "", duracion_s: 12, seed_video: null, escala: null, videos: [],
-    ocupado: false, ...extra,
+    ocupado: false, generando_previews: false, ...extra,
   });
   const animada = (extra: Partial<GaleriaDetalle> = {}) =>
     detalle({ tipo: "animada", estado: "final", seeds: [1, 2, 3, 4], seed_elegido: 1, ...extra });
@@ -208,7 +274,8 @@ describe("ImageStudio", () => {
   beforeEach(() => {
     vi.mocked(g.listarGaleria).mockResolvedValue([resumen(2, "zorro"), resumen(3, "gato")]);
     vi.mocked(g.detalleGaleria).mockResolvedValue(detalle());
-    vi.mocked(g.crearGenerar).mockResolvedValue({ id: 8 });
+    vi.mocked(g.crearGenerar).mockResolvedValue({ id: 8, job_id: 1 });
+    vi.mocked(g.cambiarEstilo).mockResolvedValue({ ok: true });
     vi.mocked(g.crearEditar).mockResolvedValue({ id: 8 });
     vi.mocked(g.crearQuitarFondo).mockResolvedValue({ id: 8, job_id: 1 });
     vi.mocked(g.editarPrompt).mockResolvedValue({ ok: true });
@@ -216,7 +283,7 @@ describe("ImageStudio", () => {
     vi.mocked(g.lanzarPreviews).mockResolvedValue({ job_id: 2 });
     vi.mocked(g.lanzarFinal).mockResolvedValue({ job_id: 3 });
     vi.mocked(g.borrarGaleria).mockResolvedValue({ borrada: 2, archivos: 0 });
-    vi.mocked(g.crearAnimada).mockResolvedValue({ id: 9 });
+    vi.mocked(g.crearAnimada).mockResolvedValue({ id: 9, job_id: 1 });
     vi.mocked(g.guardarMovimiento).mockResolvedValue({ ok: true });
     vi.mocked(g.mejorarMovimiento).mockResolvedValue({ job_id: 4 });
     vi.mocked(g.animar).mockResolvedValue({ job_id: 5 });
@@ -224,6 +291,7 @@ describe("ImageStudio", () => {
     currentTrack.set(null);
     seleccionPendiente.set(null);
     jobsDrenados.set(0);
+    jobs.set([]);
     vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
   });
 
@@ -269,21 +337,49 @@ describe("ImageStudio", () => {
     expect(await screen.findByText("HTTP 400")).toBeInTheDocument();
   });
 
-  it("generar previews guarda el prompt editado antes de lanzarlas", async () => {
+  it("generar previews guarda la escena editada antes de lanzarlas, con las que se pidan", async () => {
     await abrir();
     const caja = screen.getByDisplayValue("a fox");
     await userEvent.clear(caja);
     await userEvent.type(caja, "a blue fox");
-    await userEvent.click(screen.getByRole("button", { name: "Generar 4 previews" }));
-    await waitFor(() => expect(g.lanzarPreviews).toHaveBeenCalledWith(2));
+    await userEvent.selectOptions(screen.getByLabelText("Cuántas previews"), "3");
+    await userEvent.click(screen.getByRole("button", { name: "Generar previews" }));
+    await waitFor(() => expect(g.lanzarPreviews).toHaveBeenCalledWith(2, { n_previews: 3 }));
     expect(g.editarPrompt).toHaveBeenCalledWith(2, "a blue fox");
     expect(vi.mocked(g.editarPrompt).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(g.lanzarPreviews).mock.invocationCallOrder[0]);
   });
 
-  it("mejorar el prompt con el LLM lo pide para la imagen abierta", async () => {
+  it("reescribir la escena con el LLM la pide para la imagen abierta", async () => {
     await abrir();
-    await userEvent.click(screen.getByRole("button", { name: "Mejorar prompt con el LLM" }));
+    await userEvent.click(screen.getByRole("button", { name: "Reescribir con el LLM" }));
     await waitFor(() => expect(g.mejorarPrompt).toHaveBeenCalledWith(2));
+  });
+
+  it("con estilo: título, detalles, la escena plegada si ya hay previews, y se puede cambiar el estilo", async () => {
+    vi.mocked(g.detalleGaleria).mockResolvedValue(
+      detalle({ estilo: "tinta", detalles: "un gato", estado: "previews", seeds: [1, 2] }));
+    await abrir();
+    expect(screen.getByText("un gato")).toBeInTheDocument();
+    const escena = screen.getByText("Escena (inglés, editable)").closest("details")!;
+    expect(escena.open).toBe(false);
+    expect(screen.getByText(/el estilo «Tinta y serigrafía» se añade/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Regenerar previews" })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("Estilo"), "plano");
+    await waitFor(() => expect(g.cambiarEstilo).toHaveBeenCalledWith(2, "plano"));
+  });
+
+  it("mientras el LLM escribe la escena lo dice", async () => {
+    vi.mocked(g.detalleGaleria).mockResolvedValue(detalle({ prompt: null, ocupado: true }));
+    render(ImageStudio);
+    await userEvent.click(await screen.findByText("zorro"));
+    expect(await screen.findByText("Escribiendo la escena…")).toBeInTheDocument();
+  });
+
+  it("editar conserva su prompt con «Mejorar prompt con el LLM»", async () => {
+    vi.mocked(g.detalleGaleria).mockResolvedValue(detalle({ tipo: "editar" }));
+    await abrir();
+    expect(screen.getByRole("button", { name: "Mejorar prompt con el LLM" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Estilo")).toBeNull();
   });
 
   it("flujo completo: elegir una preview y generar la final", async () => {
@@ -335,6 +431,23 @@ describe("ImageStudio", () => {
     await waitFor(() => expect(g.detalleGaleria).toHaveBeenCalledWith(2));
   });
 
+  it("cada preview que sale de la tirada de la imagen abierta recarga el detalle", async () => {
+    await abrir();
+    const tirada = (hecho: number, ref_id = 2) => ({
+      id: 50, tipo: "generar_previews_imagen", estado: "corriendo", ref_id, intentos: 0, sin_corte: null,
+      progreso: { job_id: 50, transcurrido_s: 1, fase: "", hecho, total: 4, pct: null, eta_s: null },
+    });
+    vi.mocked(g.detalleGaleria).mockClear();
+    jobs.set([tirada(0)]);
+    await waitFor(() => expect(g.detalleGaleria).toHaveBeenCalledTimes(1));
+    jobs.set([tirada(0)]);                 // el mismo paso no recarga otra vez
+    jobs.set([tirada(1)]);
+    await waitFor(() => expect(g.detalleGaleria).toHaveBeenCalledTimes(2));
+    jobs.set([tirada(2, 3)]);              // la tirada de otra imagen no toca esta
+    await new Promise((r) => setTimeout(r, 20));
+    expect(g.detalleGaleria).toHaveBeenCalledTimes(2);
+  });
+
   it("un salto desde la Biblioteca abre esa imagen y consume la señal", async () => {
     seleccionPendiente.set({ modo: "imagenes", id: 3 });
     render(ImageStudio);
@@ -352,7 +465,7 @@ describe("ImageStudio", () => {
   it("una imagen ocupada bloquea las acciones del detalle", async () => {
     vi.mocked(g.detalleGaleria).mockResolvedValue(detalle({ ocupado: true }));
     await abrir();
-    expect(screen.getByRole("button", { name: "Mejorar prompt con el LLM" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reescribir con el LLM" })).toBeDisabled();
   });
 
   it("'+ Nueva imagen' cierra la imagen abierta", async () => {
@@ -368,7 +481,7 @@ describe("ImageStudio", () => {
       await userEvent.click(screen.getByRole("tab", { name: "Animada" }));
       await userEvent.type(screen.getAllByRole("textbox")[0], "un gato groovy");
       await userEvent.click(screen.getByRole("button", { name: "Crear" }));
-      await waitFor(() => expect(g.crearAnimada).toHaveBeenCalledWith({ idea: "un gato groovy", width: 1344, height: 768 }));
+      await waitFor(() => expect(g.crearAnimada).toHaveBeenCalledWith({ ...NUEVA, idea: "un gato groovy", width: 1344, height: 768 }));
       await waitFor(() => expect(g.detalleGaleria).toHaveBeenCalledWith(9));
     });
 

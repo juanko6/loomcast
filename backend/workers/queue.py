@@ -245,6 +245,11 @@ def _encadenado(tipo: str, ref_id: int, params: dict | None = None) -> str | Non
     # del lote que ya esperaban, y el LLM no se carga y descarga entre pista y pista.
     if (params or {}).get("lote"):
         return "generar_musica" if tipo == "mejorar_prompt_musica" else None
+    # Crear una imagen en la galería ya es pedir sus previews: la escena que
+    # escribe el LLM sigue de un tirón. Reescribirla a mano no las relanza
+    # (el usuario puede querer leerla o retocarla antes).
+    if (params or {}).get("y_previews"):
+        return "generar_previews_imagen" if tipo == "mejorar_prompt_imagen" else None
     # Una pista de álbum no estrena portada: la del disco se hace una vez al
     # final (cargar el motor de imagen entre pista y pista es pagar la carga de
     # ACE-Step otra vez en cada vuelta).

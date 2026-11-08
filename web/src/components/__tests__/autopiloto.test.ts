@@ -56,7 +56,7 @@ const lote = (extra: Partial<Lote> = {}): Lote => ({
 });
 
 const job = (id: number, extra: Partial<Job> = {}): Job =>
-  ({ id, tipo: "generar_imagenes", estado: "pendiente", intentos: 0,
+  ({ id, tipo: "generar_imagenes", ref_id: 1, estado: "pendiente", intentos: 0,
      sin_corte: null, progreso: null, ...extra });
 
 beforeEach(() => {

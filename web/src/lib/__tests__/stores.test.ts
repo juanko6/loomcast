@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 const job = (id: number) =>
-  ({ id, tipo: "generar_voz", estado: "corriendo", intentos: 1, sin_corte: null, progreso: null });
+  ({ id, tipo: "generar_voz", ref_id: 1, estado: "corriendo", intentos: 1, sin_corte: null, progreso: null });
 
 describe("navegación", () => {
   it("abrirEn fija la selección pendiente y cambia de modo", () => {

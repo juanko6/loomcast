@@ -1,0 +1,7 @@
+nombre = "Foto analógica cálida 35 mm"
+descripcion = "Película cálida, luz de ventana y desenfoque suave. Foto, no dibujo."
+orden = 11
+motor = ""
+cabecera = """warm 35mm film photograph, natural window light, soft golden tones"""
+cola = """analog film grain, gentle shallow depth of field, cozy candid moment"""
+guia_escena = """A real, candid everyday moment: hands around a coffee cup, a person reading by a window, a record player spinning, a café table with sunlight. Close or medium shot, a calm uncluttered background."""

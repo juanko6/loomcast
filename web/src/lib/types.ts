@@ -29,6 +29,8 @@ export interface ProgresoJob {
 export interface Job {
   id: number;
   tipo: string;
+  // A qué apunta: el proyecto, la pista o la imagen de la galería, según el tipo.
+  ref_id: number;
   estado: string;
   // Intentos gastados: la cola reintenta sola los fallos transitorios, así que
   // un 3 aquí quiere decir que lo de fuera falló tres veces.

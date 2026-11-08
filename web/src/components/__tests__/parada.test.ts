@@ -21,7 +21,7 @@ import ImageStudio from "../imagenes/ImageStudio.svelte";
 const apiMock = vi.mocked(api);
 
 const job = (id: number, extra: Partial<Job> = {}): Job =>
-  ({ id, tipo: "generar_imagenes", estado: "pendiente", intentos: 0, sin_corte: null,
+  ({ id, tipo: "generar_imagenes", ref_id: 1, estado: "pendiente", intentos: 0, sin_corte: null,
      progreso: null, ...extra });
 const progreso = (extra: Partial<ProgresoJob> = {}): ProgresoJob =>
   ({ job_id: 1, transcurrido_s: 30, fase: "imagen 2 de 4", hecho: 1, total: 4, pct: 25, eta_s: 60, ...extra });

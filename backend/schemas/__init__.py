@@ -9,6 +9,7 @@ from .api import (
     EscenasIn,
     GaleriaAnimadaIn,
     GaleriaEscalarIn,
+    GaleriaEstiloIn,
     GaleriaFinalIn,
     GaleriaMovimientoIn,
     GaleriaGenerarIn,
@@ -91,7 +92,7 @@ from .plantilla import (
 __all__ = [
     "AlbumEditarIn", "AlbumNuevoIn", "AlbumOrdenIn", "AlbumPistaIn",
     "AutopilotoIn", "EscenaPromptIn", "EscenasIn", "GaleriaAnimadaIn",
-    "GaleriaEscalarIn", "GaleriaFinalIn", "GaleriaMovimientoIn",
+    "GaleriaEscalarIn", "GaleriaEstiloIn", "GaleriaFinalIn", "GaleriaMovimientoIn",
     "GaleriaGenerarIn", "GaleriaPreviewsIn", "GaleriaPromptIn", "HiloIn",
     "LoteIn",
     "ModoEscenaIn", "ModosEscenasIn",

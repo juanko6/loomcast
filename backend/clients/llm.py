@@ -145,13 +145,7 @@ def _completar(client: httpx.Client, url: str, body: dict) -> str:
     return contenido
 
 
-def chat(system: str, user: str, salida: type[T]) -> T:
-    """Chat completion cuya respuesta debe cumplir el contrato `salida`.
-
-    Pide generación restringida por json_schema; si el servidor no lo
-    soporta (4xx), reintenta en modo texto. En ambos casos la respuesta
-    pasa por la validación Pydantic antes de devolverse.
-    """
+def _cuerpo(system: str, user: str) -> dict:
     # El sampling lo define el llama-server (tu script de arranque); Loomcast
     # solo añade temperature o chat_template_kwargs si están en config.toml.
     m = _activo
@@ -167,6 +161,57 @@ def chat(system: str, user: str, salida: type[T]) -> T:
         base["temperature"] = m.temperature
     if m.chat_template_kwargs:
         base["chat_template_kwargs"] = m.chat_template_kwargs
+    return base
+
+
+def _limpiar_texto(text: str) -> str:
+    """Un párrafo suelto, venga como venga: sin fences de markdown, sin
+    comillas alrededor y en una sola línea. Si el modelo contestó un JSON de
+    todos modos, se queda con su primer texto."""
+    text = text.strip()
+    fence = re.search(r"```(?:\w+)?\s*(.*?)```", text, re.DOTALL)
+    if fence:
+        text = fence.group(1).strip()
+    if text.startswith("{"):
+        try:
+            datos = json.loads(text)
+            text = next((v for v in datos.values() if isinstance(v, str)), text) \
+                if isinstance(datos, dict) else text
+        except json.JSONDecodeError:
+            pass
+    text = " ".join(text.split())
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        text = text[1:-1].strip()
+    return text
+
+
+def texto(system: str, user: str, minimo: int = 20) -> str:
+    """Chat cuya respuesta es un párrafo de texto, sin contrato JSON.
+
+    Para salidas de un solo texto. Pedirlas como JSON no compensa con el Qwen
+    MLX: mlx_lm ignora `json_schema` y, con algunos prompts, contesta el
+    párrafo en prosa aunque se le pida el objeto (medido el 2026-11-08 con la
+    escena de la galería: la misma petición salía en JSON o en prosa según la
+    guía del estilo).
+    """
+    m = _activo
+    with httpx.Client(timeout=m.timeout_s) as client:
+        contenido = _completar(client, m.url, _cuerpo(system, user))
+    limpio = _limpiar_texto(contenido)
+    if len(limpio) < minimo:
+        raise LLMError(f"El modelo devolvió un texto demasiado corto: {contenido[:300]!r}")
+    return limpio
+
+
+def chat(system: str, user: str, salida: type[T]) -> T:
+    """Chat completion cuya respuesta debe cumplir el contrato `salida`.
+
+    Pide generación restringida por json_schema; si el servidor no lo
+    soporta (4xx), reintenta en modo texto. En ambos casos la respuesta
+    pasa por la validación Pydantic antes de devolverse.
+    """
+    m = _activo
+    base = _cuerpo(system, user)
     with httpx.Client(timeout=m.timeout_s) as client:
         con_schema = base | {
             "response_format": {

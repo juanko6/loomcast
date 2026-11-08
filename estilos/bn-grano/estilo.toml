@@ -1,0 +1,7 @@
+nombre = "Blanco y negro con grano"
+descripcion = "Foto analógica en blanco y negro, contraste alto, humo y grano."
+orden = 10
+motor = "flux2klein"
+cabecera = """black and white analog photograph, high contrast, deep blacks, heavy film grain"""
+cola = """moody 1950s jazz photography, smoke in the air, shot on Tri-X film"""
+guia_escena = """A real person (musician or listener) in a smoky bar, a rainy street at night or a dim room with one hard light source, photographed candidly. Medium shot, strong shadows, one side falling into darkness."""

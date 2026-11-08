@@ -4,12 +4,14 @@ from fastapi.responses import FileResponse
 from ..schemas import (
     GaleriaAnimadaIn,
     GaleriaEscalarIn,
+    GaleriaEstiloIn,
     GaleriaFinalIn,
     GaleriaGenerarIn,
     GaleriaMovimientoIn,
     GaleriaPreviewsIn,
     GaleriaPromptIn,
 )
+from .. import estilos
 from ..services import galeria as galeria_service
 from ..services.pipeline import imagen_animada, imagen_libre
 
@@ -28,15 +30,33 @@ def motores(modo: str | None = None):
     return galeria_service.motores(modo)
 
 
+@router.get("/estilos")
+def listar_estilos():
+    """Estilos de `estilos/` para el selector, con cuántos ejemplos tienen."""
+    return [estilos.a_dict(e) for e in estilos.listar()]
+
+
+@router.get("/estilos/{estilo_id}/ejemplo/{n}")
+def ejemplo_estilo(estilo_id: str, n: int):
+    try:
+        e = estilos.obtener(estilo_id)
+    except estilos.EstiloNoExiste:
+        raise HTTPException(404, "Estilo no existe")
+    if not 0 <= n < len(e.ejemplos):
+        raise HTTPException(404, "Ese ejemplo no existe")
+    return FileResponse(e.ejemplos[n])
+
+
 @router.post("")
 def crear_generar(body: GaleriaGenerarIn):
     if not body.idea.strip():
         raise HTTPException(400, "La idea no puede estar vacía")
     try:
         return galeria_service.crear_generar(
-            body.idea, body.width, body.height, body.motor
+            body.idea, body.width, body.height, body.motor,
+            body.detalles, body.estilo, body.n_previews,
         )
-    except galeria_service.MotorInvalido as e:
+    except (galeria_service.MotorInvalido, galeria_service.EstiloInvalido) as e:
         raise HTTPException(400, str(e))
 
 
@@ -44,7 +64,13 @@ def crear_generar(body: GaleriaGenerarIn):
 def crear_animada(body: GaleriaAnimadaIn):
     if not body.idea.strip():
         raise HTTPException(400, "Describe la imagen que quieres animar")
-    return galeria_service.crear_animada(body.idea, body.width, body.height)
+    try:
+        return galeria_service.crear_animada(
+            body.idea, body.width, body.height, body.detalles, body.estilo,
+            body.n_previews,
+        )
+    except galeria_service.EstiloInvalido as e:
+        raise HTTPException(400, str(e))
 
 
 @router.post("/editar")
@@ -100,11 +126,23 @@ def editar_prompt(imagen_id: int, body: GaleriaPromptIn):
         raise HTTPException(404, "Imagen no existe")
 
 
+@router.put("/{imagen_id}/estilo")
+def cambiar_estilo(imagen_id: int, body: GaleriaEstiloIn):
+    try:
+        galeria_service.cambiar_estilo(imagen_id, body.estilo)
+        return {"ok": True}
+    except galeria_service.ImagenNoExiste:
+        raise HTTPException(404, "Imagen no existe")
+    except (galeria_service.EstiloInvalido, galeria_service.PasoInvalido) as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/{imagen_id}/previews")
 def previews(imagen_id: int, body: GaleriaPreviewsIn | None = None):
     b = body or GaleriaPreviewsIn()
     try:
-        return {"job_id": galeria_service.lanzar_previews(imagen_id, b.width, b.height)}
+        return {"job_id": galeria_service.lanzar_previews(
+            imagen_id, b.width, b.height, b.n_previews)}
     except galeria_service.ImagenNoExiste:
         raise HTTPException(404, "Imagen no existe")
 

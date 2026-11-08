@@ -1,0 +1,7 @@
+nombre = "Y2K / flash de cámara digital"
+descripcion = "Flash directo, colores saturados de los 2000 y ambiente nocturno."
+orden = 12
+motor = ""
+cabecera = """early 2000s digital point-and-shoot photo, direct on-camera flash, saturated colors"""
+cola = """Y2K nightlife aesthetic, slight overexposure on faces, dark background falloff"""
+guia_escena = """Real young people at night: friends laughing in a car, someone dancing in a small club, a person with headphones on a city street, posed casually toward the camera. Medium shot, the flash lighting the subject against a dark background."""

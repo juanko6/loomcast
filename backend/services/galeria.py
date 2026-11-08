@@ -10,6 +10,7 @@ import shutil
 
 from PIL import Image
 
+from .. import estilos
 from ..config import IMAGEN_MOTOR_EDITAR, IMAGEN_MOTOR_GENERAR, IMAGEN_MOTORES
 from ..db import get_session
 from ..repositories import galeria as galeria_repo
@@ -42,6 +43,41 @@ class MotorInvalido(ValueError):
 
 class PasoInvalido(ValueError):
     """La entrada no está en el punto del flujo que pide la operación."""
+
+
+class EstiloInvalido(ValueError):
+    pass
+
+
+def _motor_y_estilo(motor: str | None, estilo: str) -> tuple[str, str]:
+    """Motor a guardar y estilo validado. Sin motor pedido, manda el del
+    estilo (el que mejor lo dibuja, medido); sin estilo, el por defecto."""
+    estilo = (estilo or "").strip()
+    if estilo:
+        try:
+            e = estilos.obtener(estilo)
+        except estilos.EstiloNoExiste:
+            raise EstiloInvalido(f"No existe el estilo '{estilo}'")
+        motor = motor or e.motor or None
+    return _validar_motor(motor, "generar"), estilo
+
+
+def _crear_con_estilo(tipo: str, idea: str, width: int, height: int,
+                      motor: str | None, detalles: str, estilo: str,
+                      n_previews: int) -> dict:
+    """Generar y animada arrancan igual: se guarda y se encola la escena, que
+    al acabar encadena las previews. Crear ya es pedir las imágenes: el paso de
+    escribir el prompt sigue existiendo, pero no hay que pulsarlo."""
+    w, h = _normalizar_lado(width), _normalizar_lado(height)
+    motor, estilo = _motor_y_estilo(motor, estilo)
+    with get_session() as s:
+        img = galeria_repo.crear(s, tipo, idea.strip(), w, h, motor,
+                                 detalles=detalles.strip(), estilo=estilo,
+                                 n_previews=n_previews)
+        s.commit()
+        imagen_id = img.id
+    job_id = queue.encolar("mejorar_prompt_imagen", imagen_id, y_previews=True)
+    return {"id": imagen_id, "job_id": job_id}
 
 
 def _normalizar_lado(v: int) -> int:
@@ -82,16 +118,10 @@ def motores(modo: str | None = None) -> list[dict]:
     ]
 
 
-def crear_generar(idea: str, width: int, height: int, motor: str | None = None) -> dict:
-    w, h = _normalizar_lado(width), _normalizar_lado(height)
-    elegido = _validar_motor(motor, "generar")
-    with get_session() as s:
-        img = galeria_repo.crear(s, "generar", idea.strip(), w, h, elegido)
-        s.commit()
-        imagen_id = img.id
-    # Mejorar el prompt con el LLM es un paso opcional: lo lanza el usuario
-    # desde la UI (`lanzar_mejorar`), no se encola al crear.
-    return {"id": imagen_id}
+def crear_generar(idea: str, width: int, height: int, motor: str | None = None,
+                  detalles: str = "", estilo: str = "", n_previews: int = 4) -> dict:
+    return _crear_con_estilo("generar", idea, width, height, motor, detalles,
+                             estilo, n_previews)
 
 
 def crear_editar(
@@ -113,15 +143,27 @@ def crear_editar(
     return {"id": imagen_id}
 
 
-def crear_animada(idea: str, width: int, height: int) -> dict:
+def crear_animada(idea: str, width: int, height: int, detalles: str = "",
+                  estilo: str = "", n_previews: int = 4) -> dict:
     """Una imagen animada: arranca como una de generar (previews con el motor
-    de generar por defecto, Z-Image) y sigue con el movimiento."""
-    w, h = _normalizar_lado(width), _normalizar_lado(height)
+    del estilo, o el de generar por defecto) y sigue con el movimiento."""
+    return _crear_con_estilo("animada", idea, width, height, None, detalles,
+                             estilo, n_previews)
+
+
+def cambiar_estilo(imagen_id: int, estilo: str) -> None:
+    """Cambia el estilo de una imagen ya creada. Su escena se queda: con
+    estilo es solo qué se dibuja, y eso no depende de cómo. El motor pasa a ser
+    el del estilo nuevo."""
+    motor, estilo = _motor_y_estilo(None, estilo)
     with get_session() as s:
-        img = galeria_repo.crear(s, "animada", idea.strip(), w, h,
-                                 _validar_motor(None, "generar"))
+        img = galeria_repo.obtener(s, imagen_id)
+        if img is None:
+            raise ImagenNoExiste(imagen_id)
+        if img.tipo not in ("generar", "animada"):
+            raise PasoInvalido("Solo las imágenes generadas o animadas tienen estilo")
+        img.estilo, img.motor = estilo, motor
         s.commit()
-        return {"id": img.id}
 
 
 def lanzar_mejorar(imagen_id: int) -> int:
@@ -162,6 +204,9 @@ def _a_dict(s, img) -> dict:
         "motor": img.motor,
         "motor_nombre": motor.nombre if motor else img.motor,
         "idea": img.idea,
+        "detalles": img.detalles or "",
+        "estilo": img.estilo or "",
+        "n_previews": img.n_previews,
         "prompt": img.prompt,
         "width": img.width,
         "height": img.height,
@@ -178,6 +223,14 @@ def _a_dict(s, img) -> dict:
             if imagen_animada.ruta_video(img.id, None if e == "base" else e).exists()
         ] if img.tipo == "animada" else [],
         "ocupado": _ocupado(s, img.id),
+        # Hay una tirada de previews corriendo: la UI dibuja los `n_previews`
+        # huecos y va llenando los que ya salieron. Solo corriendo: una que
+        # espera en la cola todavía no ha vaciado las semillas de la anterior.
+        "generando_previews": any(
+            j.ref_id == img.id and j.tipo == "generar_previews_imagen"
+            and j.estado == "corriendo"
+            for j in jobs_repo.activos(s)
+        ),
     }
 
 
@@ -211,11 +264,15 @@ def editar_prompt(imagen_id: int, prompt: str) -> None:
         s.commit()
 
 
-def lanzar_previews(imagen_id: int, width: int | None, height: int | None) -> int:
+def lanzar_previews(imagen_id: int, width: int | None, height: int | None,
+                    n_previews: int | None = None) -> int:
     with get_session() as s:
         img = galeria_repo.obtener(s, imagen_id)
         if img is None:
             raise ImagenNoExiste(imagen_id)
+        if n_previews is not None:
+            img.n_previews = n_previews
+            s.commit()
         if width is not None and height is not None:
             galeria_repo.guardar_tamano(
                 s, img, _normalizar_lado(width), _normalizar_lado(height)

@@ -4,27 +4,70 @@
   import Segmented from "../primitives/Segmented.svelte";
   import Button from "../primitives/Button.svelte";
   import Icon from "../primitives/Icon.svelte";
-  import { TAMANO_ANIMADA, TAMANOS, listarMotores, type MotorImagen } from "@/lib/galeria";
+  import StylePicker from "./StylePicker.svelte";
+  import { media } from "@/lib/api";
+  import {
+    N_PREVIEWS_DEFECTO,
+    N_PREVIEWS_MAX,
+    TAMANO_ANIMADA,
+    TAMANOS,
+    listarMotores,
+    rutaEjemploEstilo,
+    type EstiloImagen,
+    type MotorImagen,
+    type NuevaImagen,
+  } from "@/lib/galeria";
   import type { TipoGaleria } from "@/lib/types";
 
   let {
     busy = false,
+    estilos = [],
     oncreateGenerar,
     oncreateEditar,
     oncreateFondo,
     oncreateAnimada,
   }: {
     busy?: boolean;
-    oncreateGenerar: (p: {
-      idea: string;
-      width: number;
-      height: number;
-      motor: string;
-    }) => void;
+    estilos?: EstiloImagen[];
+    oncreateGenerar: (p: NuevaImagen & { motor: string }) => void;
     oncreateEditar: (p: { idea: string; file: File; motor: string }) => void;
     oncreateFondo: (p: { file: File }) => void;
-    oncreateAnimada: (p: { idea: string; width: number; height: number }) => void;
+    oncreateAnimada: (p: NuevaImagen) => void;
   } = $props();
+
+  // Estilo y cuántas previews: los dos se recuerdan en este navegador, porque
+  // lo normal es hacer varias seguidas con el mismo look. El acceso a
+  // localStorage puede fallar (ventana privada, datos bloqueados).
+  const CLAVE_N = "loomcast.galeria.nPreviews";
+  const CLAVE_ESTILO = "loomcast.galeria.estilo";
+  function leer(clave: string): string | null {
+    try {
+      return localStorage.getItem(clave);
+    } catch {
+      return null;
+    }
+  }
+  function guardar(clave: string, v: string) {
+    try {
+      localStorage.setItem(clave, v);
+    } catch {
+      /* sin almacenamiento: se olvida al recargar, nada más */
+    }
+  }
+  const nGuardado = Number(leer(CLAVE_N));
+  let nPreviews = $state(
+    nGuardado >= 1 && nGuardado <= N_PREVIEWS_MAX ? nGuardado : N_PREVIEWS_DEFECTO,
+  );
+  let estilo = $state(leer(CLAVE_ESTILO) ?? "");
+  let detalles = $state("");
+  let eligiendoEstilo = $state(false);
+  $effect(() => guardar(CLAVE_N, String(nPreviews)));
+  $effect(() => guardar(CLAVE_ESTILO, estilo));
+  // Un estilo recordado que ya no existe (se borró la carpeta) vuelve a libre.
+  $effect(() => {
+    if (estilos.length && estilo && !estilos.some((e) => e.id === estilo)) estilo = "";
+  });
+  const estiloElegido = $derived(estilos.find((e) => e.id === estilo) ?? null);
 
   let tipo = $state<TipoGaleria>("generar");
   let motores = $state<MotorImagen[]>([]);
@@ -33,12 +76,14 @@
   let motorPorModo = $state<Record<string, string>>({ generar: "", editar: "" });
 
   // Motores que saben hacer el modo activo. Quitar fondo no pasa por ComfyUI,
-  // y la animada usa siempre el motor de generar por defecto (Z-Image).
-  const motoresDelModo = $derived(
-    tipo === "quitarfondo" || tipo === "animada"
-      ? []
-      : motores.filter((m) => m.modos.includes(tipo)),
-  );
+  // la animada usa el del estilo (o Z-Image), y con un estilo elegido el motor
+  // es el suyo: el que mejor lo dibuja.
+  const motoresDelModo = $derived.by(() => {
+    if (tipo === "quitarfondo" || tipo === "animada") return [];
+    if (tipo === "generar" && estilo) return [];
+    const modo = tipo;
+    return motores.filter((m) => m.modos.includes(modo));
+  });
   const motorElegido = $derived(motorPorModo[tipo] ?? "");
 
   onMount(async () => {
@@ -93,13 +138,17 @@
         : !!file,
   );
 
+  function nueva(): NuevaImagen {
+    const [width, height] = tamanoElegido();
+    return { idea: idea.trim(), detalles: detalles.trim(), estilo, n_previews: nPreviews, width, height };
+  }
+
   function crear() {
     if (tipo === "generar") {
-      const [w, h] = tamanoElegido();
-      oncreateGenerar({ idea: idea.trim(), width: w, height: h, motor: motorElegido });
+      // Con estilo, el motor lo pone el estilo (el backend lo resuelve).
+      oncreateGenerar({ ...nueva(), motor: estilo ? "" : motorElegido });
     } else if (tipo === "animada") {
-      const [w, h] = tamanoElegido();
-      oncreateAnimada({ idea: idea.trim(), width: w, height: h });
+      oncreateAnimada(nueva());
     } else if (tipo === "editar" && file) {
       oncreateEditar({ idea: idea.trim(), file, motor: motorElegido });
     } else if (tipo === "quitarfondo" && file) {
@@ -108,23 +157,21 @@
   }
 
   const ideaLabel = $derived(
-    tipo === "editar"
-      ? "¿Qué cambios o efectos quieres aplicar?"
-      : tipo === "animada"
-        ? "¿Qué imagen quieres animar?"
-        : "¿Qué imagen quieres?",
+    tipo === "editar" ? "¿Qué cambios o efectos quieres aplicar?" : "Título",
   );
   const ideaPlaceholder = $derived(
     tipo === "editar"
       ? "Ej: cambia el cielo a un atardecer dramático y añade niebla"
       : tipo === "animada"
-        ? "Ej: un personaje groovy con gafas redondas tomándose un batido, en pose chill"
+        ? "Ej: Morning Groove – jazz hip hop para empezar el día"
         : "Ej: un faro solitario en un acantilado bajo una tormenta eléctrica",
   );
   const ideaHint = $derived(
-    tipo === "animada"
-      ? "Primero salen 4 previews; apruebas una y luego escribes cómo se mueve. El vídeo dura 10–15 s y vuelve al principio para que empalme en bucle."
-      : "Después puedes escribir el prompt a mano o pedirle al LLM que lo mejore.",
+    tipo === "editar"
+      ? "Después puedes escribir el prompt a mano o pedirle al LLM que lo mejore."
+      : tipo === "animada"
+        ? "Lo que quieres ver, o el título del vídeo. Al crear, el LLM escribe la escena y salen las previews; apruebas una y luego eliges cómo se mueve (10–15 s en bucle)."
+        : "Lo que quieres ver, o el título del vídeo. Al crear, el LLM escribe la escena y salen las previews directamente.",
   );
   const ctaLabel = $derived(
     tipo === "quitarfondo" ? "Quitar fondo" : tipo === "editar" ? "Subir imagen" : "Crear",
@@ -180,6 +227,45 @@
     {/if}
 
     {#if conTamano}
+      <Field label="Detalles (opcional)" hint="Mandan sobre lo que el LLM deduzca del título.">
+        <textarea
+          class="control"
+          rows="2"
+          bind:value={detalles}
+          placeholder="Ej: un gato naranja en vez de una persona, fondo verde menta"
+        ></textarea>
+      </Field>
+
+      <div class="flex flex-col gap-1.5">
+        <span class="text-xs font-medium tracking-wide text-dim">Estilo</span>
+        <button
+          type="button"
+          onclick={() => (eligiendoEstilo = true)}
+          class="flex items-center gap-3 rounded-lg border border-line bg-surface-2 p-2 text-left transition hover:border-accent"
+        >
+          {#if estiloElegido && estiloElegido.ejemplos > 0}
+            <img
+              src={media(rutaEjemploEstilo(estiloElegido.id, 0))}
+              alt=""
+              class="h-10 w-16 shrink-0 rounded object-cover"
+            />
+          {:else}
+            <span class="flex h-10 w-16 shrink-0 items-center justify-center rounded bg-surface text-[10px] text-muted">
+              {estiloElegido ? "sin ejemplo" : "libre"}
+            </span>
+          {/if}
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-sm text-text">{estiloElegido?.nombre ?? "Libre"}</span>
+            <span class="block truncate text-xs text-dim">
+              {estiloElegido?.descripcion ?? "El LLM elige el estilo."}
+            </span>
+          </span>
+          <span class="text-xs text-accent">Cambiar</span>
+        </button>
+      </div>
+    {/if}
+
+    {#if conTamano}
       <Field label="Tamaño">
         <select class="control" bind:value={tamano}>
           {#each TAMANOS as t (t.label)}
@@ -199,6 +285,13 @@
         </div>
         <p class="text-xs text-muted">Se redondea a múltiplos de 64 (entre 256 y 1536).</p>
       {/if}
+      <Field label="Previews">
+        <select class="control" bind:value={nPreviews}>
+          {#each Array.from({ length: N_PREVIEWS_MAX }, (_, i) => i + 1) as n (n)}
+            <option value={n}>{n} {n === 1 ? "preview" : "previews"}</option>
+          {/each}
+        </select>
+      </Field>
     {/if}
   </div>
 
@@ -206,3 +299,15 @@
     <Button class="w-full" disabled={busy || !puedeCrear} onclick={crear}>{ctaLabel}</Button>
   </div>
 </div>
+
+{#if eligiendoEstilo}
+  <StylePicker
+    {estilos}
+    value={estilo}
+    onpick={(id) => {
+      estilo = id;
+      eligiendoEstilo = false;
+    }}
+    onclose={() => (eligiendoEstilo = false)}
+  />
+{/if}

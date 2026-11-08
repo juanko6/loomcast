@@ -206,8 +206,9 @@ def test_portada_de_pista_inexistente(engine, fake_comfy):
 
 # --- galería: imagen_libre --------------------------------------------------
 
-def _imagen(session, tipo="generar", prompt="a red fox", width=512, height=768, motor=""):
-    img = galeria_repo.crear(session, tipo, "un zorro", width, height, motor)
+def _imagen(session, tipo="generar", prompt="a red fox", width=512, height=768, motor="",
+            **campos):
+    img = galeria_repo.crear(session, tipo, "un zorro", width, height, motor, **campos)
     img.prompt = prompt
     session.commit()
     return img.id
@@ -236,15 +237,15 @@ def test_mejorar_prompt_de_edicion_exige_la_imagen_de_origen(session, dirs_tmp, 
 
 def test_generar_previews_de_texto_a_imagen(session, dirs_tmp, fake_comfy):
     iid = _imagen(session, motor="flux2klein")
-    assert imagen_libre.generar_previews(iid) == f"{imagen_libre.N_PREVIEWS} previews generadas"
+    assert imagen_libre.generar_previews(iid) == "4 previews generadas"
     llamadas = [k for n, k in fake_comfy.llamadas if n == "generar_imagen"]
-    assert len(llamadas) == imagen_libre.N_PREVIEWS
+    assert len(llamadas) == 4
     assert {(k["width"], k["height"], k["motor"]) for k in llamadas} == {(512, 768, "flux2klein")}
     assert len({k["seed"] for k in llamadas}) > 1 and fake_comfy.nombres()[-1] == "liberar_memoria"
     session.expire_all()
     img = galeria_repo.obtener(session, iid)
-    assert len(__import__("json").loads(img.seeds)) == imagen_libre.N_PREVIEWS and img.estado == "previews"
-    assert all(imagen_libre.ruta_preview(iid, i).exists() for i in range(imagen_libre.N_PREVIEWS))
+    assert len(__import__("json").loads(img.seeds)) == 4 and img.estado == "previews"
+    assert all(imagen_libre.ruta_preview(iid, i).exists() for i in range(4))
 
 
 def test_generar_previews_de_edicion_conserva_el_tamano_de_la_fuente(session, dirs_tmp, fake_comfy):
@@ -252,9 +253,47 @@ def test_generar_previews_de_edicion_conserva_el_tamano_de_la_fuente(session, di
     _fuente(iid, (101, 75))   # se redondea hacia abajo a múltiplo de 8
     imagen_libre.generar_previews(iid)
     llamadas = [k for n, k in fake_comfy.llamadas if n == "editar_imagen"]
-    assert len(llamadas) == imagen_libre.N_PREVIEWS
+    assert len(llamadas) == 4
     assert {(k["width"], k["height"]) for k in llamadas} == {(96, 72)}
     assert all(k["imagenes"] == imagen_libre.ruta_fuente(iid) for k in llamadas)
+
+
+def test_generar_previews_hace_las_pedidas_y_borra_las_de_una_tirada_anterior(session, dirs_tmp, fake_comfy):
+    iid = _imagen(session, n_previews=6)
+    imagen_libre.generar_previews(iid)
+    assert len([n for n, _ in fake_comfy.llamadas if n == "generar_imagen"]) == 6
+    session.expire_all()
+    galeria_repo.obtener(session, iid).n_previews = 2
+    session.commit()
+    assert imagen_libre.generar_previews(iid) == "2 previews generadas"
+    assert sorted(p.name for p in imagen_libre.carpeta(iid).glob("preview_*")) == [
+        "preview_0.png", "preview_1.png"]
+
+
+def test_con_estilo_el_llm_escribe_la_escena_y_el_estilo_va_tal_cual(session, dirs_tmp, fake_llm,
+                                                                     fake_comfy, estilos_tmp):
+    iid = _imagen(session, prompt="", estilo="tinta", detalles="un gato, no un perro")
+    # La escena se pide como texto, no como JSON (ver llm.texto).
+    fake_llm.responder(str, "a cat sitting on a stool.")
+    imagen_libre.mejorar_prompt(iid, y_previews=True)
+    llamada = fake_llm.llamadas[0]
+    assert "TITLE: un zorro" in llamada["user"] and "un gato, no un perro" in llamada["user"]
+    assert "STYLE GUIDE: leave room for a title" in llamada["user"]
+    # La cabecera del estilo no se le enseña al LLM: la parafrasearía.
+    assert "ink linework" not in llamada["user"] and "SCENE" in llamada["system"]
+    session.expire_all()
+    assert galeria_repo.obtener(session, iid).prompt == "a cat sitting on a stool."
+
+    imagen_libre.generar_previews(iid)
+    prompts = {k["prompt"] for n, k in fake_comfy.llamadas if n == "generar_imagen"}
+    assert prompts == {"heavy ink linework, two colors. a cat sitting on a stool. risograph grain."}
+
+
+def test_libre_con_detalles_los_suma_a_la_idea(session, dirs_tmp, fake_llm):
+    iid = _imagen(session, prompt="", detalles="fondo verde")
+    fake_llm.responder(ImagenLibrePromptLLM, ImagenLibrePromptLLM(prompt="a fox in a green field"))
+    imagen_libre.mejorar_prompt(iid)
+    assert fake_llm.llamadas[0]["user"] == "un zorro\n\nDetalles: fondo verde"
 
 
 def test_tamano_de_una_imagen_minuscula_tiene_suelo(tmp_path):
@@ -581,3 +620,60 @@ def test_escalar_sin_video_o_escala_rara(session, dirs_tmp, fake_escalador):
     with pytest.raises(ValueError, match="Escala"):
         imagen_animada.escalar(iid, "8k")
     assert fake_escalador.llamadas == []
+
+
+def test_mejorar_una_recien_creada_la_pasa_a_mejorada(session, dirs_tmp, fake_llm):
+    iid = _imagen(session, prompt=None)
+    fake_llm.responder(ImagenLibrePromptLLM, ImagenLibrePromptLLM(prompt="a fox in a green field"))
+    imagen_libre.mejorar_prompt(iid)
+    session.expire_all()
+    assert galeria_repo.obtener(session, iid).estado == "mejorada"
+
+
+@pytest.mark.parametrize("tipo, estado", [
+    ("generar", "previews"), ("generar", "final"),
+    ("animada", "final"), ("animada", "movimiento"), ("animada", "escalada"),
+])
+def test_reescribir_la_escena_no_esconde_lo_que_ya_hay(session, dirs_tmp, fake_llm, tipo, estado):
+    """Reescribir cambia el texto y nada más: las previews, la imagen aprobada
+    y el vídeo siguen a la vista hasta que se regenera."""
+    iid = _imagen(session, tipo)
+    img = galeria_repo.obtener(session, iid)
+    img.estado, img.seeds, img.seed_elegido = estado, "[1, 2]", 1
+    session.commit()
+    fake_llm.responder(ImagenLibrePromptLLM, ImagenLibrePromptLLM(prompt="a fox in a snowy field"))
+    imagen_libre.mejorar_prompt(iid)
+    session.expire_all()
+    img = galeria_repo.obtener(session, iid)
+    assert (img.prompt, img.estado, img.seeds, img.seed_elegido) == (
+        "a fox in a snowy field", estado, "[1, 2]", 1)
+
+
+def test_cada_preview_se_apunta_en_cuanto_sale(session, dirs_tmp, fake_comfy, monkeypatch):
+    """La UI rellena los huecos según salen: al generar la tercera, las dos
+    primeras ya están en la base, y las de la tirada anterior no."""
+    iid = _imagen(session, n_previews=3)
+    img = galeria_repo.obtener(session, iid)
+    img.seeds, img.estado = "[7, 8, 9, 10]", "previews"
+    session.commit()
+    imagen_libre.carpeta(iid).mkdir(parents=True, exist_ok=True)
+    for i in range(4):
+        Image.new("RGB", (8, 8)).save(imagen_libre.ruta_preview(iid, i))
+
+    vistas = []
+    original = fake_comfy.generar_imagen
+
+    def mirando(prompt, seed, destino, *a, **k):
+        from backend.db import get_session
+        with get_session() as s:
+            vistas.append(json.loads(galeria_repo.obtener(s, iid).seeds))
+        return original(prompt, seed, destino, *a, **k)
+
+    monkeypatch.setattr(imagen_libre.comfy, "generar_imagen", mirando)
+    imagen_libre.generar_previews(iid)
+    semillas = [k["seed"] for n, k in fake_comfy.llamadas if n == "generar_imagen"]
+    assert vistas == [[], semillas[:1], semillas[:2]]
+    session.expire_all()
+    assert json.loads(galeria_repo.obtener(session, iid).seeds) == semillas
+    assert sorted(p.name for p in imagen_libre.carpeta(iid).glob("preview_*")) == [
+        "preview_0.png", "preview_1.png", "preview_2.png"]

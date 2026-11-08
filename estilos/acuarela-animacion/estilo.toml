@@ -1,0 +1,7 @@
+nombre = "Acuarela de animación japonesa"
+descripcion = "Fondos en acuarela, nubes enormes y luz de tarde suave. Nostálgico y tranquilo."
+orden = 7
+motor = ""
+cabecera = """hand-painted Japanese animation film still, soft watercolor background painting, simple clean character design with gentle cel shading"""
+cola = """nostalgic warm afternoon light, delicate watercolor textures, lush painted scenery"""
+guia_escena = """A quiet, nostalgic moment in a lush place (a hillside, a small town street, a garden, a train window), with a small figure doing something simple and calm. Wide or medium-wide shot with big painted clouds or greenery taking much of the frame and a calm open area of sky."""

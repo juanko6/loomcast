@@ -1,0 +1,7 @@
+nombre = "Synthwave neón"
+descripcion = "Rosas y cianes, rejilla, sol a rayas y siluetas con neón."
+orden = 13
+motor = "flux2klein"
+cabecera = """synthwave retro 1980s illustration, glowing neon magenta and cyan, striped setting sun"""
+cola = """retrowave night atmosphere, glowing grid horizon, soft bloom"""
+guia_escena = """A night scene on a long road, a coastline or a city skyline: a car driving away, a silhouette on a rooftop, palm trees against a huge striped sun. Wide shot with a strong horizon line and empty glowing sky."""

@@ -215,6 +215,36 @@ def test_chat_envia_temperature_y_template_kwargs_solo_si_estan_configurados(htt
 
 # --- ping -------------------------------------------------------------------
 
+# --- texto -------------------------------------------------------------------
+
+@pytest.mark.parametrize("crudo,esperado", [
+    ("  A cat sits on a stool.\n", "A cat sits on a stool."),
+    ('"A cat sits on a stool."', "A cat sits on a stool."),
+    ("```\nA cat sits\non a stool.\n```", "A cat sits on a stool."),
+    ('{"prompt": "A cat sits on a stool."}', "A cat sits on a stool."),
+    ('```json\n{"prompt": "A cat sits on a stool."}\n```', "A cat sits on a stool."),
+    ("{ no es json pero empieza así", "{ no es json pero empieza así"),
+])
+def test_limpiar_texto_deja_un_parrafo_venga_como_venga(crudo, esperado):
+    assert llm._limpiar_texto(crudo) == esperado
+
+
+def test_texto_sin_schema_y_devuelve_el_parrafo(http_mock):
+    vistas = http_mock(lambda r: _respuesta("A cat sits on a wooden stool by the window."))
+    assert llm.texto("sys", "usr") == "A cat sits on a wooden stool by the window."
+    cuerpo = json.loads(vistas[0].content)
+    assert "response_format" not in cuerpo and cuerpo["stream"] is True
+
+
+def test_texto_demasiado_corto_o_cortado_lanza(http_mock):
+    http_mock(lambda r: _respuesta("ok"))
+    with pytest.raises(llm.LLMError, match="demasiado corto"):
+        llm.texto("s", "u")
+    http_mock(lambda r: _cortada("A cat sits on a wooden st"))
+    with pytest.raises(llm.LLMTruncado):
+        llm.texto("s", "u")
+
+
 def test_ping_responde(http_mock):
     vistas = http_mock(lambda r: httpx.Response(200, json={}))
     assert llm.ping("http://x:1") is True

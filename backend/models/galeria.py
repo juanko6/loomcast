@@ -31,16 +31,27 @@ class ImagenLibre(Base):
     # previews (Z-Image, FLUX.2 Klein, Qwen-Image-Edit…). Vacío = el motor por
     # defecto del modo. No aplica a quitarfondo, que no pasa por ComfyUI.
     motor: Mapped[str] = mapped_column(default="")
-    # Lo que escribió el usuario (español): idea a generar o cambios a aplicar.
+    # Lo que escribió el usuario (español): en generar y animada es el título
+    # (lo que quiere ver, a menudo el título del vídeo); en editar, los cambios.
     idea: Mapped[str] = mapped_column(Text)
-    # Prompt en inglés que produce el LLM y que el usuario puede editar; None
-    # hasta que termina la etapa de mejora.
+    # Precisiones del usuario que mandan sobre lo que el LLM deduzca del título
+    # («un gato en vez de una persona, fondo verde»). Vacío = ninguna.
+    detalles: Mapped[str] = mapped_column(Text, default="")
+    # Id de un estilo de `estilos/` (ver backend/estilos.py), o "" = libre: el
+    # LLM elige el estilo y escribe el prompt entero, como siempre.
+    estilo: Mapped[str] = mapped_column(default="")
+    # Cuántas previews se generan en cada tirada.
+    n_previews: Mapped[int] = mapped_column(default=4)
+    # Prompt en inglés que escribe el LLM y que el usuario puede editar; None
+    # hasta que termina la etapa de mejora. Con estilo es solo la ESCENA (qué
+    # se dibuja): el estilo se le pega delante y detrás al generar. Libre, es
+    # el prompt completo.
     prompt: Mapped[str | None] = mapped_column(Text, default=None)
     width: Mapped[int] = mapped_column(default=768)
     height: Mapped[int] = mapped_column(default=1344)
     # nueva | mejorada | previews | final [| movimiento | animada | escalada]
     estado: Mapped[str] = mapped_column(default="nueva")
-    # Las 4 seeds de las previews, en JSON (mismo orden que preview_{i}.png).
+    # Las seeds de las previews, en JSON (mismo orden que preview_{i}.png).
     seeds: Mapped[str] = mapped_column(Text, default="[]")
     # Índice de la preview elegida para la versión final (None hasta elegir).
     seed_elegido: Mapped[int | None] = mapped_column(default=None)

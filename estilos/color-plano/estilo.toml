@@ -1,0 +1,10 @@
+nombre = "Personaje sobre color plano"
+descripcion = "Anime de línea fina, sombreado mínimo y un solo color de fondo saturado. Sin escenario."
+orden = 1
+motor = ""
+cabecera = """Japanese anime character illustration, clean thin line art, flat cel shading with one soft shadow tone,
+muted mostly grayscale clothing that stands out against a single saturated flat background color,
+character drawn directly on the background with no outline border around it"""
+cola = """crisp clean lineart, flat solid background with no gradient and no environment, high quality anime illustration"""
+guia_escena = """One full-body character in a relaxed, laid-back pose, alone on a plain flat background of one saturated color (choose a color that fits the mood unless the details name one). At most one or two small props next to them (a small round table, a cup, a chair), floating music notes are welcome. No room, no landscape, no floor detail. Keep the character on one third of the frame and leave the other two thirds as wide, completely empty flat background."""
+
