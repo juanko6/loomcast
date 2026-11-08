@@ -1,0 +1,7 @@
+nombre = "Cartel art déco de jazz"
+descripcion = "Geometría de los años 30, dorados y negros, siluetas elegantes."
+orden = 15
+motor = ""
+cabecera = """1930s art deco poster illustration, bold geometric shapes, gold and black with one deep accent color"""
+cola = """elegant vintage lithograph texture, symmetrical composition, sunburst rays"""
+guia_escena = """An elegant scene of a jazz era: a stylized musician with a saxophone or trumpet, a couple dancing, a grand ballroom or a skyline, built from strong geometric shapes. Centered composition with large plain geometric background areas."""

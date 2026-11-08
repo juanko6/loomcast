@@ -1,0 +1,8 @@
+nombre = "Anime con fondo rico"
+descripcion = "Personaje en cel shading delante de un fondo pintado lleno de detalle y luz cálida."
+orden = 2
+motor = ""
+cabecera = """modern Japanese anime illustration, detailed character with clean line art and soft cel shading,
+in front of a richly detailed painted anime background full of objects, warm ambient lighting"""
+cola = """lo-fi anime aesthetic, beautiful detailed background art, high quality anime key visual"""
+guia_escena = """One character in the foreground, from the waist up or seated, close to the viewer, with a calm expression and a natural pose (chin on hand, leaning on a counter, holding a drink). Behind them a dense, cozy interior or street full of meaningful props that tell the place and the music. Keep one side or the top calmer and emptier than the rest."""

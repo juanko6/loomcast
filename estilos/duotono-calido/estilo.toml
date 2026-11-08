@@ -1,0 +1,8 @@
+nombre = "Duotono cálido"
+descripcion = "Todo en naranja, marrón y negro. Tinta de cómic y grano. Muy lo-fi."
+orden = 5
+motor = ""
+cabecera = """warm duotone ink illustration, only burnt orange, deep brown and black ink,
+detailed black ink linework with hatching, vintage printed illustration that fills the whole image edge to edge"""
+cola = """subtle paper grain and halftone texture, cozy lo-fi mood, monochrome warm palette"""
+guia_escena = """A cozy indoor moment of rest: a character relaxing (eyes closed, hands behind the head, headphones on) in a lived-in room with plants, records, books, a steaming mug, maybe a sleeping cat, and a window with a sunset city. Medium-wide shot, the character off-center."""

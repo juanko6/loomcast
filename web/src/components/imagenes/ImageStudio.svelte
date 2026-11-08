@@ -5,7 +5,7 @@
   import ImageDetail from "./ImageDetail.svelte";
   import Button from "../primitives/Button.svelte";
   import BotonParar from "../shell/BotonParar.svelte";
-  import { jobsDrenados, refrescarJobs, seleccionPendiente } from "@/lib/stores";
+  import { jobs, jobsDrenados, refrescarJobs, seleccionPendiente } from "@/lib/stores";
   import { currentTrack } from "@/lib/player";
   import {
     listarGaleria,
@@ -14,6 +14,10 @@
     crearEditar,
     crearQuitarFondo,
     crearAnimada,
+    cambiarEstilo,
+    listarEstilos,
+    type EstiloImagen,
+    type NuevaImagen,
     guardarMovimiento,
     mejorarMovimiento,
     animar,
@@ -29,6 +33,8 @@
   import type { GaleriaResumen } from "@/lib/types";
 
   let items = $state<GaleriaResumen[]>([]);
+  // Los estilos de `estilos/`: los usan el formulario y el panel de trabajo.
+  let estilos = $state<EstiloImagen[]>([]);
   let selectedId = $state<number | null>(null);
   let detail = $state<GaleriaDetalle | null>(null);
   let previewSel = $state<number | null>(null);
@@ -72,6 +78,15 @@
     verGrid = false;
   }
 
+  async function cargarEstilos() {
+    try {
+      estilos = await listarEstilos();
+    } catch {
+      // Sin estilos se puede crear igual, en libre.
+      estilos = [];
+    }
+  }
+
   async function crearY(promesa: Promise<{ id: number }>) {
     try {
       const { id } = await promesa;
@@ -83,15 +98,13 @@
     }
   }
 
-  // Al crear NO se mejora el prompt automáticamente: el paso del LLM es opcional
-  // (el usuario lo pulsa en el panel de trabajo si lo quiere).
-  const handleGenerar = (p: { idea: string; width: number; height: number; motor: string }) =>
-    crearY(crearGenerar(p));
+  // Generar y animada: crear ya encola la escena y las previews (el backend
+  // las encadena). Editar sigue con su paso de prompt opcional.
+  const handleGenerar = (p: NuevaImagen & { motor: string }) => crearY(crearGenerar(p));
   const handleEditar = (p: { idea: string; file: File; motor: string }) =>
     crearY(crearEditar(p.idea, p.file, p.motor));
   const handleFondo = (p: { file: File }) => crearY(crearQuitarFondo(p.file));
-  const handleAnimada = (p: { idea: string; width: number; height: number }) =>
-    crearY(crearAnimada(p));
+  const handleAnimada = (p: NuevaImagen) => crearY(crearAnimada(p));
 
   // Pasos de la animada tras aprobar la preview. El movimiento se guarda antes
   // de pedir nada: tanto el LLM como el render leen el que está en la base.
@@ -128,11 +141,11 @@
     }
   }
 
-  async function onpreviews(prompt: string) {
+  async function onpreviews(prompt: string, nPreviews: number) {
     if (selectedId == null) return;
     try {
       await editarPrompt(selectedId, prompt);
-      await lanzarPreviews(selectedId);
+      await lanzarPreviews(selectedId, { n_previews: nPreviews });
       previewSel = null;
       verGrid = false;
       refrescarJobs();
@@ -161,6 +174,16 @@
     }
   }
 
+  async function oncambiarestilo(estilo: string) {
+    if (selectedId == null) return;
+    try {
+      await cambiarEstilo(selectedId, estilo);
+      loadDetail(selectedId);
+    } catch (e) {
+      error = (e as Error).message;
+    }
+  }
+
   function onreelegir() {
     verGrid = true;
   }
@@ -176,6 +199,21 @@
       error = (e as Error).message;
     }
   }
+
+  // Una tirada de previews de la imagen abierta: cada vez que su progreso
+  // avanza ha salido una preview más, y se recarga el detalle para enseñarla
+  // en su hueco sin esperar a que termine la tirada entera.
+  let pasoTirada = "";
+  $effect(() => {
+    const t = $jobs.find(
+      (j) => j.tipo === "generar_previews_imagen" && j.ref_id === selectedId && j.estado === "corriendo",
+    );
+    const paso = t ? `${t.id}:${t.progreso?.hecho ?? 0}` : "";
+    if (paso !== pasoTirada) {
+      pasoTirada = paso;
+      if (paso && selectedId != null) loadDetail(selectedId);
+    }
+  });
 
   let ultimoDrenaje = 0;
   $effect(() => {
@@ -197,13 +235,16 @@
     }
   });
 
-  onMount(refreshList);
+  onMount(() => {
+    refreshList();
+    cargarEstilos();
+  });
 </script>
 
 <div class="flex min-h-0 flex-1">
   <!-- Config (izquierda) -->
   <div class="flex w-[360px] min-w-0 shrink-0 flex-col border-r border-line bg-surface" style={reservaPlayer}>
-    <ImageConfig {busy} oncreateGenerar={handleGenerar} oncreateEditar={handleEditar} oncreateFondo={handleFondo} oncreateAnimada={handleAnimada} />
+    <ImageConfig {busy} {estilos} oncreateGenerar={handleGenerar} oncreateEditar={handleEditar} oncreateFondo={handleFondo} oncreateAnimada={handleAnimada} />
   </div>
 
   <!-- Lista (centro) -->
@@ -239,5 +280,5 @@
   </div>
 
   <!-- Trabajo (derecha) -->
-  <ImageDetail {detail} {busy} {previewSel} {verGrid} {bust} {onpreviews} {onmejorar} {onpick} {onfinal} {onreelegir} {onmejorarmov} {onanimar} {onescalar} />
+  <ImageDetail {detail} {busy} {previewSel} {verGrid} {bust} {estilos} {oncambiarestilo} {onpreviews} {onmejorar} {onpick} {onfinal} {onreelegir} {onmejorarmov} {onanimar} {onescalar} />
 </div>

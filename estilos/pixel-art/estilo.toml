@@ -1,0 +1,7 @@
+nombre = "Pixel art lo-fi"
+descripcion = "16 bits, ventanas con lluvia y luces de ciudad. Ideal para bucles."
+orden = 9
+motor = ""
+cabecera = """detailed 16-bit pixel art scene, crisp visible pixels, limited retro game palette"""
+cola = """cozy lo-fi pixel art, dithered shading, no anti-aliasing"""
+guia_escena = """A cozy small scene that invites a gentle loop: a character at a desk by a rainy window, a city at night with lit windows, a café counter, a bedroom with a lamp and plants. Side or three-quarter view, everything readable at small size."""

@@ -17,8 +17,13 @@ def _png(modo="RGB", tam=(10, 10), formato="PNG") -> bytes:
 
 
 @pytest.fixture
-def img(client, dirs_tmp):
-    return client.post("/api/galeria", json={"idea": "un gato"}).json()["id"]
+def img(client, dirs_tmp, jobs_encolados):
+    """Una imagen de generar recién creada. Crear ya encola su escena (con las
+    previews encadenadas); se olvida aquí para que cada test mire solo lo que
+    encola él."""
+    iid = client.post("/api/galeria", json={"idea": "un gato"}).json()["id"]
+    jobs_encolados.olvidar()
+    return iid
 
 
 # --- motores ----------------------------------------------------------------
@@ -136,7 +141,19 @@ def test_editar_prompt(client, img):
 def test_detalle_marca_ocupado_con_job_activo(client, session, img):
     session.add(Job(tipo="generar_previews_imagen", ref_id=img, estado="corriendo"))
     session.commit()
-    assert client.get(f"/api/galeria/{img}").json()["ocupado"] is True
+    d = client.get(f"/api/galeria/{img}").json()
+    assert (d["ocupado"], d["generando_previews"]) == (True, True)
+
+
+@pytest.mark.parametrize("tipo, estado", [
+    ("generar_previews_imagen", "pendiente"),   # en cola: aún no vació la tirada anterior
+    ("mejorar_prompt_imagen", "corriendo"),      # escribiendo la escena, no previews
+])
+def test_generando_previews_solo_con_la_tirada_corriendo(client, session, img, tipo, estado):
+    session.add(Job(tipo=tipo, ref_id=img, estado=estado))
+    session.commit()
+    d = client.get(f"/api/galeria/{img}").json()
+    assert (d["ocupado"], d["generando_previews"]) == (True, False)
 
 
 # --- lanzar etapas ----------------------------------------------------------
@@ -178,8 +195,11 @@ def test_final_sin_indice_422(client, img):
 def _animada(client, dirs_tmp, estado="final"):
     """Una animada con la preview 1 ya aprobada (o en el estado pedido)."""
     from backend.db import get_session
+    from backend.workers import queue
 
     iid = client.post("/api/galeria/animada", json={"idea": "un gato groovy"}).json()["id"]
+    # El job de escena que encola crear no es lo que miran estos tests.
+    queue.encolar.llamadas.olvidar()
     carpeta = imagen_libre.carpeta(iid)
     carpeta.mkdir(parents=True, exist_ok=True)
     for i in range(4):
@@ -202,7 +222,10 @@ def test_crear_animada_usa_el_motor_de_generar(client, dirs_tmp, jobs_encolados)
     assert (d["tipo"], d["idea"], d["motor"], d["estado"]) == ("animada", "un faro", "zimage", "nueva")
     assert (d["width"], d["height"]) == (704, 1280)
     assert (d["prompt_movimiento"], d["duracion_s"], d["videos"]) == ("", 12, [])
-    assert jobs_encolados == []
+    assert (d["estilo"], d["detalles"], d["n_previews"]) == ("", "", 4)
+    # Crear ya pide las imágenes: la escena, con las previews encadenadas.
+    assert jobs_encolados == [("mejorar_prompt_imagen", d["id"])]
+    assert jobs_encolados.params == [{"y_previews": True}]
 
 
 def test_crear_animada_sin_idea_400(client):
@@ -322,3 +345,62 @@ def test_archivos_404_hasta_que_existen(client, img, dirs_tmp, ruta):
     (carpeta / nombre).write_bytes(b"png")
     r = client.get(f"/api/galeria/{img}/{ruta}")
     assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+
+
+# --- estilos -------------------------------------------------------------------
+
+def test_listar_estilos_y_sus_ejemplos(client, estilos_tmp):
+    assert client.get("/api/galeria/estilos").json() == [{
+        "id": "tinta", "nombre": "Tinta", "descripcion": "Tinta y dos colores",
+        "motor": "flux2klein", "ejemplos": 1}]
+    assert client.get("/api/galeria/estilos/tinta/ejemplo/0").content == b"png"
+    assert client.get("/api/galeria/estilos/tinta/ejemplo/1").status_code == 404
+    assert client.get("/api/galeria/estilos/nada/ejemplo/0").status_code == 404
+
+
+def test_crear_con_estilo_usa_su_motor_y_guarda_detalles_y_previews(client, dirs_tmp, estilos_tmp,
+                                                                    jobs_encolados):
+    r = client.post("/api/galeria", json={"idea": "Morning Bossa", "detalles": " un gato ",
+                                          "estilo": "tinta", "n_previews": 6})
+    d = client.get(f"/api/galeria/{r.json()['id']}").json()
+    assert (d["estilo"], d["motor"], d["detalles"], d["n_previews"]) == ("tinta", "flux2klein",
+                                                                         "un gato", 6)
+    assert jobs_encolados == [("mejorar_prompt_imagen", d["id"])]
+    assert jobs_encolados.params == [{"y_previews": True}]
+
+
+def test_un_motor_pedido_manda_sobre_el_del_estilo(client, dirs_tmp, estilos_tmp):
+    r = client.post("/api/galeria", json={"idea": "x", "estilo": "tinta", "motor": "zimage"})
+    assert client.get(f"/api/galeria/{r.json()['id']}").json()["motor"] == "zimage"
+
+
+@pytest.mark.parametrize("ruta", ["/api/galeria", "/api/galeria/animada"])
+def test_crear_con_estilo_que_no_existe_400_y_previews_fuera_de_rango_422(client, estilos_tmp, ruta):
+    assert client.post(ruta, json={"idea": "x", "estilo": "nada"}).status_code == 400
+    assert client.post(ruta, json={"idea": "x", "estilo": "../x"}).status_code == 400
+    assert client.post(ruta, json={"idea": "x", "n_previews": 9}).status_code == 422
+    assert client.post(ruta, json={"idea": "x", "n_previews": 0}).status_code == 422
+
+
+def test_cambiar_estilo_conserva_la_escena_y_cambia_el_motor(client, img, estilos_tmp):
+    client.put(f"/api/galeria/{img}/prompt", json={"prompt": "a cat"})
+    assert client.put(f"/api/galeria/{img}/estilo", json={"estilo": "tinta"}).status_code == 200
+    d = client.get(f"/api/galeria/{img}").json()
+    assert (d["estilo"], d["motor"], d["prompt"]) == ("tinta", "flux2klein", "a cat")
+    assert client.put(f"/api/galeria/{img}/estilo", json={"estilo": ""}).status_code == 200
+    assert client.get(f"/api/galeria/{img}").json()["motor"] == "zimage"
+    assert client.put(f"/api/galeria/{img}/estilo", json={"estilo": "nada"}).status_code == 400
+    assert client.put("/api/galeria/999/estilo", json={"estilo": ""}).status_code == 404
+
+
+def test_previews_pueden_cambiar_cuantas(client, img, jobs_encolados):
+    assert client.post(f"/api/galeria/{img}/previews", json={"n_previews": 8}).status_code == 200
+    assert client.get(f"/api/galeria/{img}").json()["n_previews"] == 8
+
+
+def test_la_escena_de_crear_encadena_las_previews_y_reescribirla_no():
+    from backend.workers import queue
+
+    assert queue._encadenado("mejorar_prompt_imagen", 1, {"y_previews": True}) == "generar_previews_imagen"
+    assert queue._encadenado("mejorar_prompt_imagen", 1, {}) is None
+    assert queue._encadenado("generar_previews_imagen", 1, {"y_previews": True}) is None

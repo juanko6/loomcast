@@ -1,0 +1,8 @@
+nombre = "Tinta y serigrafía"
+descripcion = "Línea de tinta gruesa, tramado, paleta de 2–3 colores y grano. Manga de los 90."
+orden = 3
+motor = ""
+cabecera = """1990s manga ink illustration, bold expressive black ink linework with cross-hatching,
+limited palette of two or three colors such as teal and burnt orange, screen print look"""
+cola = """risograph print grain, slightly misregistered flat color fills, full-bleed artwork filling the whole image edge to edge"""
+guia_escena = """A character in motion or in a strong pose inside a lived-in place (an old street, a shop front, a workshop, a lantern-lit alley), seen at a slight low angle, with a small animal or a few telling props nearby. Full scene with depth, but keep one side calmer, with open sky or bare wall."""

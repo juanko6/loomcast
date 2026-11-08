@@ -1,0 +1,7 @@
+nombre = "City pop de los 80"
+descripcion = "Colores planos limpísimos, piscinas, palmeras y atardeceres en degradado. Retro japonés."
+orden = 8
+motor = ""
+cabecera = """1980s Japanese city pop illustration, crisp flat colors with clean hard edges, airbrushed gradient sky"""
+cola = """retro summer resort mood, pastel pink, turquoise and sunset orange palette, vintage album art print"""
+guia_escena = """A sunny or sunset leisure scene with clean architecture: a swimming pool, palm trees, a modern villa, a convertible car or a seaside road. Few or no people, seen small or from behind. Strong geometric shadows and a large smooth gradient sky."""

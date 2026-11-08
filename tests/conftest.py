@@ -51,6 +51,12 @@ def jobs_encolados(monkeypatch):
         params: list[dict]
         prioridades: list[int]
 
+        def olvidar(self) -> None:
+            """Borra lo registrado (lo que encoló la preparación del test)."""
+            self.clear()
+            self.params.clear()
+            self.prioridades.clear()
+
     llamadas = Llamadas()
     llamadas.params = []
     llamadas.prioridades = []
@@ -61,6 +67,7 @@ def jobs_encolados(monkeypatch):
         llamadas.prioridades.append(prioridad)
         return len(llamadas)
 
+    falso.llamadas = llamadas
     monkeypatch.setattr(queue, "encolar", falso)
     return llamadas
 
@@ -329,3 +336,20 @@ class _ProcDeTest:
 
     def poll(self):
         return None
+
+
+@pytest.fixture
+def estilos_tmp(monkeypatch, tmp_path):
+    """Una carpeta de estilos con uno solo, `tinta`, con un ejemplo."""
+    from backend import estilos
+
+    d = tmp_path / "estilos" / "tinta"
+    d.mkdir(parents=True)
+    (d / "estilo.toml").write_text(
+        'nombre = "Tinta"\ndescripcion = "Tinta y dos colores"\nmotor = "flux2klein"\n'
+        'cabecera = "heavy ink linework, two colors"\ncola = "risograph grain"\n'
+        'guia_escena = "leave room for a title"\norden = 1\n'
+    )
+    (d / "ejemplo_1.png").write_bytes(b"png")
+    monkeypatch.setattr(estilos, "ESTILOS_DIR", tmp_path / "estilos")
+    return tmp_path / "estilos"

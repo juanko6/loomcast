@@ -1,0 +1,7 @@
+nombre = "3D estilizado / plastilina"
+descripcion = "3D suave y redondeado, como plastilina hecha a mano. Tierno y acogedor."
+orden = 14
+motor = ""
+cabecera = """stylized handcrafted clay 3D scene, soft rounded shapes, visible fingerprint texture"""
+cola = """tilt-shift miniature look, soft studio lighting, cozy toy-like diorama"""
+guia_escena = """A small cozy diorama: a tiny café, a little room with a piano, a snowy cabin, a character playing an instrument. Slightly high three-quarter view so it reads as a miniature set, with a plain soft background around it."""

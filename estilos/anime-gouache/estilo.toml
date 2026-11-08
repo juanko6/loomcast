@@ -1,0 +1,8 @@
+nombre = "Anime soleado (gouache)"
+descripcion = "Cielo azul intenso, nubes pintadas y colores vivos. Mucha energía."
+orden = 4
+motor = ""
+cabecera = """vibrant hand-painted anime illustration in gouache, bright saturated colors, bold confident ink outlines,
+big painted summer clouds in a deep blue sky"""
+cola = """sunny joyful atmosphere, visible painterly brush strokes, studio anime background painting"""
+guia_escena = """A joyful, energetic moment outdoors under a big sky: a character or an animal walking, running or dancing toward the viewer, slightly low angle with dynamic perspective, a simple ground (stone path, beach, rooftop) and a few birds or flying elements. Leave a large area of open sky."""

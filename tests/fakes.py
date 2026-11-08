@@ -23,7 +23,7 @@ class FakeLLM:
     inventado.
     """
 
-    PUBLICOS = ("chat", "ping")
+    PUBLICOS = ("chat", "texto", "ping")
 
     def __init__(self):
         self.llamadas: list[dict] = []
@@ -45,6 +45,16 @@ class FakeLLM:
         else:
             raise AssertionError(f"FakeLLM sin respuesta para {salida.__name__}")
         return r if isinstance(r, BaseModel) else salida.model_validate(r)
+
+    def texto(self, system: str, user: str, minimo: int = 20) -> str:
+        """Las respuestas de texto se programan con el esquema `str`:
+        `fake_llm.responder(str, "a cat on a stool")`."""
+        self.llamadas.append({"system": system, "user": user, "salida": str})
+        if self._cadenas.get(str):
+            return self._cadenas[str].pop(0)
+        if str in self._respuestas:
+            return self._respuestas[str]
+        raise AssertionError("FakeLLM sin respuesta de texto")
 
     def ping(self, url=None) -> bool:
         return True

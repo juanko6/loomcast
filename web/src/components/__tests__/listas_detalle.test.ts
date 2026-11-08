@@ -168,7 +168,8 @@ describe("ImageRow", () => {
 describe("ImageDetail", () => {
   const detalle = (extra: Partial<GaleriaDetalle> = {}): GaleriaDetalle => ({
     id: 2, tipo: "generar", motor: "zimage", motor_nombre: "Z-Image Turbo", idea: "zorro", prompt: "a red fox",
-    width: 768, height: 1344, estado: "nueva", seeds: [], seed_elegido: null, ocupado: false, ...extra,
+    width: 768, height: 1344, estado: "nueva", seeds: [], seed_elegido: null, ocupado: false,
+    generando_previews: false, n_previews: 4, ...extra,
   });
   const props = () => ({ onpreviews: vi.fn(), onmejorar: vi.fn(), onpick: vi.fn(), onfinal: vi.fn(), onreelegir: vi.fn() });
 
@@ -190,23 +191,47 @@ describe("ImageDetail", () => {
     expect(screen.queryByText("768×1344")).toBeNull();
   });
 
-  it("generar previews envía el prompt editado; sin prompt está bloqueado", async () => {
+  it("generar previews envía la escena editada y cuántas; sin escena está bloqueado", async () => {
     const p = props();
     render(ImageDetail, { detail: detalle({ prompt: null }), ...p });
-    const boton = screen.getByRole("button", { name: "Generar 4 previews" });
+    const boton = screen.getByRole("button", { name: "Generar previews" });
     expect(boton).toBeDisabled();
     await userEvent.type(screen.getByRole("textbox"), "  a blue fox ");
     expect(boton).toBeEnabled();
     await userEvent.click(boton);
-    expect(p.onpreviews).toHaveBeenCalledWith("  a blue fox ");
+    expect(p.onpreviews).toHaveBeenCalledWith("  a blue fox ", 4);
   });
 
   it("con previews cambia a 'Regenerar' y muestra la cuadrícula para elegir", async () => {
     const p = props();
     render(ImageDetail, { detail: detalle({ estado: "previews", seeds: [1, 2, 3, 4] }), ...p });
-    expect(screen.getByRole("button", { name: "Regenerar 4 previews" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Regenerar previews" })).toBeInTheDocument();
     await userEvent.click(screen.getByAltText("preview 3"));
     expect(p.onpick).toHaveBeenCalledWith(2);
+  });
+
+  it("generando: N huecos, las hechas a la vista, la siguiente generándose y el resto en cola", () => {
+    render(ImageDetail, {
+      detail: detalle({ estado: "previews", seeds: [11, 22], n_previews: 4, generando_previews: true, ocupado: true }),
+      busy: true, ...props(),
+    });
+    expect(screen.getByText("Generando previews: 2 de 4")).toBeInTheDocument();
+    // La semilla va en la URL: cada tirada estrena URL y no sale la imagen vieja de caché.
+    expect(screen.getByAltText("preview 1")).toHaveAttribute("src", "/api/galeria/2/preview/0?v=11");
+    expect(screen.getByAltText("preview 2")).toHaveAttribute("src", "/api/galeria/2/preview/1?v=22");
+    expect(screen.getByRole("img", { name: "preview 3: generando" })).toHaveTextContent("Generando…");
+    expect(screen.getByRole("img", { name: "preview 4: en cola" })).toHaveTextContent("En cola");
+    expect(screen.getByAltText("preview 1").closest("button")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Generar máxima resolución" })).toBeNull();
+  });
+
+  it("al empezar la tirada todos son huecos, y la final de antes no se enseña", () => {
+    render(ImageDetail, {
+      detail: detalle({ estado: "final", seeds: [], n_previews: 3, generando_previews: true, ocupado: true }),
+      busy: true, ...props(),
+    });
+    expect(screen.getAllByRole("img", { name: /preview \d: (generando|en cola)/ })).toHaveLength(3);
+    expect(screen.queryByAltText("final")).toBeNull();
   });
 
   it("'máxima resolución' exige elegir una preview", async () => {
@@ -221,7 +246,7 @@ describe("ImageDetail", () => {
   it("'busy' bloquea las acciones y lo indica", () => {
     render(ImageDetail, { detail: detalle({ estado: "previews", seeds: [1] }), busy: true, previewSel: 0, ...props() });
     expect(screen.getByText(/Trabajando/)).toBeInTheDocument();
-    for (const n of ["Mejorar prompt con el LLM", "Generar máxima resolución"]) {
+    for (const n of ["Reescribir con el LLM", "Generar máxima resolución"]) {
       expect(screen.getByRole("button", { name: n })).toBeDisabled();
     }
   });

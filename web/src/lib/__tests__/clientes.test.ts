@@ -26,6 +26,8 @@ beforeEach(() => {
 
 const ultima = () => apiMock.mock.calls.at(-1)!;
 
+const NUEVA = { idea: "x", detalles: "", estilo: "", n_previews: 4, width: 768, height: 1344 };
+
 describe("galería", () => {
   it.each([
     ["listarGaleria", () => galeria.listarGaleria(), "/galeria", undefined],
@@ -35,22 +37,30 @@ describe("galería", () => {
     ["editarPrompt", () => galeria.editarPrompt(4, "a fox"), "/galeria/4/prompt", { method: "PUT", body: { prompt: "a fox" } }],
     ["lanzarFinal", () => galeria.lanzarFinal(4, 2), "/galeria/4/final", { method: "POST", body: { indice: 2 } }],
     ["borrarGaleria", () => galeria.borrarGaleria(4), "/galeria/4", { method: "DELETE" }],
-    ["crearGenerar", () => galeria.crearGenerar({ idea: "x", width: 768, height: 1344, motor: "zimage" }), "/galeria",
-      { method: "POST", body: { idea: "x", width: 768, height: 1344, motor: "zimage" } }],
+    ["crearGenerar", () => galeria.crearGenerar({ ...NUEVA, motor: "zimage" }), "/galeria",
+      { method: "POST", body: { ...NUEVA, motor: "zimage" } }],
+    ["crearAnimada", () => galeria.crearAnimada(NUEVA), "/galeria/animada", { method: "POST", body: NUEVA }],
+    ["listarEstilos", () => galeria.listarEstilos(), "/galeria/estilos", undefined],
+    ["cambiarEstilo", () => galeria.cambiarEstilo(4, "tinta"), "/galeria/4/estilo",
+      { method: "PUT", body: { estilo: "tinta" } }],
   ])("%s", async (_n, llamar, ruta, opts) => {
     await llamar();
     expect(ultima()).toEqual(opts === undefined ? [ruta] : [ruta, opts]);
   });
 
-  it("lanzarPreviews manda el tamaño solo si vienen los dos lados", async () => {
-    await galeria.lanzarPreviews(1, 512, 768);
-    expect(ultima()[1]).toMatchObject({ body: { width: 512, height: 768 } });
-    await galeria.lanzarPreviews(1, 512);
-    expect(ultima()[1]).toMatchObject({ body: {} });
+  it("lanzarPreviews manda el tamaño solo si vienen los dos lados, y cuántas si se piden", async () => {
+    await galeria.lanzarPreviews(1, { width: 512, height: 768 });
+    expect(ultima()[1]).toEqual({ method: "POST", body: { width: 512, height: 768 } });
+    await galeria.lanzarPreviews(1, { width: 512 });
+    expect(ultima()[1]).toEqual({ method: "POST", body: {} });
     await galeria.lanzarPreviews(1);
-    expect(ultima()[1]).toMatchObject({ body: {} });
-    await galeria.lanzarPreviews(1, 0, 0);
-    expect(ultima()[1]).toMatchObject({ body: {} });
+    expect(ultima()[1]).toEqual({ method: "POST", body: {} });
+    await galeria.lanzarPreviews(1, { width: 0, height: 0, n_previews: 6 });
+    expect(ultima()[1]).toEqual({ method: "POST", body: { n_previews: 6 } });
+  });
+
+  it("la ruta de un ejemplo de estilo", () => {
+    expect(galeria.rutaEjemploEstilo("tinta", 2)).toBe("/galeria/estilos/tinta/ejemplo/2");
   });
 
   it("crearEditar sube idea, imagen y motor como multipart", async () => {

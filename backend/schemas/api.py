@@ -266,12 +266,21 @@ class LoteIn(AutopilotoIn):
     tema_id: int
 
 
+N_PREVIEWS_MAX = 8
+
+
 class GaleriaGenerarIn(BaseModel):
+    # El título: lo que se quiere ver (puede ser el título del vídeo).
     idea: str
     width: int = 768
     height: int = 1344
-    # Id de [imagen.motores] de config.toml; None = el motor por defecto.
+    # Id de [imagen.motores] de config.toml; None = el del estilo, o el motor
+    # por defecto si no hay estilo.
     motor: str | None = None
+    detalles: str = ""
+    # Id de un estilo de `estilos/`; "" = libre.
+    estilo: str = ""
+    n_previews: int = Field(4, ge=1, le=N_PREVIEWS_MAX)
 
 
 class GaleriaPromptIn(BaseModel):
@@ -283,6 +292,13 @@ class GaleriaPreviewsIn(BaseModel):
     # usa el guardado al crear la entrada.
     width: int | None = None
     height: int | None = None
+    # Opcional: cuántas previews en esta tirada (se queda guardado).
+    n_previews: int | None = Field(None, ge=1, le=N_PREVIEWS_MAX)
+
+
+class GaleriaEstiloIn(BaseModel):
+    # "" = libre.
+    estilo: str = ""
 
 
 class GaleriaFinalIn(BaseModel):
@@ -293,6 +309,9 @@ class GaleriaAnimadaIn(BaseModel):
     idea: str
     width: int = 768
     height: int = 1344
+    detalles: str = ""
+    estilo: str = ""
+    n_previews: int = Field(4, ge=1, le=N_PREVIEWS_MAX)
 
 
 class GaleriaMovimientoIn(BaseModel):

@@ -1251,6 +1251,7 @@ ficha no hay de dónde escribirle la voz.
 - ✅ **Publicación y liberado** — el vídeo subido se apunta a mano (fecha, enlace y nota), se ve de un vistazo cuáles ya están arriba, los metadatos se copian en la forma que pide cada red y liberar deja en la carpeta solo el `final.mp4`. Primera pieza de la Fase 10
 - ✅ **Motion graphics** — un modo de montaje que dibuja el vídeo por código (Pillow, sin ComfyUI ni GPU) a partir de fichas de composición que escribe el LLM y que se reparan antes de dibujarse; primera plantilla, `explica`. Fase 11
 - ✅ **Imagen animada** — cuarto modo de Imágenes: una preview aprobada se anima 10–15 s con LTX-2.5 en un bucle que vuelve a sí mismo, en vertical u horizontal, y se escala a Full HD, 2K o 4K
+- ✅ **Estilos de imagen** — en Generar y Animada se pone un título, se elige un estilo de una galería con ejemplos y cuántas previews; el LLM escribe la escena (editable) y el estilo fija cómo se dibuja. Las previews aparecen según salen
 - ✅ **Álbumes y lotes de música** — varias pistas con la misma banda, la misma semilla y una intención distinta cada una, con tracklist editable antes de producir; y un lote que convierte una lista de ideas en pistas instrumentales sin pasar por la UI
 - ⬜ Pendiente — QA de consistencia de caras con ArcFace (cierra la Fase 6); export multiformato, thumbnail automático, variantes A/B de títulos y empaquetado con Tauri (Fase 10)
 
@@ -1258,8 +1259,9 @@ ficha no hay de dónde escribirle la voz.
 
 Cuatro modos, independientes del pipeline de vídeo:
 
-- **Generar** desde texto. El LLM puede pasar tu idea en español a un prompt en
-  inglés; se generan varias previsualizaciones y eliges cuál llega a final.
+- **Generar** desde un título y un estilo (ver «Estilos» más abajo): el LLM
+  escribe la escena, se generan las previews que pidas (1–8) y eliges cuál
+  llega a final. Con el estilo «Libre» sigue el flujo de antes, prompt a mano.
 - **Editar** por instrucciones sobre una imagen que subas ("quítale las gafas").
 - **Quitar fondo**, con rembg (u2net vía onnxruntime). No pasa por ComfyUI: es
   una segmentación ligera que corre en CPU y no necesita el pipeline de difusión.
@@ -1289,10 +1291,53 @@ workflow tarda diez veces más.
 puede cambiar por imagen. Añadir un motor nuevo es declarar su bloque y poner su
 workflow, sin tocar código.
 
+### Estilos
+
+Un estilo es **cómo se dibuja**; la escena es **qué se dibuja**. En Generar y
+Animada se pone un título, unos detalles opcionales ("fondo amarillo, un gato en
+vez de un perro"), se elige el estilo en una galería con ejemplos y cuántas
+previews se quieren. Al crear no hay paso de prompt: el LLM escribe la escena con
+`prompts/imagen_escena.md` y la cola encadena las previews.
+
+- El prompt final es `cabecera + escena + cola` del estilo, pegado tal cual
+  (`backend/estilos.py: componer`). El LLM solo ve la `guia_escena`, que le
+  orienta el encuadre sin dictarle técnica.
+- Los detalles mandan sobre el título. La escena sigue a la vista y editable en
+  el detalle de la imagen, y se puede reescribir con el LLM o cambiar de estilo
+  sin perder las previews ya hechas.
+- Las previews aparecen una a una según salen, con huecos «Generando…» y
+  «En cola» para las que faltan.
+
+Cada estilo es una carpeta en `estilos/<id>/` con su `estilo.toml` y 2–3
+`ejemplo_N.webp`; se leen en cada petición, así que añadir uno es crear la
+carpeta, sin tocar código:
+
+```toml
+nombre = "Personaje sobre color plano"
+descripcion = "Lo que se ve en la tarjeta."
+orden = 1
+motor = ""            # vacío = el motor por defecto (Z-Image); "flux2klein" para B/N y synthwave
+cabecera = """..."""  # va delante de la escena
+cola = """..."""      # va detrás
+guia_escena = """...""" # solo para el LLM
+```
+
+Hay 16: color plano, anime con fondo rico, tinta y serigrafía, anime gouache,
+duotono cálido, editorial limpia, acuarela de animación, city pop, pixel art,
+B/N con grano, foto 35 mm, Y2K flash, synthwave, plastilina 3D, art déco y papel
+recortado. Los ejemplos se generan con `scripts/ejemplos_estilos.py`
+(`lanzar`, `estado`, `copiar <id> <i>`), con prompts sacados de
+`referencias/youtube`.
+
+Lo aprendido escribiendo los textos: nunca nombrar «title», «text» ni
+«typography» en la escena (Z-Image dibuja letras chinas); «sticker-like» añade
+un borde blanco y «poster art» o «comic book print» enmarcan la imagen, lo que se
+corrige con «full-bleed … edge to edge».
+
 ### Imagen animada
 
-Hasta elegir la preview es la galería de siempre: se generan previews con
-Z-Image y se aprueba una (sin pasar por ESRGAN). A partir de ahí, tres pasos que
+Hasta elegir la preview es la galería de siempre: título, estilo y previews
+como en Generar, y se aprueba una (sin pasar por ESRGAN). A partir de ahí, tres pasos que
 lanza el usuario:
 
 1. **Movimiento** (opcional): el LLM pule el prompt de movimiento que escribiste

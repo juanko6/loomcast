@@ -6,9 +6,11 @@ from ..models import ImagenLibre
 
 
 def crear(
-    s: Session, tipo: str, idea: str, width: int, height: int, motor: str = ""
+    s: Session, tipo: str, idea: str, width: int, height: int, motor: str = "",
+    *, detalles: str = "", estilo: str = "", n_previews: int = 4,
 ) -> ImagenLibre:
-    img = ImagenLibre(tipo=tipo, idea=idea, width=width, height=height, motor=motor)
+    img = ImagenLibre(tipo=tipo, idea=idea, width=width, height=height, motor=motor,
+                      detalles=detalles, estilo=estilo, n_previews=n_previews)
     s.add(img)
     return img
 
@@ -22,13 +24,30 @@ def listar(s: Session) -> list[ImagenLibre]:
 
 
 def guardar_prompt(s: Session, img: ImagenLibre, prompt: str) -> None:
+    """Guarda el prompt (o la escena) que escribió el LLM. Solo avanza una
+    entrada recién creada: reescribirlo más tarde no la devuelve atrás. Antes
+    sí, y la UI dejaba de enseñar las previews (y en una animada aprobada, la
+    imagen, el movimiento y el vídeo) aunque seguían en disco; ahora se ven
+    hasta que se regeneran, que es cuando se sustituyen."""
     img.prompt = prompt
-    img.estado = "mejorada"
+    if img.estado == "nueva":
+        img.estado = "mejorada"
 
 
 def guardar_tamano(s: Session, img: ImagenLibre, width: int, height: int) -> None:
     img.width = width
     img.height = height
+
+
+def empezar_previews(s: Session, img: ImagenLibre) -> None:
+    """Una tirada nueva: las semillas se vacían y se van apuntando según sale
+    cada preview (`anadir_preview`), para que la UI las enseñe sin esperar a
+    la última."""
+    img.seeds = "[]"
+
+
+def anadir_preview(s: Session, img: ImagenLibre, seed: int) -> None:
+    img.seeds = json.dumps([*json.loads(img.seeds or "[]"), seed])
 
 
 def guardar_previews(s: Session, img: ImagenLibre, seeds: list[int]) -> None:
