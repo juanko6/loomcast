@@ -75,7 +75,7 @@ export interface ProyectoResumen {
   publicado_en: string;
 }
 
-export type TipoGaleria = "generar" | "editar" | "quitarfondo" | "animada";
+export type TipoGaleria = "generar" | "libre" | "editar" | "quitarfondo" | "animada";
 export interface GaleriaResumen {
   id: number;
   idea: string;

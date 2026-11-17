@@ -7,6 +7,8 @@ from ..schemas import (
     GaleriaEstiloIn,
     GaleriaFinalIn,
     GaleriaGenerarIn,
+    GaleriaLibreIn,
+    GaleriaMejorarIn,
     GaleriaMovimientoIn,
     GaleriaPreviewsIn,
     GaleriaPromptIn,
@@ -60,6 +62,19 @@ def crear_generar(body: GaleriaGenerarIn):
         raise HTTPException(400, str(e))
 
 
+@router.post("/libre")
+def crear_libre(body: GaleriaLibreIn):
+    if not body.idea.strip():
+        raise HTTPException(400, "El título no puede estar vacío")
+    try:
+        return galeria_service.crear_libre(
+            body.idea, body.width, body.height, body.motor, body.detalles,
+            body.n_previews,
+        )
+    except galeria_service.MotorInvalido as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/animada")
 def crear_animada(body: GaleriaAnimadaIn):
     if not body.idea.strip():
@@ -110,9 +125,10 @@ def detalle(imagen_id: int):
 
 
 @router.post("/{imagen_id}/mejorar")
-def mejorar(imagen_id: int):
+def mejorar(imagen_id: int, body: GaleriaMejorarIn | None = None):
+    cambios = body.cambios if body else ""
     try:
-        return {"job_id": galeria_service.lanzar_mejorar(imagen_id)}
+        return {"job_id": galeria_service.lanzar_mejorar(imagen_id, cambios)}
     except galeria_service.ImagenNoExiste:
         raise HTTPException(404, "Imagen no existe")
 

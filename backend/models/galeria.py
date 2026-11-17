@@ -9,7 +9,8 @@ from .base import Base, now_utc
 class ImagenLibre(Base):
     """Una generación de la galería de imágenes independiente del pipeline de
     video. Cubre los dos modos: crear una imagen desde una idea de texto
-    (`tipo="generar"`) y editar una imagen subida con un prompt de cambios
+    (`tipo="generar"`, con estilo; `tipo="libre"`, con el modelo que se elija
+    y sin estilo) y editar una imagen subida con un prompt de cambios
     (`tipo="editar"`).
 
     El ciclo de vida vive en `estado`: nueva → mejorada (el LLM ya pulió el

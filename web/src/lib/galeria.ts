@@ -105,6 +105,20 @@ export const listarMotores = () => api<MotorImagen[]>("/galeria/motores");
 export const crearGenerar = (body: NuevaImagen & { motor: string }) =>
   api<{ id: number; job_id: number }>("/galeria", { method: "POST", body });
 
+// Pestaña Libre: título + detalles con el modelo elegido y sin estilo. Crear
+// encola el prompt (lo escribe el LLM) y las previews.
+export interface NuevaLibre {
+  idea: string;
+  detalles: string;
+  n_previews: number;
+  width: number;
+  height: number;
+  motor: string;
+}
+
+export const crearLibre = (body: NuevaLibre) =>
+  api<{ id: number; job_id: number }>("/galeria/libre", { method: "POST", body });
+
 export const crearAnimada = (body: NuevaImagen) =>
   api<{ id: number; job_id: number }>("/galeria/animada", { method: "POST", body });
 
@@ -117,8 +131,13 @@ export function crearEditar(idea: string, file: File, motor: string) {
 }
 
 // Mejora el prompt con el LLM a demanda (paso opcional).
-export const mejorarPrompt = (id: number) =>
-  api<{ job_id: number }>(`/galeria/${id}/mejorar`, { method: "POST" });
+// En una libre con prompt, `cambios` es lo que hay que cambiarle: el LLM parte
+// del prompt guardado (guárdalo antes con `editarPrompt`).
+export const mejorarPrompt = (id: number, cambios = "") =>
+  api<{ job_id: number }>(
+    `/galeria/${id}/mejorar`,
+    cambios.trim() ? { method: "POST", body: { cambios: cambios.trim() } } : { method: "POST" },
+  );
 
 export function crearQuitarFondo(file: File) {
   const fd = new FormData();

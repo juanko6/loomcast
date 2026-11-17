@@ -404,3 +404,38 @@ def test_la_escena_de_crear_encadena_las_previews_y_reescribirla_no():
     assert queue._encadenado("mejorar_prompt_imagen", 1, {"y_previews": True}) == "generar_previews_imagen"
     assert queue._encadenado("mejorar_prompt_imagen", 1, {}) is None
     assert queue._encadenado("generar_previews_imagen", 1, {"y_previews": True}) is None
+
+
+# --- libre -------------------------------------------------------------------
+
+def test_crear_libre_guarda_el_motor_elegido_y_encola_prompt_y_previews(client, dirs_tmp,
+                                                                       jobs_encolados):
+    r = client.post("/api/galeria/libre", json={
+        "idea": "  un faro ", "detalles": " de noche ", "motor": "flux2klein",
+        "width": 1024, "height": 1024, "n_previews": 2})
+    assert r.status_code == 200
+    d = client.get(f"/api/galeria/{r.json()['id']}").json()
+    assert (d["tipo"], d["idea"], d["detalles"], d["motor"]) == ("libre", "un faro", "de noche", "flux2klein")
+    assert (d["estilo"], d["n_previews"], d["width"], d["height"]) == ("", 2, 1024, 1024)
+    assert jobs_encolados == [("mejorar_prompt_imagen", d["id"])]
+    assert jobs_encolados.params == [{"y_previews": True}]
+
+
+def test_crear_libre_sin_motor_usa_el_de_generar(client, dirs_tmp, jobs_encolados):
+    iid = client.post("/api/galeria/libre", json={"idea": "un faro"}).json()["id"]
+    assert client.get(f"/api/galeria/{iid}").json()["motor"] == "zimage"
+
+
+def test_crear_libre_con_motor_que_no_genera_400(client, dirs_tmp, jobs_encolados):
+    assert client.post("/api/galeria/libre", json={"idea": "x", "motor": "qwen"}).status_code == 400
+    assert jobs_encolados == []
+
+
+def test_crear_libre_sin_titulo_400(client):
+    assert client.post("/api/galeria/libre", json={"idea": "  "}).status_code == 400
+
+
+def test_mejorar_con_cambios_los_pasa_al_job(client, img, jobs_encolados):
+    client.post(f"/api/galeria/{img}/mejorar", json={"cambios": "  con bufanda "})
+    client.post(f"/api/galeria/{img}/mejorar", json={"cambios": "  "})
+    assert jobs_encolados.params == [{"cambios": "con bufanda"}, {}]

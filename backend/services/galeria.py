@@ -124,6 +124,15 @@ def crear_generar(idea: str, width: int, height: int, motor: str | None = None,
                              estilo, n_previews)
 
 
+def crear_libre(idea: str, width: int, height: int, motor: str | None = None,
+                detalles: str = "", n_previews: int = 4) -> dict:
+    """Pestaña Libre: el flujo general, sin estilo y con el modelo que se
+    elija. El LLM escribe el prompt completo con el título y los detalles, y
+    salen las previews."""
+    return _crear_con_estilo("libre", idea, width, height, motor, detalles,
+                             "", n_previews)
+
+
 def crear_editar(
     idea: str, width: int, height: int, data: bytes, motor: str | None = None
 ) -> dict:
@@ -166,12 +175,16 @@ def cambiar_estilo(imagen_id: int, estilo: str) -> None:
         s.commit()
 
 
-def lanzar_mejorar(imagen_id: int) -> int:
-    """Mejora el prompt con el LLM. Paso opcional, a petición del usuario."""
+def lanzar_mejorar(imagen_id: int, cambios: str = "") -> int:
+    """Mejora el prompt con el LLM. Paso opcional, a petición del usuario. En
+    una libre con prompt, `cambios` es lo que hay que cambiarle (ver
+    `imagen_libre.mejorar_prompt`)."""
     with get_session() as s:
         if galeria_repo.obtener(s, imagen_id) is None:
             raise ImagenNoExiste(imagen_id)
-    return queue.encolar("mejorar_prompt_imagen", imagen_id)
+    cambios = (cambios or "").strip()
+    return queue.encolar("mejorar_prompt_imagen", imagen_id,
+                         **({"cambios": cambios} if cambios else {}))
 
 
 def crear_quitarfondo(nombre: str, data: bytes) -> dict:

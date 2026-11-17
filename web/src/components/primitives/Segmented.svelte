@@ -16,7 +16,7 @@
       role="tab"
       aria-selected={value === opt.value}
       onclick={() => onchange(opt.value)}
-      class={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium
+      class={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium
         transition-colors ${
           value === opt.value
             ? "bg-accent text-on-accent"

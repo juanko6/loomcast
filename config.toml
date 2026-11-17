@@ -74,89 +74,13 @@ chat_template_kwargs = { enable_thinking = false }
 #
 # Cada modelo puede sobrescribir url, model, timeout_s, max_tokens, temperature
 # y chat_template_kwargs.
-# IMPORTANTE: `url` tiene que apuntar al puerto que abre ESE script. Todos tus
-# scripts de ~/Models están igualados a 127.0.0.1:9876; si cambias el --port de
-# alguno, cambia aquí su url. Como solo corre uno a la vez, compartir puerto da
-# igual. Borra los modelos que no quieras ver en el desplegable.
-
-[[llm.modelos]]
-id = "qwen36-27b"
-nombre = "Qwen3.6 27B"
-comando = "~/Models/qwen_3.6_27b.sh"
-url = "http://127.0.0.1:9876"
-
-[[llm.modelos]]
-id = "qwen36-27b-mtp"
-nombre = "Qwen3.6 27B MTP"
-comando = "~/Models/qwen_3.6_27b_mtp.sh"
-url = "http://127.0.0.1:9876"
-
-[[llm.modelos]]
-id = "qwen36-35b"
-nombre = "Qwen3.6 35B E3M MTP"
-comando = "~/Models/qwen_3.6_35b_e3m_mtp.sh"
-url = "http://127.0.0.1:9876"
-
-[[llm.modelos]]
-id = "qwen35-9b"
-nombre = "Qwen3.5 9B"
-comando = "~/Models/qwen_3.5_9b.sh"
-url = "http://127.0.0.1:9876"
-
-[[llm.modelos]]
-id = "qwen35-9b-mtp"
-nombre = "Qwen3.5 9B MTP"
-comando = "~/Models/qwen_3.5_9b_mtp.sh"
-url = "http://127.0.0.1:9876"
-
-[[llm.modelos]]
-id = "qwen35-9b-8bit"
-nombre = "Qwen3.5 9B 8bit MTP"
-comando = "~/Models/qwen_3.5_9b_8bit_mtp.sh"
-url = "http://127.0.0.1:9876"
-
-# Gemma no usa la clave enable_thinking de Qwen: se limpia la heredada de [llm].
-# Si lo notas lento, es que tus scripts llevan --reasoning on; cámbialo ahí.
-[[llm.modelos]]
-id = "gemma4-12b"
-nombre = "Gemma 4 12B"
-comando = "~/Models/gemma4_12b.sh"
-url = "http://127.0.0.1:9876"
-chat_template_kwargs = {}
-
-[[llm.modelos]]
-id = "gemma4-26b"
-nombre = "Gemma 4 26B"
-comando = "~/Models/gemma4_26b.sh"
-url = "http://127.0.0.1:9876"
-chat_template_kwargs = {}
-
-[[llm.modelos]]
-id = "gemma4-31b"
-nombre = "Gemma 4 31B"
-comando = "~/Models/gemma4_31b.sh"
-url = "http://127.0.0.1:9876"
-chat_template_kwargs = {}
-
-# Qwen3.8 27B por llama.cpp. SIN `comando` a propósito: sus scripts empiezan con
-# `sudo sysctl iogpu.wired_limit_mb=43008` para subir el techo de RAM de la GPU,
-# y Loomcast no puede responder a la petición de contraseña. Levántalos tú
-# (`~/Models/qwen_3.8_27B_Q4.sh`) y Loomcast los usa donde estén; si prefieres
-# que los arranque él, quita el sudo del script y añade aquí su `comando`.
-[[llm.modelos]]
-id = "qwen38-27b-q4"
-nombre = "Qwen3.8 27B Q4 (a mano)"
-url = "http://127.0.0.1:9876"
-
-[[llm.modelos]]
-id = "qwen38-27b-q4-xs"
-nombre = "Qwen3.8 27B Q4_XS (a mano)"
-url = "http://127.0.0.1:9876"
-
-# ---------------------------------------------------------------- MLX
-# Los mismos modelos por MLX en vez de llama.cpp, servidos con mlx_lm.server,
-# que también habla la API de OpenAI. Los pesos están en ~/.cache/huggingface y
-# `--model` los carga de ahí sin volver a descargarlos.
+# IMPORTANTE: `url` tiene que apuntar al puerto que abre ESE comando. Todos van
+# a 127.0.0.1:9876; como solo corre uno a la vez, compartir puerto da igual.
+#
+# Los modelos van por MLX, servidos con mlx_lm.server (del venv de
+# ~/Documents/mlx/mlx), que habla la API de OpenAI. Los pesos están en
+# ~/.cache/huggingface y `--model` los carga de ahí sin volver a descargarlos.
+# Los GGUF de llama.cpp se quitaron el 2026-11-12.
 #
 # OJO con `model`: mlx_lm.server trata ese campo como un repo de Hugging Face y
 # se lo descarga si no lo tiene. Con el "local" que Loomcast manda por defecto
@@ -169,22 +93,21 @@ url = "http://127.0.0.1:9876"
 # sirven en realidad (son el drafter de decodificación especulativa, el
 # equivalente al --model-draft de los scripts de llama.cpp). El soporte va en el
 # PR #990 de ml-explore/mlx-lm, que sigue ABIERTO: no está ni en la 0.32.0, así
-# que actualizar no lo arregla. Mientras tanto, el 35B A3B con MTP va por
-# llama.cpp, en `qwen36-35b` de aquí arriba.
+# que actualizar no lo arregla.
 #
 # Cuando el PR salga, el MTP se añade al modelo base, no como modelo aparte:
 #   comando = "… --model mlx-community/Qwen3.6-35B-A3B-4bit --draft-model mlx-community/Qwen3.6-35B-A3B-MTP-4bit --port 9876"
 [[llm.modelos]]
 id = "mlx-qwen36-35b"
 nombre = "Qwen3.6 35B A3B (MLX)"
-comando = "~/Models/mlx/venv/bin/mlx_lm.server --model mlx-community/Qwen3.6-35B-A3B-4bit --port 9876"
+comando = "~/Documents/mlx/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.6-35B-A3B-4bit --port 9876"
 url = "http://127.0.0.1:9876"
 model = "mlx-community/Qwen3.6-35B-A3B-4bit"
 
 [[llm.modelos]]
 id = "mlx-qwen38-27b"
 nombre = "Qwen3.8 27B (MLX)"
-comando = "~/Models/mlx/venv/bin/mlx_lm.server --model mlx-community/Qwen3.8-27B-4bit --port 9876"
+comando = "~/Documents/mlx/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.8-27B-4bit --port 9876"
 url = "http://127.0.0.1:9876"
 model = "mlx-community/Qwen3.8-27B-4bit"
 

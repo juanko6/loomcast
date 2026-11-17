@@ -677,3 +677,45 @@ def test_cada_preview_se_apunta_en_cuanto_sale(session, dirs_tmp, fake_comfy, mo
     assert json.loads(galeria_repo.obtener(session, iid).seeds) == semillas
     assert sorted(p.name for p in imagen_libre.carpeta(iid).glob("preview_*")) == [
         "preview_0.png", "preview_1.png", "preview_2.png"]
+
+
+def test_libre_sin_prompt_lo_escribe_de_cero_con_titulo_y_detalles(session, dirs_tmp, fake_llm):
+    iid = _imagen(session, "libre", prompt="", detalles="de noche")
+    fake_llm.responder(ImagenLibrePromptLLM, ImagenLibrePromptLLM(prompt="a fox under the night sky"))
+    imagen_libre.mejorar_prompt(iid, y_previews=True)
+    llamada = fake_llm.llamadas[0]
+    assert llamada["user"] == "un zorro\n\nDetalles: de noche"
+    assert "CURRENT PROMPT" not in llamada["system"]
+    session.expire_all()
+    assert galeria_repo.obtener(session, iid).prompt == "a fox under the night sky"
+
+
+def test_libre_con_prompt_reescribe_ese_y_aplica_los_cambios(session, dirs_tmp, fake_llm):
+    iid = _imagen(session, "libre", prompt="a red fox in the snow, hand edited",
+                  detalles="de noche")
+    fake_llm.responder(str, "a red fox in the snow wearing a scarf, hand edited")
+    imagen_libre.mejorar_prompt(iid, cambios="  con bufanda ")
+    llamada = fake_llm.llamadas[0]
+    # Parte del prompt guardado (con las ediciones a mano), no de cero.
+    assert "CURRENT PROMPT: a red fox in the snow, hand edited" in llamada["user"]
+    assert "CHANGES: con bufanda" in llamada["user"]
+    assert "TITLE: un zorro" in llamada["user"] and "de noche" in llamada["user"]
+    assert "CURRENT PROMPT" in llamada["system"]
+    session.expire_all()
+    assert galeria_repo.obtener(session, iid).prompt == "a red fox in the snow wearing a scarf, hand edited"
+
+
+def test_libre_sin_cambios_pule_el_prompt_actual(session, dirs_tmp, fake_llm):
+    iid = _imagen(session, "libre", prompt="a fox, snow")
+    fake_llm.responder(str, "a fox standing in fresh snow, soft morning light")
+    imagen_libre.mejorar_prompt(iid)
+    assert "CHANGES" not in fake_llm.llamadas[0]["user"]
+    assert "CURRENT PROMPT: a fox, snow" in fake_llm.llamadas[0]["user"]
+
+
+def test_generar_previews_de_libre_usa_su_motor_sin_estilo(session, dirs_tmp, fake_comfy):
+    iid = _imagen(session, "libre", motor="flux2klein")
+    imagen_libre.generar_previews(iid)
+    llamadas = [k for n, k in fake_comfy.llamadas if n == "generar_imagen"]
+    assert len(llamadas) == 4
+    assert {(k["prompt"], k["motor"]) for k in llamadas} == {("a red fox", "flux2klein")}
