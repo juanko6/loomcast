@@ -14,6 +14,8 @@
     crearEditar,
     crearQuitarFondo,
     crearAnimada,
+    crearLibre,
+    type NuevaLibre,
     cambiarEstilo,
     listarEstilos,
     type EstiloImagen,
@@ -105,6 +107,7 @@
     crearY(crearEditar(p.idea, p.file, p.motor));
   const handleFondo = (p: { file: File }) => crearY(crearQuitarFondo(p.file));
   const handleAnimada = (p: NuevaImagen) => crearY(crearAnimada(p));
+  const handleLibre = (p: NuevaLibre) => crearY(crearLibre(p));
 
   // Pasos de la animada tras aprobar la preview. El movimiento se guarda antes
   // de pedir nada: tanto el LLM como el render leen el que está en la base.
@@ -130,10 +133,13 @@
     });
   const onescalar = (escala: Escala) => pasoAnimada(() => escalar(selectedId!, escala));
 
-  async function onmejorar() {
+  // Con `prompt` (la libre) se guarda antes el que hay en pantalla: el LLM
+  // reescribe ese, con las ediciones a mano, y aplica los `cambios`.
+  async function onmejorar(prompt?: string, cambios = "") {
     if (selectedId == null) return;
     try {
-      await mejorarPrompt(selectedId);
+      if (prompt !== undefined && prompt.trim()) await editarPrompt(selectedId, prompt);
+      await mejorarPrompt(selectedId, cambios);
       refrescarJobs();
       loadDetail(selectedId);
     } catch (e) {
@@ -244,7 +250,7 @@
 <div class="flex min-h-0 flex-1">
   <!-- Config (izquierda) -->
   <div class="flex w-[360px] min-w-0 shrink-0 flex-col border-r border-line bg-surface" style={reservaPlayer}>
-    <ImageConfig {busy} {estilos} oncreateGenerar={handleGenerar} oncreateEditar={handleEditar} oncreateFondo={handleFondo} oncreateAnimada={handleAnimada} />
+    <ImageConfig {busy} {estilos} oncreateGenerar={handleGenerar} oncreateLibre={handleLibre} oncreateEditar={handleEditar} oncreateFondo={handleFondo} oncreateAnimada={handleAnimada} />
   </div>
 
   <!-- Lista (centro) -->

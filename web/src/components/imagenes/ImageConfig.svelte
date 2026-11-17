@@ -16,6 +16,7 @@
     type EstiloImagen,
     type MotorImagen,
     type NuevaImagen,
+    type NuevaLibre,
   } from "@/lib/galeria";
   import type { TipoGaleria } from "@/lib/types";
 
@@ -23,6 +24,7 @@
     busy = false,
     estilos = [],
     oncreateGenerar,
+    oncreateLibre,
     oncreateEditar,
     oncreateFondo,
     oncreateAnimada,
@@ -30,6 +32,7 @@
     busy?: boolean;
     estilos?: EstiloImagen[];
     oncreateGenerar: (p: NuevaImagen & { motor: string }) => void;
+    oncreateLibre: (p: NuevaLibre) => void;
     oncreateEditar: (p: { idea: string; file: File; motor: string }) => void;
     oncreateFondo: (p: { file: File }) => void;
     oncreateAnimada: (p: NuevaImagen) => void;
@@ -73,7 +76,7 @@
   let motores = $state<MotorImagen[]>([]);
   // Motor elegido por modo: cambiar de Generar a Editar no debe perder la
   // elección del otro, y cada modo tiene su propio motor por defecto.
-  let motorPorModo = $state<Record<string, string>>({ generar: "", editar: "" });
+  let motorPorModo = $state<Record<string, string>>({ generar: "", libre: "", editar: "" });
 
   // Motores que saben hacer el modo activo. Quitar fondo no pasa por ComfyUI,
   // la animada usa el del estilo (o Z-Image), y con un estilo elegido el motor
@@ -81,7 +84,8 @@
   const motoresDelModo = $derived.by(() => {
     if (tipo === "quitarfondo" || tipo === "animada") return [];
     if (tipo === "generar" && estilo) return [];
-    const modo = tipo;
+    // Libre es generar desde texto con el modelo que se quiera.
+    const modo = tipo === "libre" ? "generar" : tipo;
     return motores.filter((m) => m.modos.includes(modo));
   });
   const motorElegido = $derived(motorPorModo[tipo] ?? "");
@@ -94,6 +98,8 @@
         motores.find((m) => m.modos.includes(modo))?.id ??
         "";
     }
+    // Libre arranca en el mismo modelo que Generar, pero se elige aparte.
+    motorPorModo.libre = motorPorModo.generar;
   });
   let idea = $state("");
   let tamano = $state(`${TAMANOS[0].w}x${TAMANOS[0].h}`);
@@ -129,7 +135,9 @@
 
   const usaArchivo = $derived(tipo === "editar" || tipo === "quitarfondo");
   // Generar y animada piden lo mismo para empezar: una idea y un tamaño.
-  const conTamano = $derived(tipo === "generar" || tipo === "animada");
+  const conTamano = $derived(tipo === "generar" || tipo === "libre" || tipo === "animada");
+  // Solo Generar y Animada van con estilo; Libre elige el modelo.
+  const conEstilo = $derived(tipo === "generar" || tipo === "animada");
   const puedeCrear = $derived(
     conTamano
       ? !!idea.trim()
@@ -147,6 +155,9 @@
     if (tipo === "generar") {
       // Con estilo, el motor lo pone el estilo (el backend lo resuelve).
       oncreateGenerar({ ...nueva(), motor: estilo ? "" : motorElegido });
+    } else if (tipo === "libre") {
+      const { estilo: _, ...resto } = nueva();
+      oncreateLibre({ ...resto, motor: motorElegido });
     } else if (tipo === "animada") {
       oncreateAnimada(nueva());
     } else if (tipo === "editar" && file) {
@@ -171,7 +182,9 @@
       ? "Después puedes escribir el prompt a mano o pedirle al LLM que lo mejore."
       : tipo === "animada"
         ? "Lo que quieres ver, o el título del vídeo. Al crear, el LLM escribe la escena y salen las previews; apruebas una y luego eliges cómo se mueve (10–15 s en bucle)."
-        : "Lo que quieres ver, o el título del vídeo. Al crear, el LLM escribe la escena y salen las previews directamente.",
+        : tipo === "libre"
+          ? "Lo que quieres ver. Al crear, el LLM escribe el prompt con el título y los detalles, y salen las previews con el modelo elegido."
+          : "Lo que quieres ver, o el título del vídeo. Al crear, el LLM escribe la escena y salen las previews directamente.",
   );
   const ctaLabel = $derived(
     tipo === "quitarfondo" ? "Quitar fondo" : tipo === "editar" ? "Subir imagen" : "Crear",
@@ -184,6 +197,7 @@
     <Segmented
       options={[
         { value: "generar", label: "Generar" },
+        { value: "libre", label: "Libre" },
         { value: "editar", label: "Editar" },
         { value: "quitarfondo", label: "Quitar fondo" },
         { value: "animada", label: "Animada" },
@@ -236,6 +250,7 @@
         ></textarea>
       </Field>
 
+      {#if conEstilo}
       <div class="flex flex-col gap-1.5">
         <span class="text-xs font-medium tracking-wide text-dim">Estilo</span>
         <button
@@ -263,6 +278,7 @@
           <span class="text-xs text-accent">Cambiar</span>
         </button>
       </div>
+      {/if}
     {/if}
 
     {#if conTamano}

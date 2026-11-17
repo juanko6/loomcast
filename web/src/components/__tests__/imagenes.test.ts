@@ -7,7 +7,7 @@ vi.mock("@/lib/galeria", async (o) => {
   const real = await o<typeof import("@/lib/galeria")>();
   return {
     ...real,
-    listarGaleria: vi.fn(), detalleGaleria: vi.fn(), listarMotores: vi.fn(), crearGenerar: vi.fn(),
+    listarGaleria: vi.fn(), detalleGaleria: vi.fn(), listarMotores: vi.fn(), crearGenerar: vi.fn(), crearLibre: vi.fn(),
     crearEditar: vi.fn(), crearQuitarFondo: vi.fn(), editarPrompt: vi.fn(), mejorarPrompt: vi.fn(),
     lanzarPreviews: vi.fn(), lanzarFinal: vi.fn(), borrarGaleria: vi.fn(),
     crearAnimada: vi.fn(), guardarMovimiento: vi.fn(), mejorarMovimiento: vi.fn(), animar: vi.fn(),
@@ -46,7 +46,7 @@ beforeEach(() => {
 
 describe("ImageConfig", () => {
   const props = () => ({
-    oncreateGenerar: vi.fn(), oncreateEditar: vi.fn(), oncreateFondo: vi.fn(), oncreateAnimada: vi.fn(),
+    oncreateGenerar: vi.fn(), oncreateLibre: vi.fn(), oncreateEditar: vi.fn(), oncreateFondo: vi.fn(), oncreateAnimada: vi.fn(),
   });
   const montar = async (p = props(), extra = {}) => {
     const r = render(ImageConfig, { ...p, ...extra });
@@ -201,9 +201,35 @@ describe("ImageConfig", () => {
   });
 });
 
+describe("ImageConfig: pestaña Libre", () => {
+  it("elige el modelo, no enseña estilo y manda título, detalles y modelo", async () => {
+    const p = {
+      oncreateGenerar: vi.fn(), oncreateLibre: vi.fn(), oncreateEditar: vi.fn(),
+      oncreateFondo: vi.fn(), oncreateAnimada: vi.fn(),
+    };
+    // Un estilo recordado de Generar no se cuela en Libre.
+    localStorage.setItem("loomcast.galeria.estilo", "tinta");
+    render(ImageConfig, { ...p, estilos: ESTILOS });
+    await waitFor(() => expect(g.listarMotores).toHaveBeenCalled());
+    await userEvent.click(screen.getByRole("tab", { name: "Libre" }));
+    expect(screen.queryByText("Estilo")).toBeNull();
+    const modelo = screen.getByLabelText("Modelo") as HTMLSelectElement;
+    expect(modelo.value).toBe("zimage");
+    expect([...modelo.options].map((o) => o.value)).toEqual(["zimage", "flux2klein"]);
+    await userEvent.selectOptions(modelo, "flux2klein");
+    await userEvent.type(titulo(), " un faro ");
+    await userEvent.type(screen.getByLabelText(/^Detalles/), "de noche");
+    await userEvent.click(screen.getByRole("button", { name: "Crear" }));
+    expect(p.oncreateLibre).toHaveBeenCalledWith({
+      idea: "un faro", detalles: "de noche", n_previews: 4, width: 768, height: 1344, motor: "flux2klein",
+    });
+    expect(p.oncreateGenerar).not.toHaveBeenCalled();
+  });
+});
+
 describe("ImageConfig: estilo, detalles y previews", () => {
   const props = () => ({
-    oncreateGenerar: vi.fn(), oncreateEditar: vi.fn(), oncreateFondo: vi.fn(), oncreateAnimada: vi.fn(),
+    oncreateGenerar: vi.fn(), oncreateLibre: vi.fn(), oncreateEditar: vi.fn(), oncreateFondo: vi.fn(), oncreateAnimada: vi.fn(),
   });
   const montar = async () => {
     const p = props();
@@ -352,7 +378,8 @@ describe("ImageStudio", () => {
   it("reescribir la escena con el LLM la pide para la imagen abierta", async () => {
     await abrir();
     await userEvent.click(screen.getByRole("button", { name: "Reescribir con el LLM" }));
-    await waitFor(() => expect(g.mejorarPrompt).toHaveBeenCalledWith(2));
+    await waitFor(() => expect(g.mejorarPrompt).toHaveBeenCalledWith(2, ""));
+    expect(g.editarPrompt).not.toHaveBeenCalled();
   });
 
   it("con estilo: título, detalles, la escena plegada si ya hay previews, y se puede cambiar el estilo", async () => {
@@ -373,6 +400,25 @@ describe("ImageStudio", () => {
     render(ImageStudio);
     await userEvent.click(await screen.findByText("zorro"));
     expect(await screen.findByText("Escribiendo la escena…")).toBeInTheDocument();
+  });
+
+  it("libre: sin estilo, y reescribir guarda el prompt editado y manda los cambios", async () => {
+    vi.mocked(g.detalleGaleria).mockResolvedValue(
+      detalle({ tipo: "libre", motor: "flux2klein", motor_nombre: "FLUX.2 Klein", detalles: "de noche" }));
+    await abrir();
+    expect(screen.getByText("FLUX.2 Klein", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("de noche")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Estilo")).toBeNull();
+    const prompt = screen.getByLabelText("Prompt (inglés, editable)") as HTMLTextAreaElement;
+    expect(prompt.value).toBe("a fox");
+    fireInput(prompt as unknown as HTMLInputElement, "a red fox in the snow");
+    await userEvent.type(screen.getByLabelText(/¿Qué cambiar\?/), "con bufanda");
+    await userEvent.click(screen.getByRole("button", { name: "Reescribir con el LLM" }));
+    await waitFor(() => expect(g.mejorarPrompt).toHaveBeenCalledWith(2, "con bufanda"));
+    expect(g.editarPrompt).toHaveBeenCalledWith(2, "a red fox in the snow");
+    expect(vi.mocked(g.editarPrompt).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(g.mejorarPrompt).mock.invocationCallOrder[0]);
+    expect((screen.getByLabelText(/¿Qué cambiar\?/) as HTMLTextAreaElement).value).toBe("");
   });
 
   it("editar conserva su prompt con «Mejorar prompt con el LLM»", async () => {

@@ -20,6 +20,7 @@
 
   const TIPO: Record<string, string> = {
     generar: "Generar",
+    libre: "Libre",
     editar: "Editar",
     quitarfondo: "Fondo",
     animada: "Animada",

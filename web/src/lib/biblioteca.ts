@@ -31,6 +31,7 @@ export interface LibItem {
 
 const TIPO_IMAGEN: Record<string, string> = {
   generar: "Generar",
+  libre: "Libre",
   editar: "Editar",
   quitarfondo: "Quitar fondo",
   animada: "Animada",

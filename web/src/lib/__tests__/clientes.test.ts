@@ -27,6 +27,7 @@ beforeEach(() => {
 const ultima = () => apiMock.mock.calls.at(-1)!;
 
 const NUEVA = { idea: "x", detalles: "", estilo: "", n_previews: 4, width: 768, height: 1344 };
+const LIBRE = { idea: "x", detalles: "", n_previews: 4, width: 768, height: 1344, motor: "flux2klein" };
 
 describe("galería", () => {
   it.each([
@@ -34,6 +35,9 @@ describe("galería", () => {
     ["detalleGaleria", () => galeria.detalleGaleria(4), "/galeria/4", undefined],
     ["listarMotores", () => galeria.listarMotores(), "/galeria/motores", undefined],
     ["mejorarPrompt", () => galeria.mejorarPrompt(4), "/galeria/4/mejorar", { method: "POST" }],
+    ["mejorarPrompt con cambios", () => galeria.mejorarPrompt(4, " de noche "), "/galeria/4/mejorar",
+      { method: "POST", body: { cambios: "de noche" } }],
+    ["crearLibre", () => galeria.crearLibre(LIBRE), "/galeria/libre", { method: "POST", body: LIBRE }],
     ["editarPrompt", () => galeria.editarPrompt(4, "a fox"), "/galeria/4/prompt", { method: "PUT", body: { prompt: "a fox" } }],
     ["lanzarFinal", () => galeria.lanzarFinal(4, 2), "/galeria/4/final", { method: "POST", body: { indice: 2 } }],
     ["borrarGaleria", () => galeria.borrarGaleria(4), "/galeria/4", { method: "DELETE" }],

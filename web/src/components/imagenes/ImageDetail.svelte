@@ -40,7 +40,7 @@
     bust?: number;
     estilos?: EstiloImagen[];
     onpreviews: (prompt: string, nPreviews: number) => void;
-    onmejorar: () => void;
+    onmejorar: (prompt?: string, cambios?: string) => void;
     onpick: (i: number) => void;
     onfinal: () => void;
     onreelegir: () => void;
@@ -83,6 +83,21 @@
   });
 
   const esFondo = $derived(detail?.tipo === "quitarfondo");
+  const esLibre = $derived(detail?.tipo === "libre");
+  // Qué cambiarle al prompt al reescribirlo (libre). Se vacía al cambiar de
+  // imagen y tras pedir la reescritura.
+  let cambios = $state("");
+  let idCambios: number | null = null;
+  $effect(() => {
+    if (detail && detail.id !== idCambios) {
+      idCambios = detail.id;
+      cambios = "";
+    }
+  });
+  function reescribir() {
+    onmejorar(prompt, cambios);
+    cambios = "";
+  }
   // Generar y animada nacen de un título con estilo; editar sigue con su prompt.
   const conEstilo = $derived(detail?.tipo === "generar" || detail?.tipo === "animada");
   const estiloActual = $derived(estilos.find((e) => e.id === detail?.estilo) ?? null);
@@ -164,6 +179,58 @@
             </a>
           </div>
         {/if}
+      {:else if esLibre}
+        <!-- libre: título + detalles -> prompt (lo escribe el LLM al crear,
+             editable; reescribir parte de él) -> N previews -> final -->
+        <div class="space-y-1">
+          <p class="text-sm font-medium text-text">{detail.idea}</p>
+          {#if detail.detalles}
+            <p class="text-xs text-dim">{detail.detalles}</p>
+          {/if}
+        </div>
+
+        <div class="space-y-2">
+          <label class="block text-xs font-medium tracking-wide text-muted" for="prompt-libre">
+            Prompt (inglés, editable)
+          </label>
+          <textarea
+            id="prompt-libre"
+            class="control"
+            rows="5"
+            bind:value={prompt}
+            placeholder={escribiendo ? "El LLM está escribiendo el prompt…" : "Escribe el prompt en inglés."}
+          ></textarea>
+          <label class="block text-xs font-medium tracking-wide text-muted" for="cambios-libre">
+            ¿Qué cambiar? (opcional)
+          </label>
+          <textarea
+            id="cambios-libre"
+            class="control"
+            rows="2"
+            bind:value={cambios}
+            placeholder="Ej: que sea de noche y con lluvia, y el gato con bufanda roja"
+          ></textarea>
+          <p class="text-xs text-muted">
+            «Reescribir» parte del prompt de arriba, con tus ediciones, y solo cambia lo que pidas. Sin cambios, lo pule.
+          </p>
+          <div class="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="secondary" disabled={busy} onclick={reescribir}>
+              Reescribir con el LLM
+            </Button>
+            <label class="flex items-center gap-1 text-xs text-dim">
+              <span class="sr-only">Cuántas previews</span>
+              <select class="control !w-auto !py-1" bind:value={nPreviews} disabled={busy}>
+                {#each Array.from({ length: N_PREVIEWS_MAX }, (_, i) => i + 1) as n (n)}
+                  <option value={n}>{n}</option>
+                {/each}
+              </select>
+            </label>
+            <Button size="sm" disabled={busy || !prompt.trim()} onclick={() => onpreviews(prompt, nPreviews)}>
+              {detail.seeds.length ? "Regenerar previews" : "Generar previews"}
+            </Button>
+            <span class="text-xs text-muted">{detail.width}×{detail.height}</span>
+          </div>
+        </div>
       {:else if conEstilo}
         <!-- generar / animada: título + estilo -> escena (la escribe el LLM al
              crear, editable) -> N previews -> final o movimiento -->
@@ -209,7 +276,7 @@
         </details>
 
         <div class="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="secondary" disabled={busy} onclick={onmejorar}>
+          <Button size="sm" variant="secondary" disabled={busy} onclick={() => onmejorar()}>
             Reescribir con el LLM
           </Button>
           <label class="flex items-center gap-1 text-xs text-dim">
@@ -236,7 +303,7 @@
             placeholder="Escribe el prompt en inglés, o pulsa «Mejorar prompt con el LLM»."
           ></textarea>
           <div class="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="secondary" disabled={busy} onclick={onmejorar}>
+            <Button size="sm" variant="secondary" disabled={busy} onclick={() => onmejorar()}>
               Mejorar prompt con el LLM
             </Button>
             <Button size="sm" disabled={busy || !prompt.trim()} onclick={() => onpreviews(prompt, nPreviews)}>

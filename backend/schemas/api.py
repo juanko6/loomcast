@@ -283,6 +283,23 @@ class GaleriaGenerarIn(BaseModel):
     n_previews: int = Field(4, ge=1, le=N_PREVIEWS_MAX)
 
 
+class GaleriaLibreIn(BaseModel):
+    # Pestaña Libre: título + detalles, el modelo que se quiera y sin estilo.
+    idea: str
+    detalles: str = ""
+    width: int = 768
+    height: int = 1344
+    # Id de [imagen.motores]; None = el motor de generar por defecto.
+    motor: str | None = None
+    n_previews: int = Field(4, ge=1, le=N_PREVIEWS_MAX)
+
+
+class GaleriaMejorarIn(BaseModel):
+    # Qué cambiar al reescribir un prompt que ya existe (pestaña Libre). Vacío
+    # = pulirlo sin cambiar la escena.
+    cambios: str = ""
+
+
 class GaleriaPromptIn(BaseModel):
     prompt: str
 

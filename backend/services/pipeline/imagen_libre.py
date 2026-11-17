@@ -3,11 +3,13 @@
 Tres etapas:
   1. mejorar_prompt  — el LLM convierte la idea/petición en un prompt en inglés.
      Con un estilo de `estilos/`, solo escribe la escena (qué se dibuja); el
-     estilo (cómo) se le pega tal cual al generar.
+     estilo (cómo) se le pega tal cual al generar. En una libre que ya tiene
+     prompt, lo reescribe partiendo de él (con las ediciones a mano) y de los
+     cambios que se pidan.
   2. generar_previews — N imágenes a resolución nativa con distinta seed.
   3. generar_final    — ESRGAN x4 sobre la preview elegida (máxima resolución).
 
-Generar y animada encadenan 1 → 2 al crear (`y_previews`); lo demás lo dispara
+Generar, libre y animada encadenan 1 → 2 al crear (`y_previews`); lo demás lo dispara
 el usuario desde la UI.
 
 El modo (`tipo`) decide la etapa 1 (qué prompt de sistema) y la etapa 2 (generar
@@ -82,23 +84,42 @@ def _peticion(tipo: str, idea: str, detalles: str, estilo: str) -> tuple[str, st
     return _sistema(tipo), mensaje
 
 
-def mejorar_prompt(imagen_id: int, y_previews: bool = False) -> str:
+def _reescritura(idea: str, detalles: str, actual: str, cambios: str) -> tuple[str, str]:
+    """Prompt de sistema y mensaje para reescribir un prompt que ya existe (la
+    pestaña Libre): el LLM parte del actual, con las ediciones del usuario, y
+    solo cambia lo que piden los cambios."""
+    partes = [f"TITLE: {idea}"]
+    if detalles:
+        partes.append(f"DETAILS (they override the title): {detalles}")
+    partes.append(f"CURRENT PROMPT: {actual}")
+    if cambios:
+        partes.append(f"CHANGES: {cambios}")
+    return (PROMPTS_DIR / "imagen_reescribir.md").read_text(), "\n\n".join(partes)
+
+
+def mejorar_prompt(imagen_id: int, y_previews: bool = False, cambios: str = "") -> str:
     """`y_previews` no se usa aquí: es la marca con la que la cola encadena
-    las previews al acabar (ver `queue._encadenado`)."""
+    las previews al acabar (ver `queue._encadenado`). `cambios` solo cuenta en
+    una libre que ya tiene prompt: se reescribe ese, no se empieza de cero."""
     with get_session() as s:
         img = galeria_repo.obtener(s, imagen_id)
         if img is None:
             raise ValueError(f"Imagen {imagen_id} no existe")
-        tipo, idea = img.tipo, img.idea
+        tipo, idea, actual = img.tipo, img.idea, (img.prompt or "").strip()
         detalles, estilo = img.detalles or "", img.estilo or ""
 
     if tipo == "editar" and not ruta_fuente(imagen_id).exists():
         raise ValueError("No hay imagen de origen; súbela antes de mejorar el prompt")
 
-    sistema, mensaje = _peticion(tipo, idea, detalles, estilo)
+    reescribir = tipo == "libre" and bool(actual)
+    if reescribir:
+        sistema, mensaje = _reescritura(idea, detalles, actual, cambios.strip())
+    else:
+        sistema, mensaje = _peticion(tipo, idea, detalles, estilo)
     # La escena es un párrafo y se pide como texto: el JSON lo saltaba el
-    # modelo con algunos estilos (ver `llm.texto`). Libre sigue con su contrato.
-    if estilo:
+    # modelo con algunos estilos (ver `llm.texto`). La reescritura, igual. Lo
+    # demás sigue con su contrato.
+    if estilo or reescribir:
         prompt = llm.texto(sistema, mensaje)
     else:
         prompt = llm.chat(sistema, mensaje, ImagenLibrePromptLLM).prompt
